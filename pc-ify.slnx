@@ -1,0 +1,5 @@
+<Solution>
+  <Project Path="src/PcIfy.Client/PcIfy.Client.csproj" />
+  <Project Path="src/PcIfy.Server/PcIfy.Server.csproj" />
+  <Project Path="src/PcIfy.Shared/PcIfy.Shared.csproj" />
+</Solution>

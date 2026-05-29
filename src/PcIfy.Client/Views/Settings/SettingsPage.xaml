@@ -1,0 +1,130 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:vm="clr-namespace:PcIfy.Client.ViewModels"
+             xmlns:models="clr-namespace:PcIfy.Client.Models"
+             x:Class="PcIfy.Client.Views.Settings.SettingsPage"
+             x:DataType="vm:SettingsViewModel"
+             Title="Settings">
+
+    <ScrollView>
+        <VerticalStackLayout Spacing="0" Padding="0,8">
+
+            <!-- Appearance section -->
+            <Label Text="APPEARANCE" FontSize="11" FontAttributes="Bold"
+                   Margin="20,16,20,6"
+                   TextColor="{AppThemeBinding Light='#6750A4', Dark='#9B8EC4'}"/>
+
+            <Border Margin="16,0" Padding="0"
+                    BackgroundColor="{AppThemeBinding Light='White', Dark='#1E1E38'}"
+                    Stroke="{AppThemeBinding Light='#E0E0F0', Dark='#2A2A44'}" StrokeThickness="1">
+                <Border.StrokeShape><RoundRectangle CornerRadius="12"/></Border.StrokeShape>
+                <VerticalStackLayout>
+
+                    <!-- Theme toggle -->
+                    <Grid ColumnDefinitions="*,Auto" Padding="16,14">
+                        <VerticalStackLayout Grid.Column="0" Spacing="2">
+                            <Label Text="Color Theme" FontSize="15"
+                                   TextColor="{AppThemeBinding Light='#222', Dark='#EEE'}"/>
+                            <Label Text="Choose light, dark, or follow system"
+                                   FontSize="12" TextColor="{AppThemeBinding Light='#888', Dark='#888'}"/>
+                        </VerticalStackLayout>
+                        <Picker Grid.Column="1" ItemsSource="{Binding ThemeOptions}"
+                                SelectedItem="{Binding SelectedTheme}"
+                                WidthRequest="100"
+                                TextColor="{AppThemeBinding Light='#222', Dark='#EEE'}"
+                                BackgroundColor="Transparent"/>
+                    </Grid>
+
+                    <BoxView HeightRequest="1" BackgroundColor="{AppThemeBinding Light='#F0F0F8', Dark='#2A2A3A'}" Margin="16,0"/>
+
+                    <!-- Accent color -->
+                    <Grid ColumnDefinitions="*,Auto" Padding="16,14">
+                        <VerticalStackLayout Grid.Column="0" Spacing="2">
+                            <Label Text="Accent Color" FontSize="15"
+                                   TextColor="{AppThemeBinding Light='#222', Dark='#EEE'}"/>
+                            <Label Text="Tint color used throughout the app"
+                                   FontSize="12" TextColor="{AppThemeBinding Light='#888', Dark='#888'}"/>
+                        </VerticalStackLayout>
+                        <BoxView Grid.Column="1" Color="{Binding AccentColor}"
+                                 WidthRequest="36" HeightRequest="36" CornerRadius="18"/>
+                    </Grid>
+
+                    <BoxView HeightRequest="1" BackgroundColor="{AppThemeBinding Light='#F0F0F8', Dark='#2A2A3A'}" Margin="16,0"/>
+
+                    <!-- Grid density -->
+                    <Grid ColumnDefinitions="*,Auto" Padding="16,14">
+                        <VerticalStackLayout Grid.Column="0" Spacing="2">
+                            <Label Text="Grid Density" FontSize="15"
+                                   TextColor="{AppThemeBinding Light='#222', Dark='#EEE'}"/>
+                            <Label Text="Number of items per row"
+                                   FontSize="12" TextColor="{AppThemeBinding Light='#888', Dark='#888'}"/>
+                        </VerticalStackLayout>
+                        <Picker Grid.Column="1" ItemsSource="{Binding DensityOptions}"
+                                SelectedItem="{Binding GridDensity}"
+                                WidthRequest="100"
+                                TextColor="{AppThemeBinding Light='#222', Dark='#EEE'}"
+                                BackgroundColor="Transparent"/>
+                    </Grid>
+
+                </VerticalStackLayout>
+            </Border>
+
+            <Button Text="Apply Appearance"
+                    Command="{Binding ApplyThemeCommand}"
+                    Margin="16,12" BackgroundColor="{StaticResource Primary}"
+                    TextColor="White" CornerRadius="10"/>
+
+            <!-- Connection section -->
+            <Label Text="CONNECTION" FontSize="11" FontAttributes="Bold"
+                   Margin="20,16,20,6"
+                   TextColor="{AppThemeBinding Light='#6750A4', Dark='#9B8EC4'}"/>
+
+            <Border Margin="16,0" Padding="0"
+                    BackgroundColor="{AppThemeBinding Light='White', Dark='#1E1E38'}"
+                    Stroke="{AppThemeBinding Light='#E0E0F0', Dark='#2A2A44'}" StrokeThickness="1">
+                <Border.StrokeShape><RoundRectangle CornerRadius="12"/></Border.StrokeShape>
+                <VerticalStackLayout>
+                    <Grid ColumnDefinitions="*,Auto" Padding="16,14">
+                        <VerticalStackLayout Grid.Column="0" Spacing="2">
+                            <Label Text="Server" FontSize="15"
+                                   TextColor="{AppThemeBinding Light='#222', Dark='#EEE'}"/>
+                            <Label Text="{Binding ServerAddress}" FontSize="12"
+                                   TextColor="{AppThemeBinding Light='#888', Dark='#888'}"/>
+                        </VerticalStackLayout>
+                        <Button Grid.Column="1" Text="Change"
+                                Command="{Binding ChangeServerCommand}"
+                                BackgroundColor="Transparent"
+                                TextColor="{StaticResource Primary}"
+                                FontSize="13"/>
+                    </Grid>
+                </VerticalStackLayout>
+            </Border>
+
+            <!-- Account section -->
+            <Label Text="ACCOUNT" FontSize="11" FontAttributes="Bold"
+                   Margin="20,16,20,6"
+                   TextColor="{AppThemeBinding Light='#6750A4', Dark='#9B8EC4'}"/>
+
+            <Border Margin="16,0" Padding="0"
+                    BackgroundColor="{AppThemeBinding Light='White', Dark='#1E1E38'}"
+                    Stroke="{AppThemeBinding Light='#E0E0F0', Dark='#2A2A44'}" StrokeThickness="1">
+                <Border.StrokeShape><RoundRectangle CornerRadius="12"/></Border.StrokeShape>
+                <Grid ColumnDefinitions="*,Auto" Padding="16,14">
+                    <Label Grid.Column="0" Text="Sign Out" FontSize="15" TextColor="#FF4444" VerticalOptions="Center"/>
+                    <Button Grid.Column="1" Text="Log Out"
+                            Command="{Binding LogoutCommand}"
+                            BackgroundColor="Transparent"
+                            TextColor="#FF4444"
+                            FontSize="13"/>
+                </Grid>
+            </Border>
+
+            <Label Text="pc-ify v1.0" FontSize="12" HorizontalOptions="Center"
+                   Margin="0,24,0,16"
+                   TextColor="{AppThemeBinding Light='#BBB', Dark='#555'}"/>
+
+        </VerticalStackLayout>
+    </ScrollView>
+
+</ContentPage>

@@ -1,0 +1,94 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:vm="clr-namespace:PcIfy.Client.ViewModels"
+             xmlns:dto="clr-namespace:PcIfy.Shared.DTOs.Files;assembly=PcIfy.Shared"
+             x:Class="PcIfy.Client.Views.Browser.BrowserPage"
+             x:DataType="vm:BrowserViewModel"
+             Title="{Binding Title}">
+
+    <ContentPage.ToolbarItems>
+        <ToolbarItem Text="⬆" Command="{Binding NavigateUpCommand}" Order="Primary"/>
+        <ToolbarItem Text="{Binding IsBookmarked, Converter={StaticResource BoolToStringConverter}, ConverterParameter='★|☆'}"
+                     Command="{Binding ToggleBookmarkCommand}" Order="Primary"/>
+    </ContentPage.ToolbarItems>
+
+    <Grid RowDefinitions="Auto,Auto,*">
+
+        <!-- Folder background banner -->
+        <Grid Grid.Row="0" HeightRequest="120" IsVisible="{Binding FolderPrefs_.BackgroundFilePath, Converter={StaticResource IsNotNullConverter}}">
+            <Image Source="{Binding FolderPrefs_.BackgroundFilePath}"
+                   Aspect="AspectFill" Opacity="0.7"/>
+            <BoxView BackgroundColor="#80000000"/>
+            <Label Text="{Binding Title}"
+                   FontSize="22" FontAttributes="Bold"
+                   TextColor="White"
+                   VerticalOptions="Center" HorizontalOptions="Center"/>
+        </Grid>
+
+        <!-- Density toolbar -->
+        <Grid Grid.Row="1" ColumnDefinitions="*,Auto,Auto,Auto" Padding="12,8" ColumnSpacing="8"
+              BackgroundColor="{AppThemeBinding Light='#F5F5FF', Dark='#1A1A2E'}">
+            <Label Grid.Column="0" Text="{Binding Entries.Count, StringFormat='{0} items'}"
+                   VerticalOptions="Center" FontSize="13"
+                   TextColor="{AppThemeBinding Light='#555', Dark='#AAA'}"/>
+            <Button Grid.Column="1" Text="⊞" FontSize="16"
+                    Command="{Binding Source={RelativeSource Self}, Path=BindingContext}"
+                    BackgroundColor="Transparent" TextColor="{AppThemeBinding Light='#333', Dark='#CCC'}"
+                    Padding="4" WidthRequest="36" HeightRequest="36"/>
+            <Label Grid.Column="2" Text="Grid" VerticalOptions="Center" FontSize="12"
+                   TextColor="{AppThemeBinding Light='#555', Dark='#AAA'}"/>
+        </Grid>
+
+        <!-- Activity / Error -->
+        <VerticalStackLayout Grid.Row="2" IsVisible="{Binding IsBusy}" VerticalOptions="Center" HorizontalOptions="Center">
+            <ActivityIndicator IsRunning="True" Color="{StaticResource Primary}"/>
+        </VerticalStackLayout>
+
+        <!-- File grid -->
+        <CollectionView Grid.Row="2"
+                        ItemsSource="{Binding Entries}"
+                        IsVisible="{Binding IsNotBusy}"
+                        SelectionMode="None"
+                        Margin="8">
+            <CollectionView.ItemsLayout>
+                <GridItemsLayout Orientation="Vertical"
+                                 Span="{Binding GridColumns}"
+                                 HorizontalItemSpacing="6"
+                                 VerticalItemSpacing="6"/>
+            </CollectionView.ItemsLayout>
+            <CollectionView.ItemTemplate>
+                <DataTemplate x:DataType="dto:FileEntryDto">
+                    <Border Stroke="{AppThemeBinding Light='#E0E0F0', Dark='#2A2A44'}"
+                            StrokeThickness="1"
+                            BackgroundColor="{AppThemeBinding Light='White', Dark='#1E1E38'}"
+                            Padding="0">
+                        <Border.StrokeShape>
+                            <RoundRectangle CornerRadius="10"/>
+                        </Border.StrokeShape>
+                        <Border.GestureRecognizers>
+                            <TapGestureRecognizer
+                                Command="{Binding Source={RelativeSource AncestorType={x:Type vm:BrowserViewModel}}, Path=OpenEntryCommand}"
+                                CommandParameter="{Binding .}"/>
+                        </Border.GestureRecognizers>
+                        <Grid RowDefinitions="*,Auto">
+                            <!-- Thumbnail -->
+                            <Border Grid.Row="0" HeightRequest="100" BackgroundColor="{AppThemeBinding Light='#F0F0FA', Dark='#252540'}">
+                                <Border.StrokeShape><RoundRectangle CornerRadius="10,10,0,0"/></Border.StrokeShape>
+                                <Label Text="{Binding Type, Converter={StaticResource FileTypeToIconConverter}}"
+                                       FontSize="36" HorizontalOptions="Center" VerticalOptions="Center"/>
+                            </Border>
+                            <!-- Name -->
+                            <Label Grid.Row="1" Text="{Binding Name}"
+                                   FontSize="11" MaxLines="2" LineBreakMode="TailTruncation"
+                                   Padding="6,4" HorizontalTextAlignment="Center"
+                                   TextColor="{AppThemeBinding Light='#222', Dark='#DDD'}"/>
+                        </Grid>
+                    </Border>
+                </DataTemplate>
+            </CollectionView.ItemTemplate>
+        </CollectionView>
+
+    </Grid>
+
+</ContentPage>

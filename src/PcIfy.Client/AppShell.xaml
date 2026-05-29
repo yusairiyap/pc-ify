@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<Shell
+    x:Class="PcIfy.Client.AppShell"
+    xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+    xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+    xmlns:setup="clr-namespace:PcIfy.Client.Views.Setup"
+    xmlns:home="clr-namespace:PcIfy.Client.Views.Home"
+    xmlns:browser="clr-namespace:PcIfy.Client.Views.Browser"
+    xmlns:settings="clr-namespace:PcIfy.Client.Views.Settings"
+    Shell.NavBarIsVisible="False"
+    FlyoutBehavior="Disabled">
+
+    <!-- Setup (pre-auth, no tabs) -->
+    <ShellContent
+        Route="setup"
+        ContentTemplate="{DataTemplate setup:SetupPage}"
+        Shell.NavBarIsVisible="False" />
+
+    <!-- Main tab bar (shown after login) -->
+    <TabBar Route="main">
+        <Tab Title="Home" Icon="tab_home.png">
+            <ShellContent
+                Route="home"
+                ContentTemplate="{DataTemplate home:HomePage}" />
+        </Tab>
+        <Tab Title="Browse" Icon="tab_browse.png">
+            <ShellContent
+                Route="browse_root"
+                ContentTemplate="{DataTemplate browser:BrowserPage}" />
+        </Tab>
+        <Tab Title="Settings" Icon="tab_settings.png">
+            <ShellContent
+                Route="settings"
+                ContentTemplate="{DataTemplate settings:SettingsPage}" />
+        </Tab>
+    </TabBar>
+
+</Shell>

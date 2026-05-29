@@ -1,0 +1,100 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:vm="clr-namespace:PcIfy.Client.ViewModels"
+             x:Class="PcIfy.Client.Views.Setup.SetupPage"
+             x:DataType="vm:SetupViewModel"
+             Title="{Binding Title}"
+             Shell.NavBarIsVisible="False">
+
+    <ContentPage.Background>
+        <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
+            <GradientStop Color="{AppThemeBinding Light='#1A1A2E', Dark='#0D0D1A'}" Offset="0"/>
+            <GradientStop Color="{AppThemeBinding Light='#16213E', Dark='#0A0A14'}" Offset="1"/>
+        </LinearGradientBrush>
+    </ContentPage.Background>
+
+    <ScrollView>
+        <VerticalStackLayout Spacing="24" Padding="32,60,32,32" MaximumWidthRequest="480" HorizontalOptions="Center">
+
+            <!-- Logo / Title -->
+            <VerticalStackLayout Spacing="8" HorizontalOptions="Center">
+                <Label Text="pc-ify"
+                       FontSize="48" FontAttributes="Bold"
+                       TextColor="#6750A4" HorizontalOptions="Center"/>
+                <Label Text="Your personal media server"
+                       FontSize="14" TextColor="#AAAACC" HorizontalOptions="Center"/>
+            </VerticalStackLayout>
+
+            <!-- Server card -->
+            <Border Stroke="#333355" StrokeThickness="1" Padding="24"
+                    BackgroundColor="{AppThemeBinding Light='#1E1E3A', Dark='#111128'}">
+                <Border.StrokeShape>
+                    <RoundRectangle CornerRadius="16"/>
+                </Border.StrokeShape>
+                <VerticalStackLayout Spacing="16">
+
+                    <Label Text="Server Address" FontAttributes="Bold" TextColor="#DDDDFF" FontSize="13"/>
+
+                    <Grid ColumnDefinitions="*,Auto,80" ColumnSpacing="8">
+                        <Entry Grid.Column="0" Placeholder="192.168.1.100"
+                               Text="{Binding Host}"
+                               Keyboard="Url" TextColor="White"
+                               PlaceholderColor="#666688"
+                               BackgroundColor="#2A2A4A"/>
+                        <Label Grid.Column="1" Text=":" TextColor="#AAAACC" VerticalOptions="Center" FontSize="18"/>
+                        <Entry Grid.Column="2" Placeholder="8080"
+                               Text="{Binding Port}"
+                               Keyboard="Numeric" TextColor="White"
+                               PlaceholderColor="#666688"
+                               BackgroundColor="#2A2A4A"/>
+                    </Grid>
+
+                    <Button Text="Test Connection"
+                            Command="{Binding TestConnectionCommand}"
+                            IsEnabled="{Binding IsNotBusy}"
+                            BackgroundColor="#6750A4"
+                            TextColor="White"
+                            CornerRadius="10"/>
+
+                    <ActivityIndicator IsRunning="{Binding IsBusy}" Color="#6750A4" IsVisible="{Binding IsBusy}"/>
+
+                    <Label Text="{Binding StatusMessage}"
+                           TextColor="{Binding IsConnected, Converter={StaticResource BoolToColorConverter}, ConverterParameter='#66FF99|#FF6666'}"
+                           IsVisible="{Binding StatusMessage, Converter={StaticResource IsNotNullConverter}}"
+                           HorizontalOptions="Center" FontSize="13"/>
+                </VerticalStackLayout>
+            </Border>
+
+            <!-- Login card (shown after ping succeeds) -->
+            <Border Stroke="#333355" StrokeThickness="1" Padding="24"
+                    BackgroundColor="{AppThemeBinding Light='#1E1E3A', Dark='#111128'}"
+                    IsVisible="{Binding ShowLoginSection}">
+                <Border.StrokeShape>
+                    <RoundRectangle CornerRadius="16"/>
+                </Border.StrokeShape>
+                <VerticalStackLayout Spacing="16">
+
+                    <Label Text="Sign In" FontAttributes="Bold" TextColor="#DDDDFF" FontSize="13"/>
+
+                    <Entry Placeholder="Username" Text="{Binding Username}"
+                           TextColor="White" PlaceholderColor="#666688"
+                           BackgroundColor="#2A2A4A"/>
+
+                    <Entry Placeholder="Password" Text="{Binding Password}"
+                           IsPassword="True" TextColor="White"
+                           PlaceholderColor="#666688" BackgroundColor="#2A2A4A"/>
+
+                    <Button Text="Login"
+                            Command="{Binding LoginCommand}"
+                            IsEnabled="{Binding IsNotBusy}"
+                            BackgroundColor="#6750A4"
+                            TextColor="White"
+                            CornerRadius="10"/>
+                </VerticalStackLayout>
+            </Border>
+
+        </VerticalStackLayout>
+    </ScrollView>
+
+</ContentPage>
