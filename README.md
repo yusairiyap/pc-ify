@@ -7,14 +7,16 @@ A local-network home entertainment app. Run the server on your Windows PC and br
 ### Server (Windows)
 - Embedded HTTP API hosted in a WinForms app — one `.exe`, no setup wizard
 - JWT-authenticated API (username + password, configurable)
-- Configurable port number
+- Configurable port number and server name
+- Auto-start server on launch (optional)
+- One-click copy of the connection address
 - Minimize to system tray with running/stopped indicator
 - Full connection log: client IP, username, timestamp, action
 - Dark / Light / System color mode toggle
 - Video thumbnail generation via FFmpeg
 - Image thumbnail generation
 
-### Client (Android / iOS)
+### Client (Android / iOS / macOS)
 - Clean file/folder browser with thumbnail grid
 - Resizable grid density (Compact / Normal / Large)
 - Homepage with bookmarked folders
@@ -35,6 +37,7 @@ A local-network home entertainment app. Run the server on your Windows PC and br
 | Server Runtime | .NET 10 |
 | Android | API 21+ (Android 5.0+) |
 | iOS | iOS 15+ |
+| macOS | macOS 13+ (MacCatalyst) |
 | Network | Both devices on the same Wi-Fi network |
 
 ## Setup
@@ -44,7 +47,8 @@ A local-network home entertainment app. Run the server on your Windows PC and br
 1. Build and run `PcIfy.Server`
 2. Click **Settings** → **Directories** → add the folders you want to share
 3. (Optional) Change the default `admin`/`admin` credentials in **Settings → Users**
-4. Click **Start Server** — the status bar shows the IP and port
+4. (Optional) Set a custom server name and port in **Settings → General**
+5. Click **Start Server** — the status bar shows the IP and port; use **Copy** to copy the address
 
 > **Video thumbnails:** FFmpeg is downloaded automatically on first launch (~30 MB from GitHub). You will be prompted once — click Yes to enable video thumbnail support.
 
@@ -66,6 +70,9 @@ dotnet build src/PcIfy.Client -f net10.0-android
 
 # Client (iOS — requires macOS + Xcode)
 dotnet build src/PcIfy.Client -f net10.0-ios
+
+# Client (macOS — requires macOS + Xcode)
+dotnet build src/PcIfy.Client -f net10.0-maccatalyst
 ```
 
 ## Architecture
