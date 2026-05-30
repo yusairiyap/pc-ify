@@ -20,6 +20,19 @@ public partial class SettingsViewModel : BaseViewModel
     public IReadOnlyList<string> ThemeOptions { get; } = ["System", "Light", "Dark"];
     public IReadOnlyList<GridDensity> DensityOptions { get; } = [GridDensity.Compact, GridDensity.Normal, GridDensity.Large];
 
+    public IReadOnlyList<string> PresetColors { get; } =
+    [
+        "#6750A4", // Material purple (default)
+        "#1976D2", // Blue
+        "#0097A7", // Teal
+        "#388E3C", // Green
+        "#F57C00", // Orange
+        "#D32F2F", // Red
+        "#C2185B", // Pink
+        "#455A64", // Blue grey
+        "#37474F", // Dark grey
+    ];
+
     public SettingsViewModel(IThemeService theme, IAuthTokenService tokenService, IConnectionService connection)
     {
         _theme = theme;
@@ -44,6 +57,12 @@ public partial class SettingsViewModel : BaseViewModel
     }
 
     [RelayCommand]
+    private void SelectAccentColor(string hex)
+    {
+        AccentColor = Color.FromArgb(hex);
+    }
+
+    [RelayCommand]
     private void ApplyTheme()
     {
         var appTheme = SelectedTheme switch
@@ -59,7 +78,7 @@ public partial class SettingsViewModel : BaseViewModel
     [RelayCommand]
     private async Task ChangeServerAsync()
     {
-        await Shell.Current.GoToAsync("setup");
+        await Shell.Current.GoToAsync("//setup");
     }
 
     [RelayCommand]

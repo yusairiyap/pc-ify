@@ -12,5 +12,6 @@ public partial class AppShell : Shell
         Routing.RegisterRoute("browser",      typeof(BrowserPage));
         Routing.RegisterRoute("videoplayer",  typeof(VideoPlayerPage));
         Routing.RegisterRoute("imagegallery", typeof(ImageGalleryPage));
+        Routing.RegisterRoute("imagepicker",  typeof(ImagePickerPage));
     }
 }

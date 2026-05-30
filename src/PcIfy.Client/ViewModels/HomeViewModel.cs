@@ -51,6 +51,6 @@ public partial class HomeViewModel : BaseViewModel, IRecipient<BookmarksChangedM
     [RelayCommand]
     private async Task BrowseAllAsync()
     {
-        await Shell.Current.GoToAsync("browser");
+        await Shell.Current.GoToAsync("//browse_root");
     }
 }

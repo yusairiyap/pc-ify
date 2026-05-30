@@ -10,16 +10,17 @@
     <Grid RowDefinitions="Auto,*">
 
         <!-- Header -->
-        <Grid Grid.Row="0" ColumnDefinitions="*,Auto" Padding="20,16" BackgroundColor="{AppThemeBinding Light='White', Dark='#1A1A2E'}">
+        <Grid Grid.Row="0" ColumnDefinitions="*,Auto" Padding="20,16"
+              BackgroundColor="{AppThemeBinding Light='White', Dark='#1A1A1A'}">
             <VerticalStackLayout Grid.Column="0" Spacing="2">
                 <Label Text="pc-ify" FontSize="22" FontAttributes="Bold"
-                       TextColor="{AppThemeBinding Light='#1A1A2E', Dark='White'}"/>
+                       TextColor="{AppThemeBinding Light='#111', Dark='White'}"/>
                 <Label Text="Your media, anywhere on your network"
-                       FontSize="12" TextColor="{AppThemeBinding Light='#666688', Dark='#AAAACC'}"/>
+                       FontSize="12" TextColor="{AppThemeBinding Light='#666', Dark='#999'}"/>
             </VerticalStackLayout>
             <Button Grid.Column="1" Text="Browse All"
                     Command="{Binding BrowseAllCommand}"
-                    BackgroundColor="{StaticResource Primary}"
+                    BackgroundColor="{DynamicResource Primary}"
                     TextColor="White" CornerRadius="8"
                     FontSize="13" Padding="12,8"/>
         </Grid>
@@ -28,7 +29,8 @@
             <VerticalStackLayout Spacing="16" Padding="16">
 
                 <!-- Empty state -->
-                <VerticalStackLayout Spacing="16" IsVisible="{Binding HasNoBookmarks}" HorizontalOptions="Center" Margin="0,60,0,0">
+                <VerticalStackLayout Spacing="16" IsVisible="{Binding HasNoBookmarks}"
+                                     HorizontalOptions="Center" Margin="0,60,0,0">
                     <Label Text="📁" FontSize="48" HorizontalOptions="Center"/>
                     <Label Text="No bookmarks yet"
                            FontSize="18" FontAttributes="Bold" HorizontalOptions="Center"
@@ -36,27 +38,23 @@
                     <Label Text="Browse your files and bookmark your favourite folders"
                            FontSize="14" HorizontalOptions="Center" HorizontalTextAlignment="Center"
                            TextColor="{AppThemeBinding Light='#666', Dark='#999'}"/>
-                    <Button Text="Start Browsing"
-                            Command="{Binding BrowseAllCommand}"
-                            BackgroundColor="{StaticResource Primary}"
-                            TextColor="White" CornerRadius="10"
-                            HorizontalOptions="Center" Padding="24,12"/>
                 </VerticalStackLayout>
 
                 <!-- Bookmarks section -->
-                <VerticalStackLayout Spacing="12" IsVisible="{Binding HasNoBookmarks, Converter={StaticResource InvertBoolConverter}}">
+                <VerticalStackLayout Spacing="12"
+                                     IsVisible="{Binding HasNoBookmarks, Converter={StaticResource InvertBoolConverter}}">
                     <Label Text="Bookmarks" FontSize="16" FontAttributes="Bold"
                            TextColor="{AppThemeBinding Light='#333', Dark='#DDD'}" Margin="4,0"/>
-                    <CollectionView ItemsSource="{Binding BookmarkedFolders}"
-                                    SelectionMode="None">
+                    <CollectionView ItemsSource="{Binding BookmarkedFolders}" SelectionMode="None">
                         <CollectionView.ItemsLayout>
-                            <GridItemsLayout Orientation="Vertical" Span="2" HorizontalItemSpacing="8" VerticalItemSpacing="8"/>
+                            <GridItemsLayout Orientation="Vertical" Span="2"
+                                             HorizontalItemSpacing="8" VerticalItemSpacing="8"/>
                         </CollectionView.ItemsLayout>
                         <CollectionView.ItemTemplate>
                             <DataTemplate x:DataType="models:BookmarkedFolder">
-                                <Border Stroke="{AppThemeBinding Light='#E0E0F0', Dark='#333355'}"
+                                <Border Stroke="{AppThemeBinding Light='#E0E0E0', Dark='#2E2E2E'}"
                                         StrokeThickness="1" Padding="16"
-                                        BackgroundColor="{AppThemeBinding Light='White', Dark='#1E1E3A'}">
+                                        BackgroundColor="{AppThemeBinding Light='White', Dark='#1E1E1E'}">
                                     <Border.StrokeShape>
                                         <RoundRectangle CornerRadius="12"/>
                                     </Border.StrokeShape>

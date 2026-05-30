@@ -48,11 +48,15 @@ public class ThemeService : IThemeService
     {
         if (Application.Current?.Resources is not ResourceDictionary res) return;
 
-        res["Primary"] = accent;
-        res["PrimaryDark"] = new Color(accent.Red * 0.7f, accent.Green * 0.7f, accent.Blue * 0.7f);
-        res["PrimaryLight"] = new Color(
+        var dark = new Color(accent.Red * 0.7f, accent.Green * 0.7f, accent.Blue * 0.7f);
+        var light = new Color(
             Math.Min(1f, accent.Red * 1.3f),
             Math.Min(1f, accent.Green * 1.3f),
             Math.Min(1f, accent.Blue * 1.3f));
+
+        res["Primary"]      = accent;
+        res["PrimaryDark"]  = dark;
+        res["PrimaryLight"] = light;
+        res["PrimaryBrush"] = new SolidColorBrush(accent);
     }
 }

@@ -16,6 +16,7 @@
             <converters:IsNotNullConverter x:Key="IsNotNullConverter"/>
             <converters:BoolToStringConverter x:Key="BoolToStringConverter"/>
             <converters:BoolToColorConverter x:Key="BoolToColorConverter"/>
+            <converters:StringToColorConverter x:Key="StringToColorConverter"/>
 
         </ResourceDictionary>
     </Application.Resources>

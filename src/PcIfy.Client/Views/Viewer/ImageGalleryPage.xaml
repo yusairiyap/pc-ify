@@ -2,7 +2,6 @@
 <ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
              xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
              xmlns:vm="clr-namespace:PcIfy.Client.ViewModels"
-             xmlns:dto="clr-namespace:PcIfy.Shared.DTOs.Files;assembly=PcIfy.Shared"
              x:Class="PcIfy.Client.Views.Viewer.ImageGalleryPage"
              x:DataType="vm:ImageGalleryViewModel"
              Title="{Binding Title}"
@@ -16,12 +15,12 @@
             Position="{Binding CurrentIndex, Mode=TwoWay}"
             Loop="False">
             <CarouselView.ItemTemplate>
-                <DataTemplate x:DataType="dto:FileEntryDto">
+                <DataTemplate x:DataType="vm:ImageItemViewModel">
                     <Grid>
                         <Image Aspect="AspectFit" BackgroundColor="Black">
                             <Image.Source>
                                 <UriImageSource
-                                    Uri="{Binding Path, Converter={StaticResource PathToStreamUriConverter}}"
+                                    Uri="{Binding StreamUri}"
                                     CachingEnabled="True"
                                     CacheValidity="1.00:00:00"/>
                             </Image.Source>

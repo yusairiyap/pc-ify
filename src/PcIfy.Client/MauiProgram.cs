@@ -53,6 +53,7 @@ public static class MauiProgram
         builder.Services.AddTransient<BrowserViewModel>();
         builder.Services.AddTransient<VideoPlayerViewModel>();
         builder.Services.AddTransient<ImageGalleryViewModel>();
+        builder.Services.AddTransient<ImagePickerViewModel>();
         builder.Services.AddSingleton<SettingsViewModel>();
 
         // Views
@@ -61,6 +62,7 @@ public static class MauiProgram
         builder.Services.AddTransient<BrowserPage>();
         builder.Services.AddTransient<VideoPlayerPage>();
         builder.Services.AddTransient<ImageGalleryPage>();
+        builder.Services.AddTransient<ImagePickerPage>();
         builder.Services.AddSingleton<SettingsPage>();
 
 #if DEBUG

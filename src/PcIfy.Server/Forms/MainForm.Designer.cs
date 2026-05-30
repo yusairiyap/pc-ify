@@ -96,9 +96,10 @@ partial class MainForm
         // 
         // lblPortLabel
         // 
+        lblPortLabel.Anchor = AnchorStyles.Top | AnchorStyles.Right;
         lblPortLabel.AutoSize = true;
         lblPortLabel.Font = new Font("Segoe UI", 9F, FontStyle.Bold);
-        lblPortLabel.Location = new Point(987, 92);
+        lblPortLabel.Location = new Point(948, 92);
         lblPortLabel.Margin = new Padding(4, 0, 4, 0);
         lblPortLabel.Name = "lblPortLabel";
         lblPortLabel.Size = new Size(53, 25);
@@ -107,8 +108,9 @@ partial class MainForm
         // 
         // lblPort
         // 
+        lblPort.Anchor = AnchorStyles.Top | AnchorStyles.Right;
         lblPort.AutoSize = true;
-        lblPort.Location = new Point(1048, 92);
+        lblPort.Location = new Point(1009, 92);
         lblPort.Margin = new Padding(4, 0, 4, 0);
         lblPort.Name = "lblPort";
         lblPort.Size = new Size(52, 25);
@@ -182,7 +184,7 @@ partial class MainForm
         dgvLog.RowHeadersVisible = false;
         dgvLog.RowHeadersWidth = 62;
         dgvLog.SelectionMode = DataGridViewSelectionMode.FullRowSelect;
-        dgvLog.Size = new Size(1229, 667);
+        dgvLog.Size = new Size(1190, 667);
         dgvLog.TabIndex = 9;
         // 
         // colTime
@@ -240,7 +242,7 @@ partial class MainForm
         statusStrip.Location = new Point(0, 935);
         statusStrip.Name = "statusStrip";
         statusStrip.Padding = new Padding(1, 0, 20, 0);
-        statusStrip.Size = new Size(1263, 32);
+        statusStrip.Size = new Size(1224, 32);
         statusStrip.TabIndex = 10;
         statusStrip.Text = "statusStrip";
         // 
@@ -273,8 +275,9 @@ partial class MainForm
         // 
         // btnCopyAddress
         // 
+        btnCopyAddress.Anchor = AnchorStyles.Top | AnchorStyles.Right;
         btnCopyAddress.FlatStyle = FlatStyle.Flat;
-        btnCopyAddress.Location = new Point(1140, 85);
+        btnCopyAddress.Location = new Point(1101, 85);
         btnCopyAddress.Name = "btnCopyAddress";
         btnCopyAddress.Size = new Size(106, 39);
         btnCopyAddress.TabIndex = 13;
@@ -287,7 +290,7 @@ partial class MainForm
         // 
         AutoScaleDimensions = new SizeF(10F, 25F);
         AutoScaleMode = AutoScaleMode.Font;
-        ClientSize = new Size(1263, 967);
+        ClientSize = new Size(1224, 967);
         Controls.Add(dgvLog);
         Controls.Add(btnCopyAddress);
         Controls.Add(lblConnectLabel);
@@ -302,6 +305,7 @@ partial class MainForm
         Controls.Add(lblTitle);
         Controls.Add(statusStrip);
         Controls.Add(lblConnectAddress);
+        DoubleBuffered = true;
         Margin = new Padding(4, 5, 4, 5);
         MinimumSize = new Size(991, 763);
         Name = "MainForm";

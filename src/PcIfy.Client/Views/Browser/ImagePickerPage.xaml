@@ -3,84 +3,61 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
              xmlns:vm="clr-namespace:PcIfy.Client.ViewModels"
              xmlns:toolkit="http://schemas.microsoft.com/dotnet/2022/maui/toolkit"
-             x:Class="PcIfy.Client.Views.Browser.BrowserPage"
-             x:DataType="vm:BrowserViewModel"
+             x:Class="PcIfy.Client.Views.Browser.ImagePickerPage"
+             x:DataType="vm:ImagePickerViewModel"
              Title="{Binding Title}">
 
     <ContentPage.ToolbarItems>
         <ToolbarItem Text="⬆" Command="{Binding NavigateUpCommand}" Order="Primary"/>
-        <ToolbarItem Text="{Binding IsBookmarked, Converter={StaticResource BoolToStringConverter}, ConverterParameter='★|☆'}"
-                     Command="{Binding ToggleBookmarkCommand}" Order="Primary"/>
-        <ToolbarItem Text="🖼" Command="{Binding SetFolderBackgroundCommand}" Order="Primary"/>
-        <ToolbarItem Text="✕ BG"
-                     Command="{Binding ClearFolderBackgroundCommand}"
-                     Order="Secondary"/>
+        <ToolbarItem Text="Cancel" Command="{Binding CancelCommand}" Order="Primary"/>
     </ContentPage.ToolbarItems>
 
-    <Grid RowDefinitions="Auto,Auto,*">
+    <Grid RowDefinitions="Auto,*">
 
-        <!-- Folder background banner -->
-        <Grid Grid.Row="0" HeightRequest="120"
-              IsVisible="{Binding BackgroundImageSource, Converter={StaticResource IsNotNullConverter}}">
-            <Image Source="{Binding BackgroundImageSource}" Aspect="AspectFill" Opacity="0.7"/>
-            <BoxView BackgroundColor="#80000000"/>
-            <Label Text="{Binding Title}" FontSize="22" FontAttributes="Bold"
-                   TextColor="White" VerticalOptions="Center" HorizontalOptions="Center"/>
-        </Grid>
+        <!-- Hint bar -->
+        <Label Grid.Row="0"
+               Text="Tap an image to set it as this folder's background"
+               FontSize="12" HorizontalTextAlignment="Center"
+               Padding="12,8"
+               TextColor="{AppThemeBinding Light='#666', Dark='#999'}"
+               BackgroundColor="{AppThemeBinding Light='#F0F0F0', Dark='#1A1A1A'}"/>
 
-        <!-- Density toolbar -->
-        <Grid Grid.Row="1" ColumnDefinitions="*,Auto,Auto" Padding="12,8" ColumnSpacing="4"
-              BackgroundColor="{AppThemeBinding Light='#F5F5F5', Dark='#1A1A1A'}">
-            <Label Grid.Column="0"
-                   Text="{Binding Entries.Count, StringFormat='{0} items'}"
-                   VerticalOptions="Center" FontSize="13"
-                   TextColor="{AppThemeBinding Light='#555', Dark='#AAA'}"/>
-            <Button Grid.Column="1" Text="⊞" FontSize="16"
-                    Command="{Binding CycleDensityCommand}"
-                    BackgroundColor="Transparent" TextColor="{DynamicResource Primary}"
-                    Padding="4" WidthRequest="36" HeightRequest="36"/>
-            <Label Grid.Column="2" Text="{Binding Density}"
-                   VerticalOptions="Center" FontSize="12"
-                   TextColor="{AppThemeBinding Light='#555', Dark='#AAA'}"/>
-        </Grid>
+        <!-- Spinner -->
+        <ActivityIndicator Grid.Row="1" IsRunning="{Binding IsBusy}" IsVisible="{Binding IsBusy}"
+                           Color="{DynamicResource Primary}"
+                           VerticalOptions="Center" HorizontalOptions="Center"/>
 
-        <!-- Activity indicator -->
-        <VerticalStackLayout Grid.Row="2" IsVisible="{Binding IsBusy}"
-                             VerticalOptions="Center" HorizontalOptions="Center">
-            <ActivityIndicator IsRunning="True" Color="{DynamicResource Primary}"/>
-        </VerticalStackLayout>
-
-        <!-- File grid -->
-        <CollectionView Grid.Row="2"
+        <!-- Grid of folders + images -->
+        <CollectionView Grid.Row="1"
                         ItemsSource="{Binding Items}"
                         IsVisible="{Binding IsNotBusy}"
                         SelectionMode="None"
                         Margin="8">
             <CollectionView.ItemsLayout>
-                <GridItemsLayout Orientation="Vertical"
-                                 Span="{Binding GridColumns}"
-                                 HorizontalItemSpacing="6"
-                                 VerticalItemSpacing="6"/>
+                <GridItemsLayout Orientation="Vertical" Span="3"
+                                 HorizontalItemSpacing="6" VerticalItemSpacing="6"/>
             </CollectionView.ItemsLayout>
             <CollectionView.ItemTemplate>
                 <DataTemplate x:DataType="vm:BrowserItemViewModel">
-                    <Border Stroke="{AppThemeBinding Light='#E0E0E0', Dark='#2A2A2A'}"
-                            StrokeThickness="1"
+                    <Border StrokeThickness="1.5"
+                            Stroke="{AppThemeBinding Light='#E0E0E0', Dark='#2A2A2A'}"
                             BackgroundColor="{AppThemeBinding Light='White', Dark='#1E1E1E'}"
                             Padding="0">
                         <Border.StrokeShape>
                             <RoundRectangle CornerRadius="10"/>
                         </Border.StrokeShape>
-                        <Border.Behaviors>
-                            <toolkit:TouchBehavior
-                                LongPressCommand="{Binding LongPressCommand}"
-                                LongPressDuration="600"/>
-                        </Border.Behaviors>
+                        <Border.Triggers>
+                            <!-- Image items get a primary-colour border to hint they're selectable -->
+                            <DataTrigger TargetType="Border"
+                                         Binding="{Binding IsImage}"
+                                         Value="True">
+                                <Setter Property="Stroke" Value="{DynamicResource Primary}"/>
+                            </DataTrigger>
+                        </Border.Triggers>
                         <Border.GestureRecognizers>
                             <TapGestureRecognizer Command="{Binding OpenCommand}"/>
                         </Border.GestureRecognizers>
                         <Grid RowDefinitions="100,32">
-                            <!-- Thumbnail area -->
                             <Border Grid.Row="0"
                                     BackgroundColor="{AppThemeBinding Light='#F0F0F0', Dark='#252525'}">
                                 <Border.StrokeShape><RoundRectangle CornerRadius="10,10,0,0"/></Border.StrokeShape>
@@ -97,7 +74,6 @@
                                            FontSize="36" HorizontalOptions="Center" VerticalOptions="Center"/>
                                 </Grid>
                             </Border>
-                            <!-- Name -->
                             <Label Grid.Row="1" Text="{Binding Entry.Name}"
                                    FontSize="11" MaxLines="1" LineBreakMode="TailTruncation"
                                    Padding="6,0" HorizontalTextAlignment="Center" VerticalOptions="Center"

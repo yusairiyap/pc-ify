@@ -87,10 +87,28 @@ public static class FFmpegSetupService
         return Task.Run(() =>
         {
             using var zip = ZipFile.OpenRead(zipPath);
+
+            // The shared build puts ffmpeg.exe + all DLLs in a bin/ sub-folder inside the zip.
+            // Locate that folder by finding where ffmpeg.exe lives, then extract every
+            // .exe and .dll from that same folder.
+            var ffmpegEntry = zip.Entries.FirstOrDefault(e =>
+                Path.GetFileName(e.FullName).Equals("ffmpeg.exe", StringComparison.OrdinalIgnoreCase));
+
+            var binPrefix = ffmpegEntry is null
+                ? string.Empty
+                : Path.GetDirectoryName(ffmpegEntry.FullName)?.Replace('\\', '/') + "/";
+
             foreach (var entry in zip.Entries)
             {
                 var name = Path.GetFileName(entry.FullName);
-                if (name is not ("ffmpeg.exe" or "ffprobe.exe")) continue;
+                if (string.IsNullOrEmpty(name)) continue;
+
+                var ext = Path.GetExtension(name).ToLowerInvariant();
+                if (ext is not (".exe" or ".dll")) continue;
+
+                // Only extract files that live in the same bin/ folder as ffmpeg.exe
+                if (binPrefix.Length > 0 && !entry.FullName.Replace('\\', '/').StartsWith(binPrefix, StringComparison.OrdinalIgnoreCase))
+                    continue;
 
                 var dest = Path.Combine(targetDir, name);
                 entry.ExtractToFile(dest, overwrite: true);
