@@ -66,8 +66,14 @@ class ApiService {
         queryParameters: {'path': path},
       );
       return FolderListing.fromJson(resp.data as Map<String, dynamic>);
-    } catch (_) {
-      return null;
+    } on DioException catch (e) {
+      final status = e.response?.statusCode;
+      if (status == 403) throw Exception('Access denied.');
+      if (status == 404) throw Exception('Folder not found.');
+      if (status != null) throw Exception('Server error $status.');
+      throw Exception('Network error: ${e.message}');
+    } catch (e) {
+      rethrow;
     }
   }
 

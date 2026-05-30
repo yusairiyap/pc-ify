@@ -4,7 +4,7 @@
 
 **pc-ify** is a local-network home entertainment system:
 - **PcIfy.Server** — .NET 10 WinForms app that embeds an ASP.NET Core (Kestrel) API to serve files on the local network
-- **PcIfy.Client** — .NET MAUI .NET 10 app (Android + iOS) for browsing and streaming those files
+- **PcIfy.Client.Flutter** — Flutter app (Android + iOS) for browsing and streaming those files
 - **PcIfy.Shared** — Class library with shared DTOs, constants, and models
 
 ## Solution Layout
@@ -13,7 +13,7 @@
 src/
 ├── PcIfy.Shared/          DTOs, API route constants, MIME helpers
 ├── PcIfy.Server/          WinForms host + Kestrel API
-└── PcIfy.Client/          MAUI mobile client
+└── PcIfy.Client.Flutter/  Flutter mobile client
 ```
 
 ## Running the Server
@@ -31,10 +31,11 @@ The server settings are stored at `%APPDATA%\pcify\settings.json`.
 ## Running the Client (Android)
 
 ```bash
-dotnet build src/PcIfy.Client -f net10.0-android -t:Run
+cd src/PcIfy.Client.Flutter
+flutter run
 ```
 
-Or use Visual Studio with an Android emulator / physical device.
+Or use VS Code with an Android emulator / physical device. The `launch.json` at repo root includes a ready-to-use Flutter launch config.
 
 ## FFmpeg (server thumbnail generation)
 
@@ -50,7 +51,7 @@ To skip auto-download, the user can manually place the binaries at:
 
 ## Architecture Patterns
 
-### Service Interface Pattern
+### Service Interface Pattern (Server)
 
 Always inject interfaces, never concrete types. Every service has an interface in `Services/Interfaces/`. This keeps code testable and the DI container swappable.
 
@@ -77,7 +78,7 @@ else
 
 ### JWT Query Parameter for Streaming
 
-`MediaElement` and `<Image>` in MAUI set URI sources directly; they cannot inject `Authorization` headers. Streaming and thumbnail endpoints therefore also accept the JWT via `?token=<jwt>` query parameter. This is configured in `JwtHelper.ConfigureJwtBearerOptions` via `OnMessageReceived`. Only streaming/thumbnail routes accept query-param tokens; all other endpoints require the `Authorization: Bearer` header.
+Flutter's `media_kit` video player and `CachedNetworkImage` set URLs directly; they cannot inject `Authorization` headers. Streaming and thumbnail endpoints therefore also accept the JWT via `?token=<jwt>` query parameter. This is configured in `JwtHelper.ConfigureJwtBearerOptions` via `OnMessageReceived`. Only streaming/thumbnail routes accept query-param tokens; all other endpoints require the `Authorization: Bearer` header.
 
 **Do not remove this pattern** — it is required for video and image loading to work.
 
@@ -85,36 +86,30 @@ else
 
 Every file request on the server side must pass through `PathSanitizer.IsPathAllowed()` before any file system access. This prevents path traversal attacks. The check is in `FilesController` and `ThumbnailsController`. **Never skip this check.**
 
-### MAUI DI and Navigation
+### Flutter State Management (Riverpod)
 
-DI is configured in `MauiProgram.cs`. ViewModels are `Transient` (created fresh per navigation), except `SettingsViewModel` which is `Singleton`.
+State is managed with `flutter_riverpod`. Providers live in `lib/providers/`. Services are exposed as `Provider<T>` (singleton); screen state uses `StateNotifierProvider` or `AsyncNotifierProvider`.
 
-Navigate using Shell routes:
-```csharp
-await Shell.Current.GoToAsync($"browser?path={Uri.EscapeDataString(path)}");
-```
-
-Query properties are received via `[QueryProperty]` on ViewModels.
+Navigation uses `go_router` configured in `lib/router.dart`. Pass data via route parameters or `extra`.
 
 ### Dark / Light Mode
 
 **Server:** `Program.ApplyColorMode(string mode)` calls `Application.SetColorMode()`. The mode is stored in `AppSettings.ColorMode` (`"Dark"`, `"Light"`, `"System"`). It can be toggled at runtime from MainForm or the system tray.
 
-**Client:** `IThemeService.Apply(AppTheme, Color)` sets `Application.Current.UserAppTheme`. All XAML colours use `AppThemeBinding` so they update immediately without page reload. Persisted in `Preferences`.
+**Client:** `ThemeService` in `lib/services/theme_service.dart` stores theme and accent color in `SharedPreferences`. The Riverpod theme provider notifies the app root to rebuild with the new `ThemeData`.
 
 ## Adding New API Endpoints
 
 1. Add the route constant to `PcIfy.Shared/Constants/ApiRoutes.cs`
 2. Add the controller method in `PcIfy.Server/Api/Controllers/`
-3. Add the corresponding typed call to `IApiService` + `ApiService.cs` in the client
+3. Add the corresponding call to `ApiService` in `lib/services/api_service.dart`
 4. If the endpoint streams a file, add it to the `StreamingPathPrefixes` array in `JwtHelper.cs`
 
 ## Adding New Client Screens
 
-1. Create `Views/YourFeature/YourPage.xaml` + `.cs`
-2. Create `ViewModels/YourViewModel.cs` (extend `BaseViewModel`)
-3. Register both in `MauiProgram.cs` (transient)
-4. Register the route in `AppShell.xaml.cs`
+1. Create `lib/features/your_feature/your_screen.dart`
+2. Add a route in `lib/router.dart`
+3. Add any new services/providers under `lib/services/` and `lib/providers/`
 
 ## Key Files Quick Reference
 
@@ -125,7 +120,9 @@ Query properties are received via `[QueryProperty]` on ViewModels.
 | `PcIfy.Server/Services/KestrelHostService.cs` | Embeds Kestrel in WinForms process |
 | `PcIfy.Server/Helpers/PathSanitizer.cs` | Security — path traversal prevention |
 | `PcIfy.Server/Helpers/JwtHelper.cs` | JWT generation + query-param support |
-| `PcIfy.Client/MauiProgram.cs` | Client DI registration |
-| `PcIfy.Client/Services/ApiService.cs` | All HTTP calls to server |
-| `PcIfy.Client/Services/AuthorizationHeaderHandler.cs` | Auto-attaches JWT to every request |
-| `PcIfy.Client/Services/ThemeService.cs` | Dark/light + accent color |
+| `PcIfy.Client.Flutter/lib/main.dart` | Flutter entry point |
+| `PcIfy.Client.Flutter/lib/router.dart` | go_router navigation config |
+| `PcIfy.Client.Flutter/lib/services/api_service.dart` | All HTTP calls to server |
+| `PcIfy.Client.Flutter/lib/services/auth_token_service.dart` | JWT storage and retrieval |
+| `PcIfy.Client.Flutter/lib/services/theme_service.dart` | Dark/light + accent color |
+| `PcIfy.Client.Flutter/lib/providers/` | Riverpod provider definitions |

@@ -31,11 +31,11 @@ class DownloadService {
   Future<Directory> _getDownloadsDir() async {
     if (Platform.isAndroid) {
       final dir = Directory('/storage/emulated/0/Download');
-      if (dir.existsSync()) return dir;
+      if (await dir.exists()) return dir;
     }
     final base = await getApplicationDocumentsDirectory();
     final dir = Directory('${base.path}/Downloads');
-    if (!dir.existsSync()) dir.createSync(recursive: true);
+    if (!await dir.exists()) await dir.create(recursive: true);
     return dir;
   }
 }

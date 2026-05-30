@@ -62,12 +62,6 @@ final routerProvider = Provider<GoRouter>((ref) {
         ],
       ),
       GoRoute(
-        path: '/browser',
-        builder: (context, state) => BrowserScreen(
-          path: state.uri.queryParameters['path'],
-        ),
-      ),
-      GoRoute(
         path: '/player',
         builder: (context, state) => VideoPlayerScreen(
           filePath: state.uri.queryParameters['path'] ?? '',

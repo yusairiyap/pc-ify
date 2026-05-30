@@ -28,6 +28,7 @@ class _BrowserState {
     required this.prefs,
     required this.isBookmarked,
     required this.density,
+    required this.canNavigateBack,
     this.backgroundImageUri,
   });
   final FolderListing? listing;
@@ -35,6 +36,7 @@ class _BrowserState {
   final FolderPrefs prefs;
   final bool isBookmarked;
   final GridDensity density;
+  final bool canNavigateBack;
   // Full http://host/stream/...?token=... URI, ready for CachedNetworkImage
   final String? backgroundImageUri;
 
@@ -44,6 +46,7 @@ class _BrowserState {
     FolderPrefs? prefs,
     bool? isBookmarked,
     GridDensity? density,
+    bool? canNavigateBack,
     String? backgroundImageUri,
     bool clearBackgroundUri = false,
   }) =>
@@ -53,6 +56,7 @@ class _BrowserState {
         prefs: prefs ?? this.prefs,
         isBookmarked: isBookmarked ?? this.isBookmarked,
         density: density ?? this.density,
+        canNavigateBack: canNavigateBack ?? this.canNavigateBack,
         backgroundImageUri: clearBackgroundUri
             ? null
             : (backgroundImageUri ?? this.backgroundImageUri),
@@ -64,10 +68,28 @@ class _BrowserState {
 final _browserPathProvider = Provider.autoDispose<String>((ref) => '');
 
 class _BrowserNotifier extends AutoDisposeAsyncNotifier<_BrowserState> {
+  final _history = <String>[];
+
   @override
   Future<_BrowserState> build() async {
     final path = ref.watch(_browserPathProvider);
+    _history
+      ..clear()
+      ..add(path);
     return _load(path);
+  }
+
+  Future<void> navigateTo(String path) async {
+    state = const AsyncLoading();
+    _history.add(path);
+    state = await AsyncValue.guard(() => _load(path));
+  }
+
+  Future<void> navigateBack() async {
+    if (_history.length <= 1) return;
+    _history.removeLast();
+    state = const AsyncLoading();
+    state = await AsyncValue.guard(() => _load(_history.last));
   }
 
   Future<_BrowserState> _load(String path) async {
@@ -123,6 +145,7 @@ class _BrowserNotifier extends AutoDisposeAsyncNotifier<_BrowserState> {
       prefs: folderPrefs,
       isBookmarked: isBookmarked,
       density: density,
+      canNavigateBack: _history.length > 1,
       backgroundImageUri: bgUri,
     );
   }
@@ -131,17 +154,15 @@ class _BrowserNotifier extends AutoDisposeAsyncNotifier<_BrowserState> {
     final api = ref.read(apiServiceProvider);
     final result = <_BrowserItem>[];
     for (final e in entries) {
-      if (e.hasThumbnail) {
-        final thumbUri = await api.buildThumbnailUriWithToken(e.path);
-        final streamUri =
-            (e.type == FileType.video || e.type == FileType.image)
-                ? await api.buildStreamUriWithToken(e.path)
-                : null;
-        result.add(_BrowserItem(
-            entry: e, thumbnailUri: thumbUri, streamUri: streamUri));
-      } else {
-        result.add(_BrowserItem(entry: e));
-      }
+      final String? thumbUri =
+          e.hasThumbnail ? await api.buildThumbnailUriWithToken(e.path) : null;
+      // Always build stream URI for playable types so external player actions
+      // work even when the server hasn't generated a thumbnail yet.
+      final String? streamUri =
+          (e.type == FileType.video || e.type == FileType.image)
+              ? await api.buildStreamUriWithToken(e.path)
+              : null;
+      result.add(_BrowserItem(entry: e, thumbnailUri: thumbUri, streamUri: streamUri));
     }
     return result;
   }
@@ -193,7 +214,8 @@ class _BrowserNotifier extends AutoDisposeAsyncNotifier<_BrowserState> {
 
 final _browserNotifierProvider =
     AutoDisposeAsyncNotifierProvider<_BrowserNotifier, _BrowserState>(
-        _BrowserNotifier.new);
+        _BrowserNotifier.new,
+        dependencies: [_browserPathProvider]);
 
 // --- Screen ---
 
@@ -237,11 +259,10 @@ class _BrowserLoaded extends ConsumerWidget {
     return Scaffold(
       appBar: AppBar(
         title: Text(listing.displayName),
-        leading: listing.parentPath != null
+        leading: state.canNavigateBack
             ? IconButton(
-                icon: const Icon(Icons.arrow_upward),
-                onPressed: () => context.push(
-                    '/browser?path=${Uri.encodeComponent(listing.parentPath!)}'),
+                icon: const Icon(Icons.arrow_back),
+                onPressed: notifier.navigateBack,
               )
             : null,
         actions: [
@@ -309,7 +330,7 @@ class _BrowserLoaded extends ConsumerWidget {
     final e = item.entry;
     switch (e.type) {
       case FileType.folder:
-        context.push('/browser?path=${Uri.encodeComponent(e.path)}');
+        ref.read(_browserNotifierProvider.notifier).navigateTo(e.path);
       case FileType.video:
         context.push(
             '/player?path=${Uri.encodeComponent(e.path)}&name=${Uri.encodeComponent(e.name)}');
@@ -371,7 +392,7 @@ class _BrowserLoaded extends ConsumerWidget {
 
     switch (action) {
       case 'open':
-        context.push('/browser?path=${Uri.encodeComponent(e.path)}');
+        ref.read(_browserNotifierProvider.notifier).navigateTo(e.path);
       case 'bookmark':
         await ref.read(bookmarkServiceProvider).addBookmark(
             BookmarkedFolder(path: e.path, displayName: e.name));

@@ -13,7 +13,7 @@ class FolderPrefsService {
     if (_dir != null) return _dir!;
     final base = await getApplicationDocumentsDirectory();
     final dir = Directory('${base.path}/folderprefs');
-    if (!dir.existsSync()) dir.createSync(recursive: true);
+    if (!await dir.exists()) await dir.create(recursive: true);
     _dir = dir;
     return dir;
   }
@@ -26,9 +26,9 @@ class FolderPrefsService {
   Future<FolderPrefs> getPrefs(String folderPath) async {
     final dir = await _getDir();
     final file = File('${dir.path}/${_key(folderPath)}.json');
-    if (!file.existsSync()) return const FolderPrefs();
+    if (!await file.exists()) return const FolderPrefs();
     try {
-      final json = jsonDecode(file.readAsStringSync()) as Map<String, dynamic>;
+      final json = jsonDecode(await file.readAsString()) as Map<String, dynamic>;
       return FolderPrefs.fromJson(json);
     } catch (_) {
       return const FolderPrefs();
@@ -38,6 +38,6 @@ class FolderPrefsService {
   Future<void> savePrefs(String folderPath, FolderPrefs prefs) async {
     final dir = await _getDir();
     final file = File('${dir.path}/${_key(folderPath)}.json');
-    file.writeAsStringSync(jsonEncode(prefs.toJson()));
+    await file.writeAsString(jsonEncode(prefs.toJson()));
   }
 }

@@ -71,7 +71,10 @@ public class KestrelHostService : IKestrelHostService
                     .AddJwtBearer(opts => JwtHelper.ConfigureJwtBearerOptions(opts, _settings.JwtSecret));
 
                 services.AddAuthorization();
-                services.AddControllers();
+                services.AddControllers()
+                    .AddJsonOptions(opts =>
+                        opts.JsonSerializerOptions.Converters.Add(
+                            new System.Text.Json.Serialization.JsonStringEnumConverter()));
                 services.AddCors(opts => opts.AddDefaultPolicy(p =>
                     p.AllowAnyOrigin().AllowAnyMethod().AllowAnyHeader()));
             })

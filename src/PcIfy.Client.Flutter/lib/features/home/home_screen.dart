@@ -48,20 +48,20 @@ class HomeScreen extends ConsumerWidget {
               ),
             )
           : GridView.builder(
-              padding: const EdgeInsets.all(12),
-              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: 2,
-                crossAxisSpacing: 8,
-                mainAxisSpacing: 8,
-                childAspectRatio: 1.2,
+              padding: const EdgeInsets.all(8),
+              gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+                maxCrossAxisExtent: 160,
+                crossAxisSpacing: 6,
+                mainAxisSpacing: 6,
+                childAspectRatio: 0.85,
               ),
               itemCount: bookmarks.length,
               itemBuilder: (context, i) {
                 final b = bookmarks[i];
                 return _BookmarkCard(
                   bookmark: b,
-                  onTap: () => context.push(
-                    '/browser?path=${Uri.encodeComponent(b.path)}',
+                  onTap: () => context.go(
+                    '/browse?path=${Uri.encodeComponent(b.path)}',
                   ),
                   onRemove: () {
                     ref.read(bookmarkServiceProvider).removeBookmark(b.path);
@@ -110,22 +110,24 @@ class _BookmarkCard extends StatelessWidget {
           );
           if (action == 'remove') onRemove();
         },
-        child: Padding(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(Icons.folder, size: 48, color: cs.primary),
-              const SizedBox(height: 8),
-              Text(
+        child: Column(
+          children: [
+            Expanded(
+              child: Center(
+                child: Icon(Icons.folder, size: 48, color: cs.primary),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+              child: Text(
                 bookmark.displayName,
                 textAlign: TextAlign.center,
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
-                style: Theme.of(context).textTheme.labelLarge,
+                style: Theme.of(context).textTheme.labelSmall,
               ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );
