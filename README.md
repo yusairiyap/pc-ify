@@ -63,7 +63,7 @@ A local-network home entertainment app. Run the server on your Windows PC and br
 dotnet build src/PcIfy.Server
 
 # Client (Android)
-cd src/PcIfy.Client.Flutter
+cd src/PcIfy.Client
 flutter build apk
 
 # Client (iOS — requires macOS + Xcode)
@@ -81,7 +81,7 @@ src/
 │   ├── Services/          Business logic (file, auth, thumbnail, log)
 │   ├── Helpers/           JWT, path security, range requests
 │   └── Models/            AppSettings, log entries
-└── PcIfy.Client.Flutter/  Flutter client (Android + iOS)
+└── PcIfy.Client/  Flutter client (Android + iOS)
     ├── lib/core/           Models, constants, utils
     ├── lib/features/       Screen widgets (browser, home, video, gallery…)
     ├── lib/services/       HTTP, auth token, bookmarks, theme, download

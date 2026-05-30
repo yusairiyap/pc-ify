@@ -6,27 +6,27 @@
     "configurations": [
         {
             "name": "Flutter - Android Device (debug)",
-            "cwd": "src\\PcIfy.Client.Flutter",
+            "cwd": "src\\PcIfy.Client",
             "request": "launch",
             "type": "dart"
         },
         {
             "name": "Flutter - Android Device (release)",
-            "cwd": "src\\PcIfy.Client.Flutter",
+            "cwd": "src\\PcIfy.Client",
             "request": "launch",
             "type": "dart",
             "flutterMode": "release"
         },
         {
             "name": "Flutter - Windows (debug)",
-            "cwd": "src\\PcIfy.Client.Flutter",
+            "cwd": "src\\PcIfy.Client",
             "request": "launch",
             "type": "dart",
             "deviceId": "windows"
         },
         {
             "name": "Flutter - Windows (release)",
-            "cwd": "src\\PcIfy.Client.Flutter",
+            "cwd": "src\\PcIfy.Client",
             "request": "launch",
             "type": "dart",
             "deviceId": "windows",

@@ -4,7 +4,7 @@
 
 **pc-ify** is a local-network home entertainment system:
 - **PcIfy.Server** — .NET 10 WinForms app that embeds an ASP.NET Core (Kestrel) API to serve files on the local network
-- **PcIfy.Client.Flutter** — Flutter app (Android + iOS) for browsing and streaming those files
+- **PcIfy.Client** — Flutter app (Android + iOS) for browsing and streaming those files
 - **PcIfy.Shared** — Class library with shared DTOs, constants, and models
 
 ## Solution Layout
@@ -13,7 +13,7 @@
 src/
 ├── PcIfy.Shared/          DTOs, API route constants, MIME helpers
 ├── PcIfy.Server/          WinForms host + Kestrel API
-└── PcIfy.Client.Flutter/  Flutter mobile client
+└── PcIfy.Client/  Flutter mobile client
 ```
 
 ## Running the Server
@@ -31,7 +31,7 @@ The server settings are stored at `%APPDATA%\pcify\settings.json`.
 ## Running the Client (Android)
 
 ```bash
-cd src/PcIfy.Client.Flutter
+cd src/PcIfy.Client
 flutter run
 ```
 
@@ -120,9 +120,9 @@ Navigation uses `go_router` configured in `lib/router.dart`. Pass data via route
 | `PcIfy.Server/Services/KestrelHostService.cs` | Embeds Kestrel in WinForms process |
 | `PcIfy.Server/Helpers/PathSanitizer.cs` | Security — path traversal prevention |
 | `PcIfy.Server/Helpers/JwtHelper.cs` | JWT generation + query-param support |
-| `PcIfy.Client.Flutter/lib/main.dart` | Flutter entry point |
-| `PcIfy.Client.Flutter/lib/router.dart` | go_router navigation config |
-| `PcIfy.Client.Flutter/lib/services/api_service.dart` | All HTTP calls to server |
-| `PcIfy.Client.Flutter/lib/services/auth_token_service.dart` | JWT storage and retrieval |
-| `PcIfy.Client.Flutter/lib/services/theme_service.dart` | Dark/light + accent color |
-| `PcIfy.Client.Flutter/lib/providers/` | Riverpod provider definitions |
+| `PcIfy.Client/lib/main.dart` | Flutter entry point |
+| `PcIfy.Client/lib/router.dart` | go_router navigation config |
+| `PcIfy.Client/lib/services/api_service.dart` | All HTTP calls to server |
+| `PcIfy.Client/lib/services/auth_token_service.dart` | JWT storage and retrieval |
+| `PcIfy.Client/lib/services/theme_service.dart` | Dark/light + accent color |
+| `PcIfy.Client/lib/providers/` | Riverpod provider definitions |
