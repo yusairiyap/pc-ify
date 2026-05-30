@@ -280,72 +280,112 @@ class _BrowserLoaded extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final notifier = ref.read(_browserNotifierProvider.notifier);
     final listing = state.listing!;
+    final hasBg = state.backgroundImageUri != null;
+
+    final appBar = AppBar(
+      backgroundColor: hasBg ? Colors.transparent : null,
+      foregroundColor: hasBg ? Colors.white : null,
+      elevation: hasBg ? 0 : null,
+      title: Text(listing.displayName),
+      leading: state.canNavigateBack
+          ? IconButton(
+              icon: const Icon(Icons.arrow_back),
+              onPressed: notifier.navigateBack,
+            )
+          : null,
+      actions: [
+        IconButton(
+          icon: Icon(
+              state.isBookmarked ? Icons.bookmark : Icons.bookmark_outline),
+          onPressed: notifier.toggleBookmark,
+        ),
+        if (state.prefs.backgroundImagePath != null)
+          IconButton(
+            icon: const Icon(Icons.wallpaper),
+            tooltip: 'Clear background',
+            onPressed: notifier.clearBackgroundImage,
+          )
+        else
+          IconButton(
+            icon: const Icon(Icons.image_outlined),
+            tooltip: 'Set background',
+            onPressed: () async {
+              final picked = await context.push<String>(
+                  '/image-picker?path=${Uri.encodeComponent(listing.path)}');
+              if (picked != null) await notifier.setBackgroundImage(picked);
+            },
+          ),
+      ],
+    );
+
+    final grid = LayoutBuilder(builder: (context, constraints) {
+      final cols =
+          GridDensityHelper.getColumnCount(constraints.maxWidth, state.density);
+      return GridView.builder(
+        padding: const EdgeInsets.all(8),
+        // ignore: deprecated_member_use
+        cacheExtent: 600,
+        gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+          crossAxisCount: cols,
+          crossAxisSpacing: 6,
+          mainAxisSpacing: 6,
+          childAspectRatio: 0.85,
+        ),
+        itemCount: state.items.length,
+        itemBuilder: (context, i) => RepaintBoundary(
+          child: _FileGridItem(
+            item: state.items[i],
+            hasBackground: hasBg,
+            onTap: () => _onTap(context, ref, state.items[i]),
+            onLongPress: () =>
+                _onLongPress(context, ref, state.items[i], listing),
+          ),
+        ),
+      );
+    });
+
+    if (hasBg) {
+      return Scaffold(
+        extendBodyBehindAppBar: true,
+        appBar: appBar,
+        body: Stack(
+          fit: StackFit.expand,
+          children: [
+            CachedNetworkImage(
+              imageUrl: state.backgroundImageUri!,
+              fit: BoxFit.cover,
+            ),
+            DecoratedBox(
+              decoration:
+                  BoxDecoration(color: Colors.black.withValues(alpha: 0.35)),
+            ),
+            Column(
+              children: [
+                SizedBox(
+                    height: MediaQuery.viewPaddingOf(context).top +
+                        kToolbarHeight),
+                _DensityToolbar(
+                    count: state.items.length,
+                    density: state.density,
+                    onCycle: notifier.cycleDensity,
+                    hasBackground: true),
+                Expanded(child: grid),
+              ],
+            ),
+          ],
+        ),
+      );
+    }
 
     return Scaffold(
-      appBar: AppBar(
-        title: Text(listing.displayName),
-        leading: state.canNavigateBack
-            ? IconButton(
-                icon: const Icon(Icons.arrow_back),
-                onPressed: notifier.navigateBack,
-              )
-            : null,
-        actions: [
-          IconButton(
-            icon: Icon(
-                state.isBookmarked ? Icons.bookmark : Icons.bookmark_outline),
-            onPressed: notifier.toggleBookmark,
-          ),
-          if (state.prefs.backgroundImagePath != null)
-            IconButton(
-              icon: const Icon(Icons.wallpaper),
-              tooltip: 'Clear background',
-              onPressed: notifier.clearBackgroundImage,
-            )
-          else
-            IconButton(
-              icon: const Icon(Icons.image_outlined),
-              tooltip: 'Set background',
-              onPressed: () async {
-                final picked = await context.push<String>(
-                    '/image-picker?path=${Uri.encodeComponent(listing.path)}');
-                if (picked != null) await notifier.setBackgroundImage(picked);
-              },
-            ),
-        ],
-      ),
+      appBar: appBar,
       body: Column(
         children: [
-          if (state.backgroundImageUri != null)
-            _BackgroundBanner(
-                imageUri: state.backgroundImageUri!,
-                title: listing.displayName),
           _DensityToolbar(
               count: state.items.length,
               density: state.density,
               onCycle: notifier.cycleDensity),
-          Expanded(
-            child: LayoutBuilder(builder: (context, constraints) {
-              final cols = GridDensityHelper.getColumnCount(
-                  constraints.maxWidth, state.density);
-              return GridView.builder(
-                padding: const EdgeInsets.all(8),
-                gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-                  crossAxisCount: cols,
-                  crossAxisSpacing: 6,
-                  mainAxisSpacing: 6,
-                  childAspectRatio: 0.85,
-                ),
-                itemCount: state.items.length,
-                itemBuilder: (context, i) => _FileGridItem(
-                  item: state.items[i],
-                  onTap: () => _onTap(context, ref, state.items[i]),
-                  onLongPress: () =>
-                      _onLongPress(context, ref, state.items[i], listing),
-                ),
-              );
-            }),
-          ),
+          Expanded(child: grid),
         ],
       ),
     );
@@ -458,56 +498,38 @@ class _BrowserLoaded extends ConsumerWidget {
 
 // --- Sub-widgets ---
 
-class _BackgroundBanner extends StatelessWidget {
-  const _BackgroundBanner({required this.imageUri, required this.title});
-  final String imageUri;
-  final String title;
-
-  @override
-  Widget build(BuildContext context) {
-    return SizedBox(
-      height: 120,
-      width: double.infinity,
-      child: Stack(
-        fit: StackFit.expand,
-        children: [
-          CachedNetworkImage(imageUrl: imageUri, fit: BoxFit.cover),
-          Container(color: Colors.black54),
-          Padding(
-            padding: const EdgeInsets.all(12),
-            child: Align(
-              alignment: Alignment.bottomLeft,
-              child: Text(title,
-                  style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold)),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
 class _DensityToolbar extends StatelessWidget {
-  const _DensityToolbar(
-      {required this.count, required this.density, required this.onCycle});
+  const _DensityToolbar({
+    required this.count,
+    required this.density,
+    required this.onCycle,
+    this.hasBackground = false,
+  });
   final int count;
   final GridDensity density;
   final VoidCallback onCycle;
+  final bool hasBackground;
 
   @override
   Widget build(BuildContext context) {
+    final style = hasBackground
+        ? Theme.of(context)
+            .textTheme
+            .bodySmall
+            ?.copyWith(color: Colors.white70)
+        : Theme.of(context).textTheme.bodySmall;
+
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
       child: Row(
         children: [
-          Text('$count items',
-              style: Theme.of(context).textTheme.bodySmall),
+          Text('$count items', style: style),
           const Spacer(),
           TextButton.icon(
             onPressed: onCycle,
+            style: hasBackground
+                ? TextButton.styleFrom(foregroundColor: Colors.white)
+                : null,
             icon: const Icon(Icons.grid_view, size: 18),
             label: Text(GridDensityHelper.label(density)),
           ),
@@ -518,11 +540,16 @@ class _DensityToolbar extends StatelessWidget {
 }
 
 class _FileGridItem extends StatelessWidget {
-  const _FileGridItem(
-      {required this.item, required this.onTap, required this.onLongPress});
+  const _FileGridItem({
+    required this.item,
+    required this.onTap,
+    required this.onLongPress,
+    this.hasBackground = false,
+  });
   final _BrowserItem item;
   final VoidCallback onTap;
   final VoidCallback onLongPress;
+  final bool hasBackground;
 
   @override
   Widget build(BuildContext context) {
@@ -530,38 +557,71 @@ class _FileGridItem extends StatelessWidget {
     final entry = item.entry;
     final icon = _iconFor(entry.type);
 
+    final iconColor = cs.outline;
+    final labelStyle = Theme.of(context).textTheme.labelSmall;
+
+    final cardContent = Column(
+      children: [
+        Expanded(
+          child: item.thumbnailUri != null
+              ? CachedNetworkImage(
+                  imageUrl: item.thumbnailUri!,
+                  fit: BoxFit.cover,
+                  width: double.infinity,
+                  memCacheWidth: 320,
+                  placeholder: (_, __) =>
+                      Center(child: Icon(icon, size: 40, color: iconColor)),
+                  errorWidget: (_, __, ___) =>
+                      Center(child: Icon(icon, size: 40, color: iconColor)),
+                )
+              : Center(
+                  child: Icon(icon,
+                      size: 48,
+                      color: cs.primary)),
+        ),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+          child: Text(
+            entry.name,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            textAlign: TextAlign.center,
+            style: labelStyle,
+          ),
+        ),
+      ],
+    );
+
+    if (hasBackground) {
+      return ClipRRect(
+        borderRadius: BorderRadius.circular(12),
+        child: Container(
+          decoration: BoxDecoration(
+            color: Theme.of(context).colorScheme.surfaceContainerHigh.withValues(alpha: 0.82),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+                color: Theme.of(context)
+                    .colorScheme
+                    .primary
+                    .withValues(alpha: 0.4),
+                width: 1.0),
+          ),
+          child: InkWell(
+            onTap: onTap,
+            onLongPress: onLongPress,
+            borderRadius: BorderRadius.circular(12),
+            child: cardContent,
+          ),
+        ),
+      );
+    }
+
     return Card(
-      clipBehavior: Clip.antiAlias,
+      clipBehavior: Clip.hardEdge,
       child: InkWell(
         onTap: onTap,
         onLongPress: onLongPress,
-        child: Column(
-          children: [
-            Expanded(
-              child: item.thumbnailUri != null
-                  ? CachedNetworkImage(
-                      imageUrl: item.thumbnailUri!,
-                      fit: BoxFit.cover,
-                      width: double.infinity,
-                      placeholder: (_, __) =>
-                          Center(child: Icon(icon, size: 40, color: cs.outline)),
-                      errorWidget: (_, __, ___) =>
-                          Center(child: Icon(icon, size: 40, color: cs.outline)),
-                    )
-                  : Center(child: Icon(icon, size: 48, color: cs.primary)),
-            ),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
-              child: Text(
-                entry.name,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                textAlign: TextAlign.center,
-                style: Theme.of(context).textTheme.labelSmall,
-              ),
-            ),
-          ],
-        ),
+        child: cardContent,
       ),
     );
   }
