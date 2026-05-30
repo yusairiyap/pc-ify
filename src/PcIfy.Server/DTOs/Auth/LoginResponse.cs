@@ -1,4 +1,4 @@
-namespace PcIfy.Shared.DTOs.Auth;
+﻿namespace PcIfy.Server.DTOs.Auth;
 
 public class LoginResponse
 {

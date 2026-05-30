@@ -1,8 +1,8 @@
-using PcIfy.Server.Helpers;
+﻿using PcIfy.Server.Helpers;
 using PcIfy.Server.Models;
 using PcIfy.Server.Services.Interfaces;
-using PcIfy.Shared.Constants;
-using PcIfy.Shared.DTOs.Files;
+using PcIfy.Server.Constants;
+using PcIfy.Server.DTOs.Files;
 
 namespace PcIfy.Server.Services;
 

@@ -5,15 +5,15 @@
 **pc-ify** is a local-network home entertainment system:
 - **PcIfy.Server** — .NET 10 WinForms app that embeds an ASP.NET Core (Kestrel) API to serve files on the local network
 - **PcIfy.Client** — Flutter app (Android + iOS) for browsing and streaming those files
-- **PcIfy.Shared** — Class library with shared DTOs, constants, and models
-
 ## Solution Layout
 
 ```
 src/
-├── PcIfy.Shared/          DTOs, API route constants, MIME helpers
 ├── PcIfy.Server/          WinForms host + Kestrel API
-└── PcIfy.Client/  Flutter mobile client
+│   ├── Constants/         API route strings, MIME type helpers
+│   ├── DTOs/              Request/response data objects
+│   └── ...
+└── PcIfy.Client/          Flutter mobile client
 ```
 
 ## Running the Server
@@ -100,7 +100,7 @@ Navigation uses `go_router` configured in `lib/router.dart`. Pass data via route
 
 ## Adding New API Endpoints
 
-1. Add the route constant to `PcIfy.Shared/Constants/ApiRoutes.cs`
+1. Add the route constant to `PcIfy.Server/Constants/ApiRoutes.cs`
 2. Add the controller method in `PcIfy.Server/Api/Controllers/`
 3. Add the corresponding call to `ApiService` in `lib/services/api_service.dart`
 4. If the endpoint streams a file, add it to the `StreamingPathPrefixes` array in `JwtHelper.cs`
@@ -115,7 +115,7 @@ Navigation uses `go_router` configured in `lib/router.dart`. Pass data via route
 
 | File | Purpose |
 |---|---|
-| `PcIfy.Shared/Constants/ApiRoutes.cs` | All API route strings |
+| `PcIfy.Server/Constants/ApiRoutes.cs` | All API route strings |
 | `PcIfy.Server/Program.cs` | Server entry point, DI root, color mode |
 | `PcIfy.Server/Services/KestrelHostService.cs` | Embeds Kestrel in WinForms process |
 | `PcIfy.Server/Helpers/PathSanitizer.cs` | Security — path traversal prevention |

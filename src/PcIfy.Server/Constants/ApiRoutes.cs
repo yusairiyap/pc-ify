@@ -1,4 +1,4 @@
-namespace PcIfy.Shared.Constants;
+﻿namespace PcIfy.Server.Constants;
 
 public static class ApiRoutes
 {

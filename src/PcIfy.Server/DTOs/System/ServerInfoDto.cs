@@ -1,4 +1,4 @@
-namespace PcIfy.Shared.DTOs.System;
+﻿namespace PcIfy.Server.DTOs.System;
 
 public class ServerInfoDto
 {

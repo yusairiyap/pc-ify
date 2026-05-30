@@ -74,14 +74,15 @@ flutter build ios
 
 ```
 src/
-├── PcIfy.Shared/          DTOs, API route constants, MIME helpers
 ├── PcIfy.Server/          WinForms + embedded Kestrel API
 │   ├── Api/               Controllers, middleware
+│   ├── Constants/         API route strings, MIME type helpers
+│   ├── DTOs/              Request/response data objects
 │   ├── Forms/             WinForms UI (MainForm, SettingsForm, tray)
-│   ├── Services/          Business logic (file, auth, thumbnail, log)
 │   ├── Helpers/           JWT, path security, range requests
-│   └── Models/            AppSettings, log entries
-└── PcIfy.Client/  Flutter client (Android + iOS)
+│   ├── Models/            AppSettings, log entries
+│   └── Services/          Business logic (file, auth, thumbnail, log)
+└── PcIfy.Client/          Flutter client (Android + iOS)
     ├── lib/core/           Models, constants, utils
     ├── lib/features/       Screen widgets (browser, home, video, gallery…)
     ├── lib/services/       HTTP, auth token, bookmarks, theme, download

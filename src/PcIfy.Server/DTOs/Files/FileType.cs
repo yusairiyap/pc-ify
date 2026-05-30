@@ -1,4 +1,4 @@
-namespace PcIfy.Shared.DTOs.Files;
+﻿namespace PcIfy.Server.DTOs.Files;
 
 public enum FileType
 {
