@@ -1,5 +1,10 @@
 <Solution>
-  <Project Path="src/PcIfy.Client/PcIfy.Client.csproj" />
   <Project Path="src/PcIfy.Server/PcIfy.Server.csproj" />
-  <Project Path="src/PcIfy.Shared/PcIfy.Shared.csproj" />
+  <Folder Name="PcIfy.Client (Flutter)">
+    <File Path="src/PcIfy.Client/pubspec.yaml" />
+    <File Path="src/PcIfy.Client/lib/main.dart" />
+    <File Path="src/PcIfy.Client/lib/app.dart" />
+    <File Path="src/PcIfy.Client/lib/router.dart" />
+    <File Path="src/PcIfy.Client/android/app/src/main/AndroidManifest.xml" />
+  </Folder>
 </Solution>
