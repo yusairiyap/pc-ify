@@ -5,7 +5,7 @@ import 'package:media_kit/media_kit.dart';
 import 'package:media_kit_video/media_kit_video.dart';
 
 import '../../core/constants/media_types.dart';
-import '../../providers/services_providers.dart';
+import '../../providers/services_providers.dart' show apiServiceProvider, externalPlayerServiceProvider, videoFitProvider, videoRepeatProvider;
 
 class VideoPlayerScreen extends ConsumerStatefulWidget {
   const VideoPlayerScreen(
@@ -38,6 +38,8 @@ class _VideoPlayerScreenState extends ConsumerState<VideoPlayerScreen> {
   Future<void> _initStream() async {
     final api = ref.read(apiServiceProvider);
     final uri = await api.buildStreamUriWithToken(widget.filePath);
+    final repeat = ref.read(videoRepeatProvider);
+    await _player.setPlaylistMode(repeat ? PlaylistMode.loop : PlaylistMode.none);
     setState(() => _streamUri = uri);
     await _player.open(Media(uri));
   }
@@ -85,7 +87,12 @@ class _VideoPlayerScreenState extends ConsumerState<VideoPlayerScreen> {
                 seekBarThumbSize: 22,
                 seekBarContainerHeight: 96,
               ),
-              child: Video(controller: _controller),
+              child: Consumer(
+                builder: (context, ref, _) {
+                  final fit = ref.watch(videoFitProvider);
+                  return Video(controller: _controller, fit: fit);
+                },
+              ),
             ),
     );
   }

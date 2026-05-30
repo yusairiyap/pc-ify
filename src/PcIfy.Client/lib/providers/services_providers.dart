@@ -1,3 +1,4 @@
+import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -51,4 +52,19 @@ final externalPlayerServiceProvider = Provider<ExternalPlayerService>((ref) {
 
 final themeServiceProvider = Provider<ThemeService>((ref) {
   return ThemeService(ref.watch(sharedPrefsProvider));
+});
+
+// Persisted video fit mode: 'contain' | 'cover' | 'fill'. Default: 'contain'.
+final videoFitProvider = StateProvider<BoxFit>((ref) {
+  final s = ref.watch(sharedPrefsProvider).getString('video_fit_mode') ?? 'contain';
+  return switch (s) {
+    'cover' => BoxFit.cover,
+    'fill' => BoxFit.fill,
+    _ => BoxFit.contain,
+  };
+});
+
+// Persisted auto-repeat toggle. Default: false.
+final videoRepeatProvider = StateProvider<bool>((ref) {
+  return ref.watch(sharedPrefsProvider).getBool('video_auto_repeat') ?? false;
 });

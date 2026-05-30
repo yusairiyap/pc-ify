@@ -2,8 +2,11 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:open_filex/open_filex.dart';
 
 import '../../core/constants/media_types.dart';
+import 'background_crop_screen.dart';
+import '../split_view/split_view_screen.dart' show SplitViewEntry;
 import '../../core/models/bookmarked_folder.dart';
 import '../../core/models/file_entry.dart';
 import '../../core/models/folder_listing.dart';
@@ -30,6 +33,8 @@ class _BrowserState {
     required this.density,
     required this.canNavigateBack,
     this.backgroundImageUri,
+    this.isSelecting = false,
+    this.selectedPaths = const {},
   });
   final FolderListing? listing;
   final List<_BrowserItem> items;
@@ -37,8 +42,9 @@ class _BrowserState {
   final bool isBookmarked;
   final GridDensity density;
   final bool canNavigateBack;
-  // Full http://host/stream/...?token=... URI, ready for CachedNetworkImage
   final String? backgroundImageUri;
+  final bool isSelecting;
+  final Set<String> selectedPaths;
 
   _BrowserState copyWith({
     FolderListing? listing,
@@ -49,6 +55,8 @@ class _BrowserState {
     bool? canNavigateBack,
     String? backgroundImageUri,
     bool clearBackgroundUri = false,
+    bool? isSelecting,
+    Set<String>? selectedPaths,
   }) =>
       _BrowserState(
         listing: listing ?? this.listing,
@@ -60,6 +68,8 @@ class _BrowserState {
         backgroundImageUri: clearBackgroundUri
             ? null
             : (backgroundImageUri ?? this.backgroundImageUri),
+        isSelecting: isSelecting ?? this.isSelecting,
+        selectedPaths: selectedPaths ?? this.selectedPaths,
       );
 }
 
@@ -69,6 +79,7 @@ final _browserPathProvider = Provider.autoDispose<String>((ref) => '');
 
 class _BrowserNotifier extends AutoDisposeAsyncNotifier<_BrowserState> {
   final _history = <String>[];
+  bool navigating = false;
 
   @override
   Future<_BrowserState> build() async {
@@ -87,14 +98,17 @@ class _BrowserNotifier extends AutoDisposeAsyncNotifier<_BrowserState> {
   }
 
   Future<void> navigateTo(String path) async {
+    navigating = true;
     state = const AsyncLoading<_BrowserState>().copyWithPrevious(state);
     _history.add(path);
     state = await AsyncValue.guard(() => _load(path));
+    navigating = false;
   }
 
   Future<void> navigateBack() async {
     if (_history.length <= 1) return;
     _history.removeLast();
+    navigating = true;
     state = const AsyncLoading<_BrowserState>().copyWithPrevious(state);
     final result = await AsyncValue.guard(() => _load(_history.last));
     // If we've reached the start of history but the loaded folder still has a parent,
@@ -104,10 +118,12 @@ class _BrowserNotifier extends AutoDisposeAsyncNotifier<_BrowserState> {
       if (parentPath != null && parentPath.isNotEmpty) {
         _history.insert(0, parentPath);
         state = AsyncData(result.requireValue.copyWith(canNavigateBack: true));
+        navigating = false;
         return;
       }
     }
     state = result;
+    navigating = false;
   }
 
   Future<_BrowserState> _load(String path) async {
@@ -208,15 +224,50 @@ class _BrowserNotifier extends AutoDisposeAsyncNotifier<_BrowserState> {
     state = AsyncData(s.copyWith(density: next));
   }
 
-  Future<void> setBackgroundImage(String serverPath) async {
+  Future<void> setBackgroundImage(
+    String serverPath, {
+    double? cropOffsetDx,
+    double? cropOffsetDy,
+    double? cropScale,
+  }) async {
     final s = state.valueOrNull;
     if (s?.listing == null) return;
-    final updated = s!.prefs.copyWith(backgroundImagePath: serverPath);
+    final updated = s!.prefs.copyWith(
+      backgroundImagePath: serverPath,
+      cropOffsetDx: cropOffsetDx,
+      cropOffsetDy: cropOffsetDy,
+      cropScale: cropScale,
+      clearCrop: cropOffsetDx == null,
+    );
     await ref
         .read(folderPrefsServiceProvider)
         .savePrefs(s.listing!.path, updated);
     final uri = await ref.read(apiServiceProvider).buildStreamUriWithToken(serverPath);
     state = AsyncData(s.copyWith(prefs: updated, backgroundImageUri: uri));
+  }
+
+  void enterSelection(String firstPath) {
+    final s = state.valueOrNull;
+    if (s == null) return;
+    state = AsyncData(s.copyWith(isSelecting: true, selectedPaths: {firstPath}));
+  }
+
+  void toggleSelection(String path) {
+    final s = state.valueOrNull;
+    if (s == null) return;
+    final updated = Set<String>.from(s.selectedPaths);
+    if (updated.contains(path)) {
+      updated.remove(path);
+    } else {
+      updated.add(path);
+    }
+    state = AsyncData(s.copyWith(selectedPaths: updated));
+  }
+
+  void clearSelection() {
+    final s = state.valueOrNull;
+    if (s == null) return;
+    state = AsyncData(s.copyWith(isSelecting: false, selectedPaths: {}));
   }
 
   Future<void> clearBackgroundImage() async {
@@ -255,7 +306,12 @@ class _BrowserBody extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    return ref.watch(_browserNotifierProvider).when(
+    final async = ref.watch(_browserNotifierProvider);
+    final isNavigating =
+        async.isLoading && ref.read(_browserNotifierProvider.notifier).navigating;
+    return Stack(
+      children: [
+        async.when(
           skipLoadingOnReload: true,
           loading: () =>
               const Scaffold(body: Center(child: CircularProgressIndicator())),
@@ -268,7 +324,16 @@ class _BrowserBody extends ConsumerWidget {
               state: s,
             ),
           ),
-        );
+        ),
+        if (isNavigating)
+          const Positioned.fill(
+            child: ColoredBox(
+              color: Color(0x55000000),
+              child: Center(child: CircularProgressIndicator()),
+            ),
+          ),
+      ],
+    );
   }
 }
 
@@ -282,41 +347,91 @@ class _BrowserLoaded extends ConsumerWidget {
     final listing = state.listing!;
     final hasBg = state.backgroundImageUri != null;
 
-    final appBar = AppBar(
-      backgroundColor: hasBg ? Colors.transparent : null,
-      foregroundColor: hasBg ? Colors.white : null,
-      elevation: hasBg ? 0 : null,
-      title: Text(listing.displayName),
-      leading: state.canNavigateBack
-          ? IconButton(
-              icon: const Icon(Icons.arrow_back),
-              onPressed: notifier.navigateBack,
-            )
-          : null,
-      actions: [
-        IconButton(
-          icon: Icon(
-              state.isBookmarked ? Icons.bookmark : Icons.bookmark_outline),
-          onPressed: notifier.toggleBookmark,
+    final AppBar appBar;
+    if (state.isSelecting) {
+      final selectedItems = state.items
+          .where((i) => state.selectedPaths.contains(i.entry.path))
+          .toList();
+      final single = selectedItems.length == 1;
+      final singleVideo = single && selectedItems.first.entry.type == FileType.video;
+      final singleImage = single && selectedItems.first.entry.type == FileType.image;
+      final fgColor = hasBg ? Colors.white : Theme.of(context).colorScheme.primary;
+      appBar = AppBar(
+        backgroundColor: hasBg ? Colors.black87 : null,
+        foregroundColor: hasBg ? Colors.white : null,
+        leading: IconButton(
+          icon: const Icon(Icons.close),
+          onPressed: notifier.clearSelection,
         ),
-        if (state.prefs.backgroundImagePath != null)
-          IconButton(
-            icon: const Icon(Icons.wallpaper),
-            tooltip: 'Clear background',
-            onPressed: notifier.clearBackgroundImage,
-          )
-        else
-          IconButton(
-            icon: const Icon(Icons.image_outlined),
-            tooltip: 'Set background',
-            onPressed: () async {
-              final picked = await context.push<String>(
-                  '/image-picker?path=${Uri.encodeComponent(listing.path)}');
-              if (picked != null) await notifier.setBackgroundImage(picked);
-            },
+        title: Text('${state.selectedPaths.length} selected'),
+        actions: [
+          Tooltip(
+            message: state.selectedPaths.length > 3
+                ? 'Select up to 3 items for Split View'
+                : '',
+            child: TextButton.icon(
+              onPressed: state.selectedPaths.isEmpty ||
+                      state.selectedPaths.length > 3
+                  ? null
+                  : () => _openSplitView(context, ref, listing),
+              icon: const Icon(Icons.view_column_outlined),
+              label: const Text('Open in Split View'),
+              style: TextButton.styleFrom(foregroundColor: fgColor),
+            ),
           ),
-      ],
-    );
+          PopupMenuButton<String>(
+            icon: Icon(Icons.more_vert, color: hasBg ? Colors.white : null),
+            onSelected: (v) =>
+                _onSelectionMenuAction(context, ref, listing, v, selectedItems),
+            itemBuilder: (_) => [
+              if (singleVideo)
+                const PopupMenuItem(value: 'play', child: Text('Play')),
+              if (singleImage)
+                const PopupMenuItem(value: 'view', child: Text('View')),
+              PopupMenuItem(
+                value: 'external',
+                enabled: singleVideo,
+                child: const Text('Open in external player'),
+              ),
+              PopupMenuItem(
+                value: 'download',
+                child: Text(selectedItems.length > 1 ? 'Download all' : 'Download'),
+              ),
+            ],
+          ),
+        ],
+      );
+    } else {
+      appBar = AppBar(
+        backgroundColor: hasBg ? Colors.transparent : null,
+        foregroundColor: hasBg ? Colors.white : null,
+        elevation: hasBg ? 0 : null,
+        title: Text(listing.displayName),
+        leading: state.canNavigateBack
+            ? IconButton(
+                icon: const Icon(Icons.arrow_back),
+                onPressed: notifier.navigateBack,
+              )
+            : null,
+        actions: [
+          IconButton(
+            icon: Icon(
+                state.isBookmarked ? Icons.bookmark : Icons.bookmark_outline),
+            onPressed: notifier.toggleBookmark,
+          ),
+          IconButton(
+            icon: Icon(state.prefs.backgroundImagePath != null
+                ? Icons.wallpaper
+                : Icons.image_outlined),
+            tooltip: state.prefs.backgroundImagePath != null
+                ? 'Background options'
+                : 'Set background',
+            onPressed: () => _onBackgroundTap(context, ref, notifier, listing,
+                hasBackground: state.prefs.backgroundImagePath != null),
+          ),
+        ],
+      );
+    }
 
     final grid = LayoutBuilder(builder: (context, constraints) {
       final cols =
@@ -332,15 +447,22 @@ class _BrowserLoaded extends ConsumerWidget {
           childAspectRatio: 0.85,
         ),
         itemCount: state.items.length,
-        itemBuilder: (context, i) => RepaintBoundary(
-          child: _FileGridItem(
-            item: state.items[i],
-            hasBackground: hasBg,
-            onTap: () => _onTap(context, ref, state.items[i]),
-            onLongPress: () =>
-                _onLongPress(context, ref, state.items[i], listing),
-          ),
-        ),
+        itemBuilder: (context, i) {
+          final item = state.items[i];
+          final isSelectable = item.entry.type == FileType.image ||
+              item.entry.type == FileType.video;
+          final isSelected = state.selectedPaths.contains(item.entry.path);
+          return RepaintBoundary(
+            child: _FileGridItem(
+              item: item,
+              hasBackground: hasBg,
+              isSelecting: state.isSelecting && isSelectable,
+              isSelected: isSelected,
+              onTap: () => _onTap(context, ref, item),
+              onLongPress: () => _onLongPress(context, ref, item, listing),
+            ),
+          );
+        },
       );
     });
 
@@ -351,9 +473,9 @@ class _BrowserLoaded extends ConsumerWidget {
         body: Stack(
           fit: StackFit.expand,
           children: [
-            CachedNetworkImage(
-              imageUrl: state.backgroundImageUri!,
-              fit: BoxFit.cover,
+            _BackgroundImage(
+              imageUri: state.backgroundImageUri!,
+              prefs: state.prefs,
             ),
             DecoratedBox(
               decoration:
@@ -391,7 +513,149 @@ class _BrowserLoaded extends ConsumerWidget {
     );
   }
 
+  Future<void> _onBackgroundTap(
+    BuildContext context,
+    WidgetRef ref,
+    _BrowserNotifier notifier,
+    FolderListing listing, {
+    required bool hasBackground,
+  }) async {
+    if (hasBackground) {
+      // Ask user to change or remove existing background
+      final action = await showModalBottomSheet<String>(
+        context: context,
+        builder: (_) => SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Padding(
+                padding: EdgeInsets.fromLTRB(16, 16, 16, 8),
+                child: Text('Background Image',
+                    style: TextStyle(fontWeight: FontWeight.w600)),
+              ),
+              const Divider(height: 1),
+              ListTile(
+                leading: const Icon(Icons.photo_outlined),
+                title: const Text('Change background'),
+                onTap: () => Navigator.pop(context, 'change'),
+              ),
+              ListTile(
+                leading: const Icon(Icons.delete_outline),
+                title: const Text('Remove background'),
+                onTap: () => Navigator.pop(context, 'remove'),
+              ),
+            ],
+          ),
+        ),
+      );
+      if (!context.mounted || action == null) return;
+      if (action == 'remove') {
+        await notifier.clearBackgroundImage();
+        return;
+      }
+      // 'change' falls through to the picker below
+    }
+    // Open image picker → crop screen
+    final picked = await context.push<String>(
+        '/image-picker?path=${Uri.encodeComponent(listing.path)}');
+    if (picked == null || !context.mounted) return;
+    final imageUri =
+        await ref.read(apiServiceProvider).buildStreamUriWithToken(picked);
+    if (!context.mounted) return;
+    final result = await context.push<BackgroundCropResult>(
+      '/background-crop?imagePath=${Uri.encodeComponent(picked)}',
+      extra: imageUri,
+    );
+    if (result != null) {
+      await notifier.setBackgroundImage(
+        result.imagePath,
+        cropOffsetDx: result.cropOffsetDx,
+        cropOffsetDy: result.cropOffsetDy,
+        cropScale: result.cropScale,
+      );
+    }
+  }
+
+  Future<void> _onSelectionMenuAction(
+    BuildContext context,
+    WidgetRef ref,
+    FolderListing listing,
+    String action,
+    List<_BrowserItem> selectedItems,
+  ) async {
+    if (selectedItems.isEmpty) return;
+    final item = selectedItems.first;
+
+    switch (action) {
+      case 'play':
+        ref.read(_browserNotifierProvider.notifier).clearSelection();
+        context.push(
+            '/player?path=${Uri.encodeComponent(item.entry.path)}&name=${Uri.encodeComponent(item.entry.name)}');
+      case 'view':
+        final media = listing.entries
+            .where((x) => x.type == FileType.image || x.type == FileType.video)
+            .toList();
+        final idx = media.indexWhere((x) => x.path == item.entry.path);
+        ref.read(_browserNotifierProvider.notifier).clearSelection();
+        if (context.mounted) {
+          context.push(
+              '/gallery?path=${Uri.encodeComponent(listing.path)}&index=${idx < 0 ? 0 : idx}');
+        }
+      case 'external':
+        final uri = item.streamUri ?? '';
+        final mime = MediaTypes.getMimeType(MediaTypes.extensionOf(item.entry.name));
+        ref.read(_browserNotifierProvider.notifier).clearSelection();
+        await ref.read(externalPlayerServiceProvider).openVideo(uri, mime);
+      case 'download':
+        ref.read(_browserNotifierProvider.notifier).clearSelection();
+        for (final sel in selectedItems) {
+          if (!context.mounted) return;
+          ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text('Downloading ${sel.entry.name}…')));
+          final saved = await ref
+              .read(downloadServiceProvider)
+              .downloadFile(sel.entry.path, sel.entry.name);
+          if (context.mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                content: Text(saved != null
+                    ? 'Saved: ${sel.entry.name}'
+                    : 'Download failed: ${sel.entry.name}')));
+          }
+        }
+    }
+  }
+
+  void _openSplitView(BuildContext context, WidgetRef ref, FolderListing listing) {
+    final s = ref.read(_browserNotifierProvider).valueOrNull;
+    if (s == null || s.selectedPaths.isEmpty) return;
+    final entries = s.items
+        .where((i) => s.selectedPaths.contains(i.entry.path))
+        .map((i) => SplitViewEntry(
+              name: i.entry.name,
+              filePath: i.entry.path,
+              isVideo: i.entry.type == FileType.video,
+              streamUri: i.streamUri,
+              thumbnailUri: i.thumbnailUri,
+            ))
+        .toList();
+    ref.read(_browserNotifierProvider.notifier).clearSelection();
+    context.push('/split-view', extra: {
+      'folderPath': listing.path,
+      'entries': entries,
+    });
+  }
+
   Future<void> _onTap(BuildContext context, WidgetRef ref, _BrowserItem item) async {
+    // In selection mode, tapping a media item toggles selection
+    final s = ref.read(_browserNotifierProvider).valueOrNull;
+    if (s != null && s.isSelecting) {
+      final e = item.entry;
+      if (e.type == FileType.image || e.type == FileType.video) {
+        final notifier = ref.read(_browserNotifierProvider.notifier);
+        notifier.toggleSelection(e.path);
+      }
+      return;
+    }
     final e = item.entry;
     switch (e.type) {
       case FileType.folder:
@@ -427,13 +691,40 @@ class _BrowserLoaded extends ConsumerWidget {
         context.push(
             '/gallery?path=${Uri.encodeComponent(listing?.path ?? '')}&index=${idx < 0 ? 0 : idx}');
       default:
-        break;
+        await _downloadAndOpen(context, ref, item.entry);
+    }
+  }
+
+  Future<void> _downloadAndOpen(
+      BuildContext context, WidgetRef ref, FileEntry e) async {
+    if (!context.mounted) return;
+    final messenger = ScaffoldMessenger.of(context);
+    messenger.showSnackBar(SnackBar(content: Text('Opening ${e.name}…')));
+    final saved =
+        await ref.read(downloadServiceProvider).downloadFile(e.path, e.name);
+    if (!context.mounted) return;
+    if (saved == null) {
+      messenger.showSnackBar(const SnackBar(content: Text('Download failed')));
+      return;
+    }
+    final result = await OpenFilex.open(saved);
+    if (context.mounted && result.type != ResultType.done) {
+      messenger.showSnackBar(
+          SnackBar(content: Text('Cannot open file: ${result.message}')));
     }
   }
 
   Future<void> _onLongPress(BuildContext context, WidgetRef ref,
       _BrowserItem item, FolderListing listing) async {
     final e = item.entry;
+    // Long-press on image/video → enter multi-select mode
+    if (e.type == FileType.image || e.type == FileType.video) {
+      final s = ref.read(_browserNotifierProvider).valueOrNull;
+      if (s != null && !s.isSelecting) {
+        ref.read(_browserNotifierProvider.notifier).enterSelection(e.path);
+        return;
+      }
+    }
     final actions = <String, String>{};
     if (e.type == FileType.folder) {
       actions['open'] = 'Open';
@@ -446,6 +737,7 @@ class _BrowserLoaded extends ConsumerWidget {
       actions['view'] = 'View';
       actions['download'] = 'Download';
     } else {
+      actions['open_file'] = 'Open';
       actions['download'] = 'Download';
     }
 
@@ -512,11 +804,47 @@ class _BrowserLoaded extends ConsumerWidget {
         final idx = media.indexWhere((x) => x.path == e.path);
         context.push(
             '/gallery?path=${Uri.encodeComponent(listing.path)}&index=${idx < 0 ? 0 : idx}');
+      case 'open_file':
+        await _downloadAndOpen(context, ref, e);
     }
   }
 }
 
 // --- Sub-widgets ---
+
+class _BackgroundImage extends StatelessWidget {
+  const _BackgroundImage({required this.imageUri, required this.prefs});
+  final String imageUri;
+  final FolderPrefs prefs;
+
+  @override
+  Widget build(BuildContext context) {
+    if (!prefs.hasCrop) {
+      return CachedNetworkImage(
+        imageUrl: imageUri,
+        fit: BoxFit.cover,
+        width: double.infinity,
+        height: double.infinity,
+      );
+    }
+    final scale = prefs.cropScale ?? 1.0;
+    final dx = prefs.cropOffsetDx ?? 0.0;
+    final dy = prefs.cropOffsetDy ?? 0.0;
+    return ClipRect(
+      child: Transform(
+        transform: Matrix4.identity()
+          ..translateByDouble(dx, dy, 0, 1)
+          ..scaleByDouble(scale, scale, 1, 1),
+        child: CachedNetworkImage(
+          imageUrl: imageUri,
+          fit: BoxFit.cover,
+          width: double.infinity,
+          height: double.infinity,
+        ),
+      ),
+    );
+  }
+}
 
 class _DensityToolbar extends StatelessWidget {
   const _DensityToolbar({
@@ -565,11 +893,15 @@ class _FileGridItem extends StatelessWidget {
     required this.onTap,
     required this.onLongPress,
     this.hasBackground = false,
+    this.isSelecting = false,
+    this.isSelected = false,
   });
   final _BrowserItem item;
   final VoidCallback onTap;
   final VoidCallback onLongPress;
   final bool hasBackground;
+  final bool isSelecting;
+  final bool isSelected;
 
   @override
   Widget build(BuildContext context) {
@@ -612,6 +944,26 @@ class _FileGridItem extends StatelessWidget {
       ],
     );
 
+    final selectionOverlay = isSelecting
+        ? Positioned.fill(
+            child: Stack(children: [
+              if (isSelected)
+                const ColoredBox(color: Color(0x4400AAFF)),
+              Positioned(
+                top: 6,
+                right: 6,
+                child: Icon(
+                  isSelected
+                      ? Icons.check_circle_rounded
+                      : Icons.radio_button_unchecked_rounded,
+                  color: isSelected ? Colors.lightBlue : Colors.white70,
+                  size: 22,
+                ),
+              ),
+            ]),
+          )
+        : null;
+
     if (hasBackground) {
       return ClipRRect(
         borderRadius: BorderRadius.circular(12),
@@ -620,17 +972,19 @@ class _FileGridItem extends StatelessWidget {
             color: Theme.of(context).colorScheme.surfaceContainerHigh.withValues(alpha: 0.82),
             borderRadius: BorderRadius.circular(12),
             border: Border.all(
-                color: Theme.of(context)
-                    .colorScheme
-                    .primary
-                    .withValues(alpha: 0.4),
-                width: 1.0),
+                color: isSelected
+                    ? Colors.lightBlue
+                    : Theme.of(context).colorScheme.primary.withValues(alpha: 0.4),
+                width: isSelected ? 2.0 : 1.0),
           ),
           child: InkWell(
             onTap: onTap,
             onLongPress: onLongPress,
             borderRadius: BorderRadius.circular(12),
-            child: cardContent,
+            child: Stack(children: [
+              cardContent,
+              if (selectionOverlay != null) selectionOverlay,
+            ]),
           ),
         ),
       );
@@ -638,10 +992,19 @@ class _FileGridItem extends StatelessWidget {
 
     return Card(
       clipBehavior: Clip.hardEdge,
+      shape: isSelected
+          ? RoundedRectangleBorder(
+              side: const BorderSide(color: Colors.lightBlue, width: 2),
+              borderRadius: BorderRadius.circular(12),
+            )
+          : null,
       child: InkWell(
         onTap: onTap,
         onLongPress: onLongPress,
-        child: cardContent,
+        child: Stack(children: [
+          cardContent,
+          if (selectionOverlay != null) selectionOverlay,
+        ]),
       ),
     );
   }

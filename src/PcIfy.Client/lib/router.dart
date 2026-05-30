@@ -2,8 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import 'features/browser/background_crop_screen.dart';
 import 'features/browser/browser_screen.dart';
 import 'features/browser/image_picker_screen.dart';
+import 'features/split_view/split_view_screen.dart';
 import 'features/home/home_screen.dart';
 import 'features/image_gallery/image_gallery_screen.dart';
 import 'features/settings/settings_screen.dart';
@@ -96,6 +98,29 @@ final routerProvider = Provider<GoRouter>((ref) {
           state,
           ImagePickerScreen(startPath: state.uri.queryParameters['path'] ?? ''),
         ),
+      ),
+      GoRoute(
+        path: '/background-crop',
+        pageBuilder: (context, state) {
+          final imageUri = state.extra as String? ?? '';
+          final imagePath = state.uri.queryParameters['imagePath'] ?? '';
+          return _slideUpPage(
+            state,
+            BackgroundCropScreen(imageUri: imageUri, imagePath: imagePath),
+          );
+        },
+      ),
+      GoRoute(
+        path: '/split-view',
+        pageBuilder: (context, state) {
+          final extra = state.extra as Map<String, dynamic>? ?? {};
+          final folderPath = extra['folderPath'] as String? ?? '';
+          final entries = (extra['entries'] as List<SplitViewEntry>?) ?? [];
+          return _slideUpPage(
+            state,
+            SplitViewScreen(folderPath: folderPath, selectedItems: entries),
+          );
+        },
       ),
     ],
   );

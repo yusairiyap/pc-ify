@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-
 import '../../core/utils/grid_density_helper.dart';
 import '../../providers/services_providers.dart';
 import '../../providers/theme_providers.dart';
@@ -17,6 +16,8 @@ class SettingsScreen extends ConsumerStatefulWidget {
 class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   late GridDensity _selectedDensity;
   late bool _alwaysExternal;
+  late BoxFit _videoFit;
+  late bool _videoRepeat;
 
   @override
   void initState() {
@@ -25,6 +26,12 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     _selectedDensity = GridDensityHelper.fromString(
         prefs.getString('grid_density') ?? 'normal');
     _alwaysExternal = prefs.getBool('always_external_player') ?? false;
+    _videoFit = switch (prefs.getString('video_fit_mode') ?? 'contain') {
+      'cover' => BoxFit.cover,
+      'fill' => BoxFit.fill,
+      _ => BoxFit.contain,
+    };
+    _videoRepeat = prefs.getBool('video_auto_repeat') ?? false;
   }
 
   Future<void> _onThemeModeChanged(ThemeMode mode) async {
@@ -45,6 +52,23 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   Future<void> _onAlwaysExternalChanged(bool value) async {
     setState(() => _alwaysExternal = value);
     await ref.read(sharedPrefsProvider).setBool('always_external_player', value);
+  }
+
+  void _onVideoFitChanged(BoxFit fit) {
+    setState(() => _videoFit = fit);
+    final s = switch (fit) {
+      BoxFit.cover => 'cover',
+      BoxFit.fill => 'fill',
+      _ => 'contain',
+    };
+    ref.read(sharedPrefsProvider).setString('video_fit_mode', s);
+    ref.read(videoFitProvider.notifier).state = fit;
+  }
+
+  Future<void> _onVideoRepeatChanged(bool value) async {
+    setState(() => _videoRepeat = value);
+    await ref.read(sharedPrefsProvider).setBool('video_auto_repeat', value);
+    ref.read(videoRepeatProvider.notifier).state = value;
   }
 
   Future<void> _logout() async {
@@ -136,11 +160,50 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           const SizedBox(height: 16),
           const _SectionLabel('Playback'),
           Card(
-            child: SwitchListTile(
-              title: const Text('Always open in external player'),
-              subtitle: const Text('Skip the built-in player and send videos directly to another app'),
-              value: _alwaysExternal,
-              onChanged: _onAlwaysExternalChanged,
+            child: Column(
+              children: [
+                SwitchListTile(
+                  title: const Text('Always open in external player'),
+                  subtitle: const Text(
+                      'Skip the built-in player and send videos directly to another app'),
+                  value: _alwaysExternal,
+                  onChanged: _onAlwaysExternalChanged,
+                ),
+                const Divider(height: 1, indent: 16, endIndent: 16),
+                SwitchListTile(
+                  title: const Text('Auto-repeat video'),
+                  subtitle: const Text('Loop the video when it ends'),
+                  value: _videoRepeat,
+                  onChanged: _onVideoRepeatChanged,
+                ),
+                const Divider(height: 1, indent: 16, endIndent: 16),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('Video Size',
+                          style: Theme.of(context).textTheme.labelLarge),
+                      const SizedBox(height: 8),
+                      DropdownButton<BoxFit>(
+                        value: _videoFit,
+                        isExpanded: true,
+                        onChanged: (v) => _onVideoFitChanged(v!),
+                        items: const [
+                          DropdownMenuItem(
+                              value: BoxFit.contain,
+                              child: Text('Fit to Screen')),
+                          DropdownMenuItem(
+                              value: BoxFit.cover,
+                              child: Text('Crop to Fit')),
+                          DropdownMenuItem(
+                              value: BoxFit.fill, child: Text('Stretch')),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ],
             ),
           ),
           const SizedBox(height: 16),

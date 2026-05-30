@@ -362,6 +362,44 @@ class _ImageGalleryScreenState extends ConsumerState<ImageGalleryScreen>
     );
   }
 
+  // --- Fit mode helpers ---
+
+  static String _fitLabel(BoxFit fit) => switch (fit) {
+        BoxFit.cover => 'Crop to Fit',
+        BoxFit.fill => 'Stretch',
+        _ => 'Fit to Screen',
+      };
+
+  static IconData _fitIcon(BoxFit fit) => switch (fit) {
+        BoxFit.cover => Icons.crop_rounded,
+        BoxFit.fill => Icons.fit_screen_rounded,
+        _ => Icons.aspect_ratio_rounded,
+      };
+
+  void _cycleFit(WidgetRef ref) {
+    final current = ref.read(videoFitProvider);
+    final next = switch (current) {
+      BoxFit.contain => BoxFit.cover,
+      BoxFit.cover => BoxFit.fill,
+      _ => BoxFit.contain,
+    };
+    ref.read(videoFitProvider.notifier).state = next;
+    ref.read(sharedPrefsProvider).setString(
+        'video_fit_mode',
+        switch (next) {
+          BoxFit.cover => 'cover',
+          BoxFit.fill => 'fill',
+          _ => 'contain',
+        });
+  }
+
+  void _toggleRepeat(WidgetRef ref, Player player) {
+    final next = !ref.read(videoRepeatProvider);
+    ref.read(videoRepeatProvider.notifier).state = next;
+    ref.read(sharedPrefsProvider).setBool('video_auto_repeat', next);
+    player.setPlaylistMode(next ? PlaylistMode.loop : PlaylistMode.none);
+  }
+
   Widget _buildBottomOverlay(List<_GalleryItem> items) {
     return Container(
       decoration: BoxDecoration(
@@ -396,9 +434,58 @@ class _ImageGalleryScreenState extends ConsumerState<ImageGalleryScreen>
                     ),
                   );
                 }
-                return LayoutBuilder(
-                  builder: (_, constraints) =>
-                      _buildSeekBar(player, constraints.maxWidth - 32 - 80),
+                return Row(
+                  children: [
+                    // Play/pause
+                    StreamBuilder<bool>(
+                      stream: player.stream.playing,
+                      initialData: player.state.playing,
+                      builder: (_, snap) => IconButton(
+                        icon: Icon(
+                          snap.data == true
+                              ? Icons.pause_rounded
+                              : Icons.play_arrow_rounded,
+                          color: Colors.white,
+                        ),
+                        onPressed: () {
+                          if (player.state.playing) {
+                            player.pause();
+                          } else {
+                            player.play();
+                          }
+                        },
+                      ),
+                    ),
+                    // Seek bar
+                    Expanded(
+                      child: LayoutBuilder(
+                        builder: (_, constraints) =>
+                            _buildSeekBar(player, constraints.maxWidth - 80),
+                      ),
+                    ),
+                    // Fit mode cycle
+                    Consumer(builder: (context, ref, _) {
+                      final fit = ref.watch(videoFitProvider);
+                      return IconButton(
+                        tooltip: _fitLabel(fit),
+                        icon: Icon(_fitIcon(fit), color: Colors.white, size: 20),
+                        onPressed: () => _cycleFit(ref),
+                      );
+                    }),
+                    // Repeat toggle
+                    Consumer(builder: (context, ref, _) {
+                      final repeat = ref.watch(videoRepeatProvider);
+                      return IconButton(
+                        tooltip: repeat ? 'Repeat on' : 'Repeat off',
+                        icon: Icon(
+                          Icons.repeat_one_rounded,
+                          color: repeat ? Colors.white : Colors.white38,
+                          size: 20,
+                        ),
+                        onPressed: () => _toggleRepeat(ref, player),
+                      );
+                    }),
+                  ],
                 );
               },
             ),
@@ -642,7 +729,7 @@ class _ImageGalleryScreenState extends ConsumerState<ImageGalleryScreen>
 
 // --- Gallery video page ---
 
-class _GalleryVideoPage extends StatefulWidget {
+class _GalleryVideoPage extends ConsumerStatefulWidget {
   const _GalleryVideoPage({
     required this.streamUri,
     required this.index,
@@ -655,15 +742,19 @@ class _GalleryVideoPage extends StatefulWidget {
   final ValueNotifier<Player?> playerNotifier;
 
   @override
-  State<_GalleryVideoPage> createState() => _GalleryVideoPageState();
+  ConsumerState<_GalleryVideoPage> createState() => _GalleryVideoPageState();
 }
 
-class _GalleryVideoPageState extends State<_GalleryVideoPage> {
+class _GalleryVideoPageState extends ConsumerState<_GalleryVideoPage> {
   late final Player _player;
   late final VideoController _controller;
   bool _ready = false;
-  bool _showIcon = false;
-  Timer? _iconTimer;
+
+  // Double-tap seek feedback
+  Offset? _doubleTapPos;
+  bool _seekLeft = false;
+  bool _seekRight = false;
+  Timer? _seekFeedbackTimer;
 
   bool get _isActive =>
       widget.activeIndexNotifier.value == widget.index;
@@ -678,6 +769,8 @@ class _GalleryVideoPageState extends State<_GalleryVideoPage> {
   }
 
   Future<void> _initStream() async {
+    final repeat = ref.read(videoRepeatProvider);
+    await _player.setPlaylistMode(repeat ? PlaylistMode.loop : PlaylistMode.none);
     await _player.open(Media(widget.streamUri), play: false);
     _ready = true;
     if (_isActive) {
@@ -699,22 +792,28 @@ class _GalleryVideoPageState extends State<_GalleryVideoPage> {
     }
   }
 
-  void _togglePlayPause() {
-    if (_player.state.playing) {
-      _player.pause();
-    } else {
-      _player.play();
-    }
-    _iconTimer?.cancel();
-    setState(() => _showIcon = true);
-    _iconTimer = Timer(const Duration(milliseconds: 700), () {
-      if (mounted) setState(() => _showIcon = false);
+  void _doubleTapSeek(bool left) {
+    final dur = _player.state.duration;
+    if (dur == Duration.zero) return;
+    const delta = Duration(seconds: 10);
+    final pos = _player.state.position;
+    final newPos = left
+        ? (pos - delta).isNegative ? Duration.zero : pos - delta
+        : pos + delta > dur ? dur : pos + delta;
+    _player.seek(newPos);
+    _seekFeedbackTimer?.cancel();
+    setState(() {
+      _seekLeft = left;
+      _seekRight = !left;
+    });
+    _seekFeedbackTimer = Timer(const Duration(milliseconds: 700), () {
+      if (mounted) setState(() { _seekLeft = false; _seekRight = false; });
     });
   }
 
   @override
   void dispose() {
-    _iconTimer?.cancel();
+    _seekFeedbackTimer?.cancel();
     widget.activeIndexNotifier.removeListener(_onActiveChanged);
     if (widget.playerNotifier.value == _player) {
       widget.playerNotifier.value = null;
@@ -725,36 +824,71 @@ class _GalleryVideoPageState extends State<_GalleryVideoPage> {
 
   @override
   Widget build(BuildContext context) {
+    final w = MediaQuery.sizeOf(context).width;
+    final fit = ref.watch(videoFitProvider);
     return Stack(
       children: [
-        Video(controller: _controller, controls: NoVideoControls),
+        Video(controller: _controller, controls: NoVideoControls, fit: fit),
+        // Double-tap left/right to seek
         GestureDetector(
           behavior: HitTestBehavior.translucent,
-          onTap: _togglePlayPause,
+          onDoubleTapDown: (d) => _doubleTapPos = d.localPosition,
+          onDoubleTap: () {
+            final pos = _doubleTapPos;
+            if (pos == null) return;
+            _doubleTapSeek(pos.dx < w / 2);
+          },
           child: const SizedBox.expand(),
         ),
-        if (_showIcon)
-          Center(
-            child: Container(
-              padding: const EdgeInsets.all(14),
-              decoration: const BoxDecoration(
-                color: Colors.black54,
-                shape: BoxShape.circle,
-              ),
-              child: StreamBuilder<bool>(
-                stream: _player.stream.playing,
-                initialData: _player.state.playing,
-                builder: (_, snap) => Icon(
-                  snap.data == true
-                      ? Icons.pause_rounded
-                      : Icons.play_arrow_rounded,
-                  color: Colors.white,
-                  size: 40,
-                ),
-              ),
-            ),
+        // Seek feedback overlays
+        if (_seekLeft)
+          Positioned(
+            left: 0,
+            top: 0,
+            bottom: 0,
+            width: w / 2,
+            child: const _SeekFeedback(left: true),
+          ),
+        if (_seekRight)
+          Positioned(
+            right: 0,
+            top: 0,
+            bottom: 0,
+            width: w / 2,
+            child: const _SeekFeedback(left: false),
           ),
       ],
+    );
+  }
+}
+
+// --- Seek feedback overlay ---
+
+class _SeekFeedback extends StatelessWidget {
+  const _SeekFeedback({required this.left});
+  final bool left;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      color: Colors.black26,
+      child: Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              left ? Icons.fast_rewind_rounded : Icons.fast_forward_rounded,
+              color: Colors.white,
+              size: 40,
+            ),
+            const SizedBox(height: 4),
+            Text(
+              left ? '- 10s' : '+ 10s',
+              style: const TextStyle(color: Colors.white, fontSize: 13),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
