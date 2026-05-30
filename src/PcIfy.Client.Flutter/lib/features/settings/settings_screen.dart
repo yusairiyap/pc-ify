@@ -66,7 +66,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Theme
                   Text('Theme', style: Theme.of(context).textTheme.labelLarge),
                   const SizedBox(height: 8),
                   DropdownButton<ThemeMode>(
@@ -83,7 +82,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                     ],
                   ),
                   const SizedBox(height: 16),
-                  // Accent color
                   Text('Accent Color',
                       style: Theme.of(context).textTheme.labelLarge),
                   const SizedBox(height: 8),
@@ -110,7 +108,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                     ),
                   ),
                   const SizedBox(height: 16),
-                  // Grid density
                   Text('Grid Density',
                       style: Theme.of(context).textTheme.labelLarge),
                   const SizedBox(height: 8),

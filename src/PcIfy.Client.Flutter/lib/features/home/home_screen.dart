@@ -5,7 +5,6 @@ import 'package:go_router/go_router.dart';
 import '../../core/models/bookmarked_folder.dart';
 import '../../providers/services_providers.dart';
 
-// Provider that rebuilds when invalidated (after add/remove bookmark)
 final bookmarksProvider = Provider<List<BookmarkedFolder>>((ref) {
   return ref.watch(bookmarkServiceProvider).getBookmarks();
 });

@@ -24,7 +24,6 @@ class ExternalPlayerService {
       return;
     }
 
-    // iOS: try VLC protocol, fall back to http
     if (Platform.isIOS) {
       final vlcUri = uri.replaceFirst(RegExp(r'^https?://'), 'vlc-x-callback://x-callback-url/stream?url=');
       final parsed = Uri.tryParse(vlcUri);
@@ -34,7 +33,6 @@ class ExternalPlayerService {
       }
     }
 
-    // Windows / macOS / fallback
     final parsed = Uri.tryParse(uri);
     if (parsed != null) {
       await launchUrl(parsed, mode: LaunchMode.externalApplication);

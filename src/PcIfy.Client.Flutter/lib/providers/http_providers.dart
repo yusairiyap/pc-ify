@@ -33,12 +33,10 @@ class _AuthInterceptor extends Interceptor {
   void onError(DioException err, ErrorInterceptorHandler handler) {
     if (err.response?.statusCode == 401) {
       _ref.read(authTokenServiceProvider).clearToken();
-      // Signal session expired so GoRouter redirect can fire
       _ref.read(sessionExpiredProvider.notifier).state = true;
     }
     handler.next(err);
   }
 }
 
-// Session-expired flag read by GoRouter redirect
 final sessionExpiredProvider = StateProvider<bool>((ref) => false);

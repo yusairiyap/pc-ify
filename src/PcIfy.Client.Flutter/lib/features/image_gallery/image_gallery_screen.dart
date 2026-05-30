@@ -109,7 +109,6 @@ class _ImageGalleryScreenState extends ConsumerState<ImageGalleryScreen> {
                   );
                 },
               ),
-              // Navigation arrows
               if (_currentIndex > 0)
                 Positioned(
                   left: 8,
@@ -138,7 +137,6 @@ class _ImageGalleryScreenState extends ConsumerState<ImageGalleryScreen> {
                     ),
                   ),
                 ),
-              // Counter
               Positioned(
                 bottom: 12,
                 left: 0,

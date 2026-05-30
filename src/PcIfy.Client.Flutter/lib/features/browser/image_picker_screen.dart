@@ -10,7 +10,7 @@ import '../../providers/services_providers.dart';
 class _PickerState {
   const _PickerState({required this.listing, required this.thumbnails});
   final FolderListing listing;
-  final Map<String, String> thumbnails; // path → thumbnailUri
+  final Map<String, String> thumbnails;
 }
 
 class _PickerNotifier
@@ -124,7 +124,6 @@ class ImagePickerScreen extends ConsumerWidget {
                         if (entry.type == FileType.folder) {
                           notifier.navigate(entry.path);
                         } else {
-                          // Return the server path to the caller
                           context.pop(entry.path);
                         }
                       },

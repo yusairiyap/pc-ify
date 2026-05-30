@@ -32,7 +32,7 @@ class ThemeService {
   Color getAccentColor() {
     final value = _prefs.getInt(_accentKey);
     if (value == null) return presetColors.first;
-    return Color(value); // int is still valid as ARGB32
+    return Color(value);
   }
 
   Future<void> saveThemeMode(ThemeMode mode) {

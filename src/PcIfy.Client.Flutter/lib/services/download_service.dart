@@ -30,11 +30,9 @@ class DownloadService {
 
   Future<Directory> _getDownloadsDir() async {
     if (Platform.isAndroid) {
-      // Try the public Downloads directory on Android
       final dir = Directory('/storage/emulated/0/Download');
       if (dir.existsSync()) return dir;
     }
-    // Fallback: app documents directory with a Downloads subfolder
     final base = await getApplicationDocumentsDirectory();
     final dir = Directory('${base.path}/Downloads');
     if (!dir.existsSync()) dir.createSync(recursive: true);
