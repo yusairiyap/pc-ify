@@ -76,11 +76,18 @@ class _BrowserNotifier extends AutoDisposeAsyncNotifier<_BrowserState> {
     _history
       ..clear()
       ..add(path);
-    return _load(path);
+    final loaded = await _load(path);
+    // When opening a bookmarked nested folder, seed its parent so back navigation works.
+    final parentPath = loaded.listing?.parentPath;
+    if (parentPath != null && parentPath.isNotEmpty) {
+      _history.insert(0, parentPath);
+      return loaded.copyWith(canNavigateBack: true);
+    }
+    return loaded;
   }
 
   Future<void> navigateTo(String path) async {
-    state = const AsyncLoading();
+    state = const AsyncLoading<_BrowserState>().copyWithPrevious(state);
     _history.add(path);
     state = await AsyncValue.guard(() => _load(path));
   }
@@ -88,8 +95,19 @@ class _BrowserNotifier extends AutoDisposeAsyncNotifier<_BrowserState> {
   Future<void> navigateBack() async {
     if (_history.length <= 1) return;
     _history.removeLast();
-    state = const AsyncLoading();
-    state = await AsyncValue.guard(() => _load(_history.last));
+    state = const AsyncLoading<_BrowserState>().copyWithPrevious(state);
+    final result = await AsyncValue.guard(() => _load(_history.last));
+    // If we've reached the start of history but the loaded folder still has a parent,
+    // lazily extend history so the user can keep navigating back (handles deep bookmarks).
+    if (_history.length == 1 && result.hasValue) {
+      final parentPath = result.requireValue.listing?.parentPath;
+      if (parentPath != null && parentPath.isNotEmpty) {
+        _history.insert(0, parentPath);
+        state = AsyncData(result.requireValue.copyWith(canNavigateBack: true));
+        return;
+      }
+    }
+    state = result;
   }
 
   Future<_BrowserState> _load(String path) async {
@@ -238,17 +256,24 @@ class _BrowserBody extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     return ref.watch(_browserNotifierProvider).when(
+          skipLoadingOnReload: true,
           loading: () =>
               const Scaffold(body: Center(child: CircularProgressIndicator())),
           error: (err, _) => Scaffold(
               appBar: AppBar(), body: Center(child: Text('Error: $err'))),
-          data: (s) => _BrowserLoaded(state: s),
+          data: (s) => AnimatedSwitcher(
+            duration: const Duration(milliseconds: 200),
+            child: _BrowserLoaded(
+              key: ValueKey(s.listing?.path ?? ''),
+              state: s,
+            ),
+          ),
         );
   }
 }
 
 class _BrowserLoaded extends ConsumerWidget {
-  const _BrowserLoaded({required this.state});
+  const _BrowserLoaded({super.key, required this.state});
   final _BrowserState state;
 
   @override

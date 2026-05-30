@@ -61,7 +61,7 @@ class HomeScreen extends ConsumerWidget {
                 return _BookmarkCard(
                   bookmark: b,
                   onTap: () => context.go(
-                    '/browse?path=${Uri.encodeComponent(b.path)}',
+                    '/browse?path=${Uri.encodeComponent(b.path)}&t=${DateTime.now().millisecondsSinceEpoch}',
                   ),
                   onRemove: () {
                     ref.read(bookmarkServiceProvider).removeBookmark(b.path);

@@ -11,7 +11,7 @@ import 'features/setup/setup_screen.dart';
 import 'features/video_player/video_player_screen.dart';
 import 'providers/http_providers.dart';
 import 'providers/services_providers.dart';
-import 'widgets/main_shell.dart';
+import 'widgets/main_shell.dart' show MainShell, AnimatedTabContainer;
 
 final routerProvider = Provider<GoRouter>((ref) {
   final routerNotifier = _RouterNotifier(ref);
@@ -36,8 +36,13 @@ final routerProvider = Provider<GoRouter>((ref) {
     },
     routes: [
       GoRoute(path: '/setup', builder: (_, __) => const SetupScreen()),
-      StatefulShellRoute.indexedStack(
+      StatefulShellRoute(
         builder: (context, state, shell) => MainShell(shell: shell),
+        navigatorContainerBuilder: (context, shell, children) =>
+            AnimatedTabContainer(
+              currentIndex: shell.currentIndex,
+              children: children,
+            ),
         branches: [
           StatefulShellBranch(routes: [
             GoRoute(
@@ -49,6 +54,9 @@ final routerProvider = Provider<GoRouter>((ref) {
             GoRoute(
               path: '/browse',
               builder: (context, state) => BrowserScreen(
+                // Key on the timestamp so each bookmark tap forces a fresh widget tree,
+                // resetting the notifier history even if the path hasn't changed.
+                key: ValueKey(state.uri.queryParameters['t'] ?? ''),
                 path: state.uri.queryParameters['path'],
               ),
             ),
@@ -63,28 +71,51 @@ final routerProvider = Provider<GoRouter>((ref) {
       ),
       GoRoute(
         path: '/player',
-        builder: (context, state) => VideoPlayerScreen(
-          filePath: state.uri.queryParameters['path'] ?? '',
-          fileName: state.uri.queryParameters['name'] ?? '',
+        pageBuilder: (context, state) => _slideUpPage(
+          state,
+          VideoPlayerScreen(
+            filePath: state.uri.queryParameters['path'] ?? '',
+            fileName: state.uri.queryParameters['name'] ?? '',
+          ),
         ),
       ),
       GoRoute(
         path: '/gallery',
-        builder: (context, state) => ImageGalleryScreen(
-          folderPath: state.uri.queryParameters['path'] ?? '',
-          startIndex:
-              int.tryParse(state.uri.queryParameters['index'] ?? '0') ?? 0,
+        pageBuilder: (context, state) => _slideUpPage(
+          state,
+          ImageGalleryScreen(
+            folderPath: state.uri.queryParameters['path'] ?? '',
+            startIndex:
+                int.tryParse(state.uri.queryParameters['index'] ?? '0') ?? 0,
+          ),
         ),
       ),
       GoRoute(
         path: '/image-picker',
-        builder: (context, state) => ImagePickerScreen(
-          startPath: state.uri.queryParameters['path'] ?? '',
+        pageBuilder: (context, state) => _slideUpPage(
+          state,
+          ImagePickerScreen(startPath: state.uri.queryParameters['path'] ?? ''),
         ),
       ),
     ],
   );
 });
+
+CustomTransitionPage<void> _slideUpPage(GoRouterState state, Widget child) {
+  return CustomTransitionPage<void>(
+    key: state.pageKey,
+    child: child,
+    transitionsBuilder: (context, animation, secondaryAnimation, child) {
+      return SlideTransition(
+        position: animation.drive(
+          Tween(begin: const Offset(0, 1), end: Offset.zero)
+              .chain(CurveTween(curve: Curves.easeOutCubic)),
+        ),
+        child: child,
+      );
+    },
+  );
+}
 
 class _RouterNotifier extends ChangeNotifier {
   _RouterNotifier(this._ref) {
