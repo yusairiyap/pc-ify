@@ -61,7 +61,6 @@ final routerProvider = Provider<GoRouter>((ref) {
           ]),
         ],
       ),
-      // Top-level routes (outside tab shell)
       GoRoute(
         path: '/browser',
         builder: (context, state) => BrowserScreen(
@@ -93,7 +92,6 @@ final routerProvider = Provider<GoRouter>((ref) {
   );
 });
 
-// Makes GoRouter re-evaluate redirect when sessionExpiredProvider changes
 class _RouterNotifier extends ChangeNotifier {
   _RouterNotifier(this._ref) {
     _ref.listen(sessionExpiredProvider, (_, __) => notifyListeners());
