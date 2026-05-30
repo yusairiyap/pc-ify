@@ -404,15 +404,26 @@ class _BrowserLoaded extends ConsumerWidget {
           final mime = MediaTypes.getMimeType(MediaTypes.extensionOf(e.name));
           await ref.read(externalPlayerServiceProvider).openVideo(uri, mime);
         } else {
-          context.push(
-              '/player?path=${Uri.encodeComponent(e.path)}&name=${Uri.encodeComponent(e.name)}');
+          final listing = ref.read(_browserNotifierProvider).valueOrNull?.listing;
+          final media = listing?.entries
+                  .where((x) =>
+                      x.type == FileType.image || x.type == FileType.video)
+                  .toList() ??
+              [];
+          final idx = media.indexWhere((x) => x.path == e.path);
+          if (context.mounted) {
+            context.push(
+                '/gallery?path=${Uri.encodeComponent(listing?.path ?? '')}&index=${idx < 0 ? 0 : idx}');
+          }
         }
       case FileType.image:
         final listing = ref.read(_browserNotifierProvider).valueOrNull?.listing;
-        final images =
-            listing?.entries.where((x) => x.type == FileType.image).toList() ??
-                [];
-        final idx = images.indexWhere((x) => x.path == e.path);
+        final media = listing?.entries
+                .where((x) =>
+                    x.type == FileType.image || x.type == FileType.video)
+                .toList() ??
+            [];
+        final idx = media.indexWhere((x) => x.path == e.path);
         context.push(
             '/gallery?path=${Uri.encodeComponent(listing?.path ?? '')}&index=${idx < 0 ? 0 : idx}');
       default:
@@ -495,9 +506,10 @@ class _BrowserLoaded extends ConsumerWidget {
                   Text(saved != null ? 'Saved to $saved' : 'Download failed')));
         }
       case 'view':
-        final images =
-            listing.entries.where((x) => x.type == FileType.image).toList();
-        final idx = images.indexWhere((x) => x.path == e.path);
+        final media = listing.entries
+            .where((x) => x.type == FileType.image || x.type == FileType.video)
+            .toList();
+        final idx = media.indexWhere((x) => x.path == e.path);
         context.push(
             '/gallery?path=${Uri.encodeComponent(listing.path)}&index=${idx < 0 ? 0 : idx}');
     }

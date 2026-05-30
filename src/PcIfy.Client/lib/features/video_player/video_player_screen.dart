@@ -52,9 +52,7 @@ class _VideoPlayerScreenState extends ConsumerState<VideoPlayerScreen> {
   Future<void> _openExternal() async {
     if (_streamUri == null) return;
     final mime = MediaTypes.getMimeType(MediaTypes.extensionOf(widget.fileName));
-    await ref
-        .read(externalPlayerServiceProvider)
-        .openVideo(_streamUri!, mime);
+    await ref.read(externalPlayerServiceProvider).openVideo(_streamUri!, mime);
   }
 
   @override
@@ -75,9 +73,20 @@ class _VideoPlayerScreenState extends ConsumerState<VideoPlayerScreen> {
         ],
       ),
       body: _streamUri == null
-          ? const Center(
-              child: CircularProgressIndicator(color: Colors.white))
-          : Video(controller: _controller),
+          ? const Center(child: CircularProgressIndicator(color: Colors.white))
+          : MaterialVideoControlsTheme(
+              normal: const MaterialVideoControlsThemeData(
+                seekBarHeight: 8,
+                seekBarThumbSize: 22,
+                seekBarContainerHeight: 96,
+              ),
+              fullscreen: const MaterialVideoControlsThemeData(
+                seekBarHeight: 8,
+                seekBarThumbSize: 22,
+                seekBarContainerHeight: 96,
+              ),
+              child: Video(controller: _controller),
+            ),
     );
   }
 }
