@@ -53,7 +53,6 @@ class _BrowserState {
 
 // --- Providers ---
 
-// Carries the current folder path into the scoped notifier
 final _browserPathProvider = Provider.autoDispose<String>((ref) => '');
 
 class _BrowserNotifier extends AutoDisposeAsyncNotifier<_BrowserState> {
