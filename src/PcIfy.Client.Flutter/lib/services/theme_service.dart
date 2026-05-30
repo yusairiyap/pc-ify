@@ -32,6 +32,7 @@ class ThemeService {
   Color getAccentColor() {
     final value = _prefs.getInt(_accentKey);
     if (value == null) return presetColors.first;
+    // ignore: deprecated_member_use
     return Color(value);
   }
 
@@ -44,6 +45,8 @@ class ThemeService {
     return _prefs.setString(_modeKey, s);
   }
 
-  Future<void> saveAccentColor(Color color) =>
-      _prefs.setInt(_accentKey, color.toARGB32());
+  Future<void> saveAccentColor(Color color) {
+    // ignore: deprecated_member_use
+    return _prefs.setInt(_accentKey, color.value);
+  }
 }
