@@ -1,7 +1,7 @@
-using Microsoft.AspNetCore.Mvc;
+﻿using Microsoft.AspNetCore.Mvc;
 using PcIfy.Server.Models;
-using PcIfy.Shared.Constants;
-using PcIfy.Shared.DTOs.System;
+using PcIfy.Server.Constants;
+using PcIfy.Server.DTOs.System;
 
 namespace PcIfy.Server.Api.Controllers;
 

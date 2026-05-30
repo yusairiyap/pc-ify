@@ -16,7 +16,7 @@ A local-network home entertainment app. Run the server on your Windows PC and br
 - Video thumbnail generation via FFmpeg
 - Image thumbnail generation
 
-### Client (Android / iOS / macOS)
+### Client (Android / iOS)
 - Clean file/folder browser with thumbnail grid
 - Resizable grid density (Compact / Normal / Large)
 - Homepage with bookmarked folders
@@ -26,8 +26,6 @@ A local-network home entertainment app. Run the server on your Windows PC and br
 - Image gallery with smooth swipe paging
 - File download
 - Dark / Light / System theme + customizable accent color
-- Animated page transitions
-- Tablet-optimized layout (two-pane mode)
 
 ## Requirements
 
@@ -36,8 +34,7 @@ A local-network home entertainment app. Run the server on your Windows PC and br
 | Server OS | Windows 10/11 |
 | Server Runtime | .NET 10 |
 | Android | API 21+ (Android 5.0+) |
-| iOS | iOS 15+ |
-| macOS | macOS 13+ (MacCatalyst) |
+| iOS | iOS 12+ |
 | Network | Both devices on the same Wi-Fi network |
 
 ## Setup
@@ -66,32 +63,31 @@ A local-network home entertainment app. Run the server on your Windows PC and br
 dotnet build src/PcIfy.Server
 
 # Client (Android)
-dotnet build src/PcIfy.Client -f net10.0-android
+cd src/PcIfy.Client
+flutter build apk
 
 # Client (iOS — requires macOS + Xcode)
-dotnet build src/PcIfy.Client -f net10.0-ios
-
-# Client (macOS — requires macOS + Xcode)
-dotnet build src/PcIfy.Client -f net10.0-maccatalyst
+flutter build ios
 ```
 
 ## Architecture
 
 ```
 src/
-├── PcIfy.Shared/    DTOs, API route constants, MIME helpers
-├── PcIfy.Server/    WinForms + embedded Kestrel API
-│   ├── Api/         Controllers, middleware
-│   ├── Forms/       WinForms UI (MainForm, SettingsForm, tray)
-│   ├── Services/    Business logic (file, auth, thumbnail, log)
-│   ├── Helpers/     JWT, path security, range requests
-│   └── Models/      AppSettings, log entries
-└── PcIfy.Client/    .NET MAUI (Android + iOS)
-    ├── Views/        XAML pages + code-behind
-    ├── ViewModels/   MVVM logic (CommunityToolkit.Mvvm)
-    ├── Services/     HTTP client, auth token, theme, bookmarks
-    ├── Helpers/      Grid density, image crop, file size
-    └── Converters/   XAML value converters
+├── PcIfy.Server/          WinForms + embedded Kestrel API
+│   ├── Api/               Controllers, middleware
+│   ├── Constants/         API route strings, MIME type helpers
+│   ├── DTOs/              Request/response data objects
+│   ├── Forms/             WinForms UI (MainForm, SettingsForm, tray)
+│   ├── Helpers/           JWT, path security, range requests
+│   ├── Models/            AppSettings, log entries
+│   └── Services/          Business logic (file, auth, thumbnail, log)
+└── PcIfy.Client/          Flutter client (Android + iOS)
+    ├── lib/core/           Models, constants, utils
+    ├── lib/features/       Screen widgets (browser, home, video, gallery…)
+    ├── lib/services/       HTTP, auth token, bookmarks, theme, download
+    ├── lib/providers/      Riverpod providers
+    └── lib/widgets/        Shared shell widget
 ```
 
 See [CLAUDE.md](CLAUDE.md) for detailed developer documentation.

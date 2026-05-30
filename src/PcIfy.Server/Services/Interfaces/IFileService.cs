@@ -1,4 +1,4 @@
-using PcIfy.Shared.DTOs.Files;
+﻿using PcIfy.Server.DTOs.Files;
 
 namespace PcIfy.Server.Services.Interfaces;
 

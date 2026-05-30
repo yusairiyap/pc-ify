@@ -1,7 +1,7 @@
-using Microsoft.AspNetCore.Authorization;
+﻿using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using PcIfy.Server.Services.Interfaces;
-using PcIfy.Shared.Constants;
+using PcIfy.Server.Constants;
 
 namespace PcIfy.Server.Api.Controllers;
 
