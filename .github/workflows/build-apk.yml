@@ -36,6 +36,11 @@ jobs:
       - name: Install dependencies
         run: flutter pub get
 
+      - name: Generate missing Android binary files
+        # gradle-wrapper.jar and launcher PNGs cannot be stored as text in git;
+        # flutter create recreates them without overwriting existing config files.
+        run: flutter create --org com.pcify --project-name pcify_client --platforms=android .
+
       - name: Analyze
         run: flutter analyze --no-fatal-infos
 
