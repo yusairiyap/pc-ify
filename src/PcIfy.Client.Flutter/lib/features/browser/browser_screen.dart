@@ -28,12 +28,15 @@ class _BrowserState {
     required this.prefs,
     required this.isBookmarked,
     required this.density,
+    this.backgroundImageUri,
   });
   final FolderListing? listing;
   final List<_BrowserItem> items;
   final FolderPrefs prefs;
   final bool isBookmarked;
   final GridDensity density;
+  // Full http://host/stream/...?token=... URI, ready for CachedNetworkImage
+  final String? backgroundImageUri;
 
   _BrowserState copyWith({
     FolderListing? listing,
@@ -41,6 +44,8 @@ class _BrowserState {
     FolderPrefs? prefs,
     bool? isBookmarked,
     GridDensity? density,
+    String? backgroundImageUri,
+    bool clearBackgroundUri = false,
   }) =>
       _BrowserState(
         listing: listing ?? this.listing,
@@ -48,6 +53,9 @@ class _BrowserState {
         prefs: prefs ?? this.prefs,
         isBookmarked: isBookmarked ?? this.isBookmarked,
         density: density ?? this.density,
+        backgroundImageUri: clearBackgroundUri
+            ? null
+            : (backgroundImageUri ?? this.backgroundImageUri),
       );
 }
 
@@ -104,12 +112,18 @@ class _BrowserNotifier extends AutoDisposeAsyncNotifier<_BrowserState> {
     final isBookmarked = ref.read(bookmarkServiceProvider).isBookmarked(listing.path);
     final items = await _buildItems(listing.entries);
 
+    String? bgUri;
+    if (folderPrefs.backgroundImagePath != null) {
+      bgUri = await api.buildStreamUriWithToken(folderPrefs.backgroundImagePath!);
+    }
+
     return _BrowserState(
       listing: listing,
       items: items,
       prefs: folderPrefs,
       isBookmarked: isBookmarked,
       density: density,
+      backgroundImageUri: bgUri,
     );
   }
 
@@ -162,7 +176,8 @@ class _BrowserNotifier extends AutoDisposeAsyncNotifier<_BrowserState> {
     await ref
         .read(folderPrefsServiceProvider)
         .savePrefs(s.listing!.path, updated);
-    state = AsyncData(s.copyWith(prefs: updated));
+    final uri = await ref.read(apiServiceProvider).buildStreamUriWithToken(serverPath);
+    state = AsyncData(s.copyWith(prefs: updated, backgroundImageUri: uri));
   }
 
   Future<void> clearBackgroundImage() async {
@@ -172,7 +187,7 @@ class _BrowserNotifier extends AutoDisposeAsyncNotifier<_BrowserState> {
     await ref
         .read(folderPrefsServiceProvider)
         .savePrefs(s.listing!.path, updated);
-    state = AsyncData(s.copyWith(prefs: updated));
+    state = AsyncData(s.copyWith(prefs: updated, clearBackgroundUri: true));
   }
 }
 
@@ -255,9 +270,9 @@ class _BrowserLoaded extends ConsumerWidget {
       ),
       body: Column(
         children: [
-          if (state.prefs.backgroundImagePath != null)
+          if (state.backgroundImageUri != null)
             _BackgroundBanner(
-                serverPath: state.prefs.backgroundImagePath!,
+                imageUri: state.backgroundImageUri!,
                 title: listing.displayName),
           _DensityToolbar(
               count: state.items.length,
@@ -398,8 +413,8 @@ class _BrowserLoaded extends ConsumerWidget {
 // --- Sub-widgets ---
 
 class _BackgroundBanner extends StatelessWidget {
-  const _BackgroundBanner({required this.serverPath, required this.title});
-  final String serverPath;
+  const _BackgroundBanner({required this.imageUri, required this.title});
+  final String imageUri;
   final String title;
 
   @override
@@ -410,7 +425,7 @@ class _BackgroundBanner extends StatelessWidget {
       child: Stack(
         fit: StackFit.expand,
         children: [
-          CachedNetworkImage(imageUrl: serverPath, fit: BoxFit.cover),
+          CachedNetworkImage(imageUrl: imageUri, fit: BoxFit.cover),
           Container(color: Colors.black54),
           Padding(
             padding: const EdgeInsets.all(12),
