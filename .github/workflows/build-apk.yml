@@ -2,7 +2,7 @@ name: Build Android APK
 
 on:
   push:
-    branches: [main]
+    branches: [main, 'claude/**']
     paths:
       - 'src/PcIfy.Client.Flutter/**'
   workflow_dispatch:
