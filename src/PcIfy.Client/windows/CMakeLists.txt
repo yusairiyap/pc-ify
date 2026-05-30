@@ -11,9 +11,10 @@ set(BINARY_NAME "pcify_client")
 cmake_policy(VERSION 3.14...3.25)
 
 # media_kit_libs_windows_video uses add_custom_command without PRE_BUILD/POST_BUILD.
-# Suppress the CMP0175 dev-warning by keeping the old permissive behaviour.
+# CMAKE_POLICY_DEFAULT_CMP0175 sets the default globally including subdirectories,
+# which cmake_policy(SET) alone cannot reach once a child resets its own policy scope.
 if(POLICY CMP0175)
-  cmake_policy(SET CMP0175 OLD)
+  set(CMAKE_POLICY_DEFAULT_CMP0175 OLD)
 endif()
 
 # Define build configuration option.
