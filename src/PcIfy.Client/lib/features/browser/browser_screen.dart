@@ -391,14 +391,22 @@ class _BrowserLoaded extends ConsumerWidget {
     );
   }
 
-  void _onTap(BuildContext context, WidgetRef ref, _BrowserItem item) {
+  Future<void> _onTap(BuildContext context, WidgetRef ref, _BrowserItem item) async {
     final e = item.entry;
     switch (e.type) {
       case FileType.folder:
         ref.read(_browserNotifierProvider.notifier).navigateTo(e.path);
       case FileType.video:
-        context.push(
-            '/player?path=${Uri.encodeComponent(e.path)}&name=${Uri.encodeComponent(e.name)}');
+        final alwaysExternal =
+            ref.read(sharedPrefsProvider).getBool('always_external_player') ?? false;
+        if (alwaysExternal) {
+          final uri = item.streamUri ?? '';
+          final mime = MediaTypes.getMimeType(MediaTypes.extensionOf(e.name));
+          await ref.read(externalPlayerServiceProvider).openVideo(uri, mime);
+        } else {
+          context.push(
+              '/player?path=${Uri.encodeComponent(e.path)}&name=${Uri.encodeComponent(e.name)}');
+        }
       case FileType.image:
         final listing = ref.read(_browserNotifierProvider).valueOrNull?.listing;
         final images =

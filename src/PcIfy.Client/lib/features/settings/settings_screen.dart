@@ -15,29 +15,36 @@ class SettingsScreen extends ConsumerStatefulWidget {
 }
 
 class _SettingsScreenState extends ConsumerState<SettingsScreen> {
-  late ThemeMode _selectedMode;
-  late Color _selectedAccent;
   late GridDensity _selectedDensity;
+  late bool _alwaysExternal;
 
   @override
   void initState() {
     super.initState();
-    final themeState = ref.read(themeNotifierProvider);
-    _selectedMode = themeState.mode;
-    _selectedAccent = themeState.accentColor;
+    final prefs = ref.read(sharedPrefsProvider);
     _selectedDensity = GridDensityHelper.fromString(
-        ref.read(sharedPrefsProvider).getString('grid_density') ?? 'normal');
+        prefs.getString('grid_density') ?? 'normal');
+    _alwaysExternal = prefs.getBool('always_external_player') ?? false;
   }
 
-  Future<void> _apply() async {
-    await ref.read(themeNotifierProvider.notifier).apply(_selectedMode, _selectedAccent);
-    await ref
-        .read(sharedPrefsProvider)
-        .setString('grid_density', _selectedDensity.name);
-    if (mounted) {
-      ScaffoldMessenger.of(context)
-          .showSnackBar(const SnackBar(content: Text('Settings applied')));
-    }
+  Future<void> _onThemeModeChanged(ThemeMode mode) async {
+    final current = ref.read(themeNotifierProvider);
+    await ref.read(themeNotifierProvider.notifier).apply(mode, current.accentColor);
+  }
+
+  Future<void> _onAccentChanged(Color color) async {
+    final current = ref.read(themeNotifierProvider);
+    await ref.read(themeNotifierProvider.notifier).apply(current.mode, color);
+  }
+
+  void _onDensityChanged(GridDensity density) {
+    setState(() => _selectedDensity = density);
+    ref.read(sharedPrefsProvider).setString('grid_density', density.name);
+  }
+
+  Future<void> _onAlwaysExternalChanged(bool value) async {
+    setState(() => _alwaysExternal = value);
+    await ref.read(sharedPrefsProvider).setBool('always_external_player', value);
   }
 
   Future<void> _logout() async {
@@ -52,6 +59,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final themeState = ref.watch(themeNotifierProvider);
     final serverUrl = ref.read(connectionServiceProvider).baseUrl;
 
     return Scaffold(
@@ -69,9 +77,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   Text('Theme', style: Theme.of(context).textTheme.labelLarge),
                   const SizedBox(height: 8),
                   DropdownButton<ThemeMode>(
-                    value: _selectedMode,
+                    value: themeState.mode,
                     isExpanded: true,
-                    onChanged: (v) => setState(() => _selectedMode = v!),
+                    onChanged: (v) => _onThemeModeChanged(v!),
                     items: const [
                       DropdownMenuItem(
                           value: ThemeMode.system, child: Text('System')),
@@ -89,9 +97,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                     scrollDirection: Axis.horizontal,
                     child: Row(
                       children: ThemeService.presetColors.map((color) {
-                        final selected = _selectedAccent == color;
+                        final selected = themeState.accentColor == color;
                         return GestureDetector(
-                          onTap: () => setState(() => _selectedAccent = color),
+                          onTap: () => _onAccentChanged(color),
                           child: Padding(
                             padding: const EdgeInsets.only(right: 8),
                             child: CircleAvatar(
@@ -114,23 +122,25 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   DropdownButton<GridDensity>(
                     value: _selectedDensity,
                     isExpanded: true,
-                    onChanged: (v) => setState(() => _selectedDensity = v!),
+                    onChanged: (v) => _onDensityChanged(v!),
                     items: GridDensity.values
                         .map((d) => DropdownMenuItem(
                             value: d,
                             child: Text(GridDensityHelper.label(d))))
                         .toList(),
                   ),
-                  const SizedBox(height: 16),
-                  SizedBox(
-                    width: double.infinity,
-                    child: FilledButton(
-                      onPressed: _apply,
-                      child: const Text('Apply'),
-                    ),
-                  ),
                 ],
               ),
+            ),
+          ),
+          const SizedBox(height: 16),
+          const _SectionLabel('Playback'),
+          Card(
+            child: SwitchListTile(
+              title: const Text('Always open in external player'),
+              subtitle: const Text('Skip the built-in player and send videos directly to another app'),
+              value: _alwaysExternal,
+              onChanged: _onAlwaysExternalChanged,
             ),
           ),
           const SizedBox(height: 16),
