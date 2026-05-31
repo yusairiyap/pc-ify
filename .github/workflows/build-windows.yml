@@ -8,6 +8,11 @@ on:
       - 'src/PcIfy.Server.Flutter/**'
   workflow_dispatch:
 
+# Opt into Node.js 24 now to suppress the Node.js 20 deprecation warning.
+# GitHub Actions will force Node.js 24 by default from June 16, 2026.
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 jobs:
   build-windows-client:
     runs-on: windows-latest

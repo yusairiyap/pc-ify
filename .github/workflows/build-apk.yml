@@ -13,12 +13,18 @@ on:
         required: false
         default: ''
 
+# Opt into Node.js 24 now to suppress the Node.js 20 deprecation warning.
+# GitHub Actions will force Node.js 24 by default from June 16, 2026.
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 jobs:
   build-client-apk:
     runs-on: ubuntu-latest
-    if: >
-      github.event_name == 'workflow_dispatch' ||
-      contains(toJson(github.event.commits[0].modified || '[]'), 'src/PcIfy.Client')
+    # No per-job 'if' condition — the workflow-level path filter above already
+    # controls when this file runs. Per-job conditions using
+    # github.event.commits[0].modified only see modified files, not newly
+    # added ones, causing jobs to be incorrectly skipped on first push.
     defaults:
       run:
         working-directory: src/PcIfy.Client
@@ -73,9 +79,6 @@ jobs:
 
   build-server-apk:
     runs-on: ubuntu-latest
-    if: >
-      github.event_name == 'workflow_dispatch' ||
-      contains(toJson(github.event.commits[0].modified || '[]'), 'src/PcIfy.Server.Flutter')
     defaults:
       run:
         working-directory: src/PcIfy.Server.Flutter
