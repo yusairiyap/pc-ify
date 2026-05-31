@@ -6,7 +6,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../providers/server_providers.dart';
 import '../../providers/settings_providers.dart';
 import '../../providers/theme_providers.dart';
+import '../../services/ffmpeg_setup_service.dart';
 import '../../services/http_server_service.dart';
+import '../dialogs/ffmpeg_download_dialog.dart';
 import '../settings/settings_screen.dart';
 import 'log_table_widget.dart';
 
@@ -116,6 +118,15 @@ class _MainScreenState extends ConsumerState<MainScreen> {
           await ref.read(foregroundServiceProvider).stop();
         }
       } else {
+        if ((Platform.isWindows || Platform.isMacOS) &&
+            !FFmpegSetupService.isAvailable &&
+            mounted) {
+          await showDialog<bool>(
+            context: context,
+            barrierDismissible: false,
+            builder: (_) => const FfmpegDownloadDialog(),
+          );
+        }
         await svc.start(settings.port);
         if (Platform.isAndroid) {
           await ref.read(foregroundServiceProvider).start(settings.port);

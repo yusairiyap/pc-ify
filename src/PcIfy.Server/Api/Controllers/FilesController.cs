@@ -16,7 +16,7 @@ public class FilesController : ControllerBase
 
     [HttpGet(ApiRoutes.FilesRoots)]
     public IActionResult GetRoots() =>
-        Ok(_files.GetConfiguredRoots().Select(r => new { path = r, name = Path.GetFileName(r) ?? r }));
+        Ok(_files.GetConfiguredRoots().Select(r => new { path = r, displayName = Path.GetFileName(r) ?? r }));
 
     [HttpGet(ApiRoutes.FilesList)]
     public async Task<IActionResult> List([FromQuery] string path)

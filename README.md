@@ -6,7 +6,7 @@ A local-network home entertainment app. Run the server on Windows, Android, or m
 
 ### Server (Windows · Android · macOS)
 
-> The Flutter-based server replaces the original Windows-only WinForms server and runs natively on all three platforms.
+> **Preview notice (Windows):** The Flutter server on Windows is still in preview — some features (e.g. thumbnail processing speed) are not yet on par with the legacy server. For best stability on Windows, use the legacy WinForms server (`PcIfy.Server`) until the Flutter version matures.
 
 - Embedded HTTP API built with Dart `shelf` — no external dependencies
 - JWT-authenticated API (username + password, configurable)
@@ -20,7 +20,7 @@ A local-network home entertainment app. Run the server on Windows, Android, or m
 - Video thumbnail generation via `video_thumbnail` (Android) or FFmpeg download (Windows/macOS)
 - Image thumbnail generation
 
-> **Legacy server:** The original `PcIfy.Server` WinForms project (C# / .NET 10) is retained in `src/PcIfy.Server` for reference during migration. It can be built and run independently.
+> **Legacy server (recommended for Windows):** The original `PcIfy.Server` WinForms project (C# / .NET 10) is the stable option for Windows users while the Flutter server is in preview. It can be built and run independently from `src/PcIfy.Server`.
 
 ### Client (Android · iOS · macOS · Windows)
 - Clean file/folder browser with thumbnail grid
