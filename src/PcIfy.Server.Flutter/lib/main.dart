@@ -8,6 +8,9 @@ import 'providers/settings_providers.dart';
 import 'providers/server_providers.dart';
 import 'providers/theme_providers.dart';
 import 'services/ffmpeg_setup_service.dart';
+import 'services/platform/foreground_service_android.dart'
+    as fg_android;
+import 'services/platform/foreground_service.dart';
 import 'services/platform/mobile_video_thumbnail.dart'
     as mobile_thumb;
 import 'services/settings_service.dart';
@@ -33,9 +36,9 @@ Future<void> main() async {
     await FFmpegSetupService.configure();
   }
 
-  // Android: register video_thumbnail helper.
+  // Android: register foreground service + video thumbnail helper.
   if (Platform.isAndroid) {
-    _registerMobileVideoThumbnail();
+    _registerAndroidServices();
   }
 
   runApp(
@@ -54,7 +57,8 @@ Future<void> main() async {
   );
 }
 
-void _registerMobileVideoThumbnail() {
+void _registerAndroidServices() {
+  ForegroundServiceHelper.register(fg_android.ForegroundServiceImpl());
   PlatformThumbnailHelper.register(mobile_thumb.getMobileVideoThumbnail);
 }
 
@@ -95,8 +99,10 @@ class _AppWithWindowManagerState extends ConsumerState<_AppWithWindowManager> {
 
   Future<void> _autoStart() async {
     final settings = ref.read(settingsProvider);
-    final svc = ref.read(httpServerServiceProvider);
-    await svc.start(settings.port);
+    await ref.read(httpServerServiceProvider).start(settings.port);
+    if (Platform.isAndroid) {
+      await ref.read(foregroundServiceProvider).start(settings.port);
+    }
   }
 
   @override
