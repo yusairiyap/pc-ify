@@ -100,8 +100,7 @@ class _BackupRestoreScreenState extends ConsumerState<BackupRestoreScreen> {
                       : const Text('Not in backup'),
                   value: restoreBookmarks,
                   onChanged: data.hasBookmarks
-                      ? (v) =>
-                          setDialogState(() => restoreBookmarks = v!)
+                      ? (v) => setDialogState(() => restoreBookmarks = v!)
                       : null,
                   contentPadding: EdgeInsets.zero,
                 ),
@@ -113,16 +112,15 @@ class _BackupRestoreScreenState extends ConsumerState<BackupRestoreScreen> {
                       : const Text('Not in backup'),
                   value: restoreBookmarkFolderPrefs,
                   onChanged: data.hasBookmarkFolderPrefs
-                      ? (v) => setDialogState(
-                          () => restoreBookmarkFolderPrefs = v!)
+                      ? (v) =>
+                          setDialogState(() => restoreBookmarkFolderPrefs = v!)
                       : null,
                   contentPadding: EdgeInsets.zero,
                 ),
                 CheckboxListTile(
                   title: const Text('Other folder backgrounds'),
                   subtitle: data.hasOtherFolderPrefs
-                      ? Text(
-                          '${data.otherFolderPrefs!.length} background(s)')
+                      ? Text('${data.otherFolderPrefs!.length} background(s)')
                       : const Text('Not in backup'),
                   value: restoreOtherFolderPrefs,
                   onChanged: data.hasOtherFolderPrefs
@@ -133,13 +131,11 @@ class _BackupRestoreScreenState extends ConsumerState<BackupRestoreScreen> {
                 ),
                 CheckboxListTile(
                   title: const Text('App settings'),
-                  subtitle: !data.hasSettings
-                      ? const Text('Not in backup')
-                      : null,
+                  subtitle:
+                      !data.hasSettings ? const Text('Not in backup') : null,
                   value: restoreSettings,
                   onChanged: data.hasSettings
-                      ? (v) =>
-                          setDialogState(() => restoreSettings = v!)
+                      ? (v) => setDialogState(() => restoreSettings = v!)
                       : null,
                   contentPadding: EdgeInsets.zero,
                 ),
@@ -264,14 +260,13 @@ class _BackupRestoreScreenState extends ConsumerState<BackupRestoreScreen> {
                     title: const Text('Bookmarks'),
                     subtitle: const Text('Saved folder shortcuts'),
                     value: _exportBookmarks,
-                    onChanged: (v) =>
-                        setState(() => _exportBookmarks = v!),
+                    onChanged: (v) => setState(() => _exportBookmarks = v!),
                   ),
                   const Divider(height: 1, indent: 16, endIndent: 16),
                   CheckboxListTile(
                     title: const Text('Bookmark folder backgrounds'),
                     subtitle: const Text(
-                        'Background images set for bookmarked folders'),
+                        'Background images and videos set for bookmarked folders'),
                     value: _exportBookmarkFolderPrefs,
                     onChanged: (v) =>
                         setState(() => _exportBookmarkFolderPrefs = v!),
@@ -288,11 +283,10 @@ class _BackupRestoreScreenState extends ConsumerState<BackupRestoreScreen> {
                   const Divider(height: 1, indent: 16, endIndent: 16),
                   CheckboxListTile(
                     title: const Text('App settings'),
-                    subtitle: const Text(
-                        'Theme, playback and display preferences'),
+                    subtitle:
+                        const Text('Theme, playback and display preferences'),
                     value: _exportSettings,
-                    onChanged: (v) =>
-                        setState(() => _exportSettings = v!),
+                    onChanged: (v) => setState(() => _exportSettings = v!),
                   ),
                 ],
               ),
@@ -329,9 +323,7 @@ class _BackupRestoreScreenState extends ConsumerState<BackupRestoreScreen> {
                   Text(
                     'Folder backgrounds are only usable when connected to the same server.',
                     style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                          color: Theme.of(context)
-                              .colorScheme
-                              .onSurfaceVariant,
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
                         ),
                   ),
                 ],

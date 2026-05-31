@@ -6,6 +6,7 @@ import 'package:open_filex/open_filex.dart';
 
 import '../../core/constants/media_types.dart';
 import 'background_crop_screen.dart';
+import 'background_video_trim_screen.dart';
 import '../split_view/split_view_screen.dart' show SplitViewEntry;
 import '../../core/models/bookmarked_folder.dart';
 import '../../core/models/file_entry.dart';
@@ -14,6 +15,7 @@ import '../../core/models/folder_prefs.dart';
 import '../../core/utils/grid_density_helper.dart';
 import '../../providers/services_providers.dart';
 import '../../widgets/folder_background_image.dart';
+import '../../widgets/video_background_player.dart';
 import '../home/home_screen.dart';
 
 // --- Data classes ---
@@ -34,6 +36,7 @@ class _BrowserState {
     required this.density,
     required this.canNavigateBack,
     this.backgroundImageUri,
+    this.backgroundVideoUri,
     this.isSelecting = false,
     this.selectedPaths = const {},
   });
@@ -44,8 +47,11 @@ class _BrowserState {
   final GridDensity density;
   final bool canNavigateBack;
   final String? backgroundImageUri;
+  final String? backgroundVideoUri;
   final bool isSelecting;
   final Set<String> selectedPaths;
+
+  bool get hasBg => backgroundImageUri != null || backgroundVideoUri != null;
 
   _BrowserState copyWith({
     FolderListing? listing,
@@ -55,6 +61,7 @@ class _BrowserState {
     GridDensity? density,
     bool? canNavigateBack,
     String? backgroundImageUri,
+    String? backgroundVideoUri,
     bool clearBackgroundUri = false,
     bool? isSelecting,
     Set<String>? selectedPaths,
@@ -69,6 +76,9 @@ class _BrowserState {
         backgroundImageUri: clearBackgroundUri
             ? null
             : (backgroundImageUri ?? this.backgroundImageUri),
+        backgroundVideoUri: clearBackgroundUri
+            ? null
+            : (backgroundVideoUri ?? this.backgroundVideoUri),
         isSelecting: isSelecting ?? this.isSelecting,
         selectedPaths: selectedPaths ?? this.selectedPaths,
       );
@@ -130,8 +140,8 @@ class _BrowserNotifier extends AutoDisposeAsyncNotifier<_BrowserState> {
   Future<_BrowserState> _load(String path) async {
     final api = ref.read(apiServiceProvider);
     final prefs = ref.read(sharedPrefsProvider);
-    final density =
-        GridDensityHelper.fromString(prefs.getString('grid_density') ?? 'normal');
+    final density = GridDensityHelper.fromString(
+        prefs.getString('grid_density') ?? 'normal');
 
     FolderListing listing;
 
@@ -156,7 +166,10 @@ class _BrowserNotifier extends AutoDisposeAsyncNotifier<_BrowserState> {
                 ))
             .toList();
         listing = FolderListing(
-            path: '', parentPath: null, displayName: 'Drives', entries: entries);
+            path: '',
+            parentPath: null,
+            displayName: 'Drives',
+            entries: entries);
       }
     } else {
       final l = await api.getFolderListing(path);
@@ -166,12 +179,19 @@ class _BrowserNotifier extends AutoDisposeAsyncNotifier<_BrowserState> {
 
     final folderPrefsService = ref.read(folderPrefsServiceProvider);
     final folderPrefs = await folderPrefsService.getPrefs(listing.path);
-    final isBookmarked = ref.read(bookmarkServiceProvider).isBookmarked(listing.path);
+    final isBookmarked =
+        ref.read(bookmarkServiceProvider).isBookmarked(listing.path);
     final items = await _buildItems(listing.entries);
 
-    String? bgUri;
+    String? bgImageUri;
     if (folderPrefs.backgroundImagePath != null) {
-      bgUri = await api.buildStreamUriWithToken(folderPrefs.backgroundImagePath!);
+      bgImageUri =
+          await api.buildStreamUriWithToken(folderPrefs.backgroundImagePath!);
+    }
+    String? bgVideoUri;
+    if (folderPrefs.backgroundVideoPath != null) {
+      bgVideoUri =
+          await api.buildStreamUriWithToken(folderPrefs.backgroundVideoPath!);
     }
 
     return _BrowserState(
@@ -181,7 +201,8 @@ class _BrowserNotifier extends AutoDisposeAsyncNotifier<_BrowserState> {
       isBookmarked: isBookmarked,
       density: density,
       canNavigateBack: _history.length > 1,
-      backgroundImageUri: bgUri,
+      backgroundImageUri: bgImageUri,
+      backgroundVideoUri: bgVideoUri,
     );
   }
 
@@ -197,7 +218,8 @@ class _BrowserNotifier extends AutoDisposeAsyncNotifier<_BrowserState> {
           (e.type == FileType.video || e.type == FileType.image)
               ? await api.buildStreamUriWithToken(e.path)
               : null;
-      result.add(_BrowserItem(entry: e, thumbnailUri: thumbUri, streamUri: streamUri));
+      result.add(
+          _BrowserItem(entry: e, thumbnailUri: thumbUri, streamUri: streamUri));
     }
     return result;
   }
@@ -210,8 +232,8 @@ class _BrowserNotifier extends AutoDisposeAsyncNotifier<_BrowserState> {
     if (s.isBookmarked) {
       await svc.removeBookmark(path);
     } else {
-      await svc.addBookmark(BookmarkedFolder(
-          path: path, displayName: s.listing!.displayName));
+      await svc.addBookmark(
+          BookmarkedFolder(path: path, displayName: s.listing!.displayName));
     }
     ref.invalidate(bookmarksProvider);
     state = AsyncData(s.copyWith(isBookmarked: !s.isBookmarked));
@@ -233,24 +255,69 @@ class _BrowserNotifier extends AutoDisposeAsyncNotifier<_BrowserState> {
   }) async {
     final s = state.valueOrNull;
     if (s?.listing == null) return;
-    final updated = s!.prefs.copyWith(
+    final snap = s!;
+    final updated = FolderPrefs(
       backgroundImagePath: serverPath,
       cropOffsetDx: cropOffsetDx,
       cropOffsetDy: cropOffsetDy,
       cropScale: cropScale,
-      clearCrop: cropOffsetDx == null,
     );
     await ref
         .read(folderPrefsServiceProvider)
-        .savePrefs(s.listing!.path, updated);
-    final uri = await ref.read(apiServiceProvider).buildStreamUriWithToken(serverPath);
-    state = AsyncData(s.copyWith(prefs: updated, backgroundImageUri: uri));
+        .savePrefs(snap.listing!.path, updated);
+    final uri =
+        await ref.read(apiServiceProvider).buildStreamUriWithToken(serverPath);
+    state = AsyncData(_BrowserState(
+      listing: snap.listing,
+      items: snap.items,
+      prefs: updated,
+      isBookmarked: snap.isBookmarked,
+      density: snap.density,
+      canNavigateBack: snap.canNavigateBack,
+      backgroundImageUri: uri,
+      backgroundVideoUri: null,
+      isSelecting: snap.isSelecting,
+      selectedPaths: snap.selectedPaths,
+    ));
+  }
+
+  Future<void> setBackgroundVideo(
+    String serverPath, {
+    int? loopStartMs,
+    int? loopEndMs,
+  }) async {
+    final s = state.valueOrNull;
+    if (s?.listing == null) return;
+    final snap = s!;
+    final updated = FolderPrefs(
+      backgroundVideoPath: serverPath,
+      videoLoopStartMs: loopStartMs,
+      videoLoopEndMs: loopEndMs,
+    );
+    await ref
+        .read(folderPrefsServiceProvider)
+        .savePrefs(snap.listing!.path, updated);
+    final uri =
+        await ref.read(apiServiceProvider).buildStreamUriWithToken(serverPath);
+    state = AsyncData(_BrowserState(
+      listing: snap.listing,
+      items: snap.items,
+      prefs: updated,
+      isBookmarked: snap.isBookmarked,
+      density: snap.density,
+      canNavigateBack: snap.canNavigateBack,
+      backgroundImageUri: null,
+      backgroundVideoUri: uri,
+      isSelecting: snap.isSelecting,
+      selectedPaths: snap.selectedPaths,
+    ));
   }
 
   void enterSelection(String firstPath) {
     final s = state.valueOrNull;
     if (s == null) return;
-    state = AsyncData(s.copyWith(isSelecting: true, selectedPaths: {firstPath}));
+    state =
+        AsyncData(s.copyWith(isSelecting: true, selectedPaths: {firstPath}));
   }
 
   void toggleSelection(String path) {
@@ -271,7 +338,7 @@ class _BrowserNotifier extends AutoDisposeAsyncNotifier<_BrowserState> {
     state = AsyncData(s.copyWith(isSelecting: false, selectedPaths: {}));
   }
 
-  Future<void> clearBackgroundImage() async {
+  Future<void> clearBackground() async {
     final s = state.valueOrNull;
     if (s?.listing == null) return;
     final updated = s!.prefs.copyWith(clearBackground: true);
@@ -308,8 +375,8 @@ class _BrowserBody extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final async = ref.watch(_browserNotifierProvider);
-    final isNavigating =
-        async.isLoading && ref.read(_browserNotifierProvider.notifier).navigating;
+    final isNavigating = async.isLoading &&
+        ref.read(_browserNotifierProvider.notifier).navigating;
     return Stack(
       children: [
         async.when(
@@ -320,8 +387,7 @@ class _BrowserBody extends ConsumerWidget {
             final msg = err is Exception
                 ? err.toString().replaceFirst('Exception: ', '')
                 : err.toString();
-            return Scaffold(
-                appBar: AppBar(), body: Center(child: Text(msg)));
+            return Scaffold(appBar: AppBar(), body: Center(child: Text(msg)));
           },
           data: (s) => AnimatedSwitcher(
             duration: const Duration(milliseconds: 200),
@@ -351,7 +417,7 @@ class _BrowserLoaded extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final notifier = ref.read(_browserNotifierProvider.notifier);
     final listing = state.listing!;
-    final hasBg = state.backgroundImageUri != null;
+    final hasBg = state.hasBg;
 
     final AppBar appBar;
     if (state.isSelecting) {
@@ -359,9 +425,12 @@ class _BrowserLoaded extends ConsumerWidget {
           .where((i) => state.selectedPaths.contains(i.entry.path))
           .toList();
       final single = selectedItems.length == 1;
-      final singleVideo = single && selectedItems.first.entry.type == FileType.video;
-      final singleImage = single && selectedItems.first.entry.type == FileType.image;
-      final fgColor = hasBg ? Colors.white : Theme.of(context).colorScheme.primary;
+      final singleVideo =
+          single && selectedItems.first.entry.type == FileType.video;
+      final singleImage =
+          single && selectedItems.first.entry.type == FileType.image;
+      final fgColor =
+          hasBg ? Colors.white : Theme.of(context).colorScheme.primary;
       appBar = AppBar(
         backgroundColor: hasBg ? Colors.black87 : null,
         foregroundColor: hasBg ? Colors.white : null,
@@ -376,10 +445,10 @@ class _BrowserLoaded extends ConsumerWidget {
                 ? 'Select up to 3 items for Split View'
                 : '',
             child: TextButton.icon(
-              onPressed: state.selectedPaths.isEmpty ||
-                      state.selectedPaths.length > 3
-                  ? null
-                  : () => _openSplitView(context, ref, listing),
+              onPressed:
+                  state.selectedPaths.isEmpty || state.selectedPaths.length > 3
+                      ? null
+                      : () => _openSplitView(context, ref, listing),
               icon: const Icon(Icons.view_column_outlined),
               label: const Text('Open in Split View'),
               style: TextButton.styleFrom(foregroundColor: fgColor),
@@ -401,7 +470,8 @@ class _BrowserLoaded extends ConsumerWidget {
               ),
               PopupMenuItem(
                 value: 'download',
-                child: Text(selectedItems.length > 1 ? 'Download all' : 'Download'),
+                child: Text(
+                    selectedItems.length > 1 ? 'Download all' : 'Download'),
               ),
             ],
           ),
@@ -423,23 +493,24 @@ class _BrowserLoaded extends ConsumerWidget {
           IconButton(
             icon: Icon(
               state.isBookmarked ? Icons.bookmark : Icons.bookmark_outline,
-              color: hasBg ? Colors.white : Theme.of(context).colorScheme.primary,
+              color:
+                  hasBg ? Colors.white : Theme.of(context).colorScheme.primary,
             ),
             onPressed: notifier.toggleBookmark,
           ),
           IconButton(
             icon: Icon(
-              state.prefs.backgroundImagePath != null
+              state.prefs.hasBackground
                   ? Icons.wallpaper
                   : Icons.image_outlined,
-              color: hasBg ? Colors.white : Theme.of(context).colorScheme.primary,
+              color:
+                  hasBg ? Colors.white : Theme.of(context).colorScheme.primary,
             ),
-            tooltip: state.prefs.backgroundImagePath != null
+            tooltip: state.prefs.hasBackground
                 ? 'Background options'
                 : 'Set background',
             onPressed: () => _onBackgroundTap(context, ref, notifier, listing,
-                hasBackground: state.prefs.backgroundImagePath != null,
-                existingImagePath: state.prefs.backgroundImagePath),
+                prefs: state.prefs),
           ),
         ],
       );
@@ -485,10 +556,16 @@ class _BrowserLoaded extends ConsumerWidget {
         body: Stack(
           fit: StackFit.expand,
           children: [
-            FolderBackgroundImage(
-              imageUri: state.backgroundImageUri!,
-              prefs: state.prefs,
-            ),
+            if (state.backgroundVideoUri != null)
+              VideoBackgroundPlayer(
+                videoUri: state.backgroundVideoUri!,
+                prefs: state.prefs,
+              )
+            else
+              FolderBackgroundImage(
+                imageUri: state.backgroundImageUri!,
+                prefs: state.prefs,
+              ),
             DecoratedBox(
               decoration:
                   BoxDecoration(color: Colors.black.withValues(alpha: 0.35)),
@@ -496,8 +573,8 @@ class _BrowserLoaded extends ConsumerWidget {
             Column(
               children: [
                 SizedBox(
-                    height: MediaQuery.viewPaddingOf(context).top +
-                        kToolbarHeight),
+                    height:
+                        MediaQuery.viewPaddingOf(context).top + kToolbarHeight),
                 _DensityToolbar(
                     count: state.items.length,
                     density: state.density,
@@ -530,28 +607,36 @@ class _BrowserLoaded extends ConsumerWidget {
     WidgetRef ref,
     _BrowserNotifier notifier,
     FolderListing listing, {
-    required bool hasBackground,
-    String? existingImagePath,
+    required FolderPrefs prefs,
   }) async {
-    if (hasBackground) {
-      // Ask user to change or remove existing background
+    if (prefs.hasBackground) {
+      final isVideo = prefs.isVideoBackground;
       final action = await showModalBottomSheet<String>(
         context: context,
         builder: (_) => SafeArea(
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Padding(
-                padding: EdgeInsets.fromLTRB(16, 16, 16, 8),
-                child: Text('Background Image',
-                    style: TextStyle(fontWeight: FontWeight.w600)),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+                child: Text(
+                  isVideo ? 'Background Video' : 'Background Image',
+                  style: const TextStyle(fontWeight: FontWeight.w600),
+                ),
               ),
               const Divider(height: 1),
-              ListTile(
-                leading: const Icon(Icons.tune_outlined),
-                title: const Text('Adjust image'),
-                onTap: () => Navigator.pop(context, 'adjust'),
-              ),
+              if (isVideo)
+                ListTile(
+                  leading: const Icon(Icons.content_cut_outlined),
+                  title: const Text('Trim video'),
+                  onTap: () => Navigator.pop(context, 'trim'),
+                )
+              else
+                ListTile(
+                  leading: const Icon(Icons.tune_outlined),
+                  title: const Text('Adjust image'),
+                  onTap: () => Navigator.pop(context, 'adjust'),
+                ),
               ListTile(
                 leading: const Icon(Icons.photo_outlined),
                 title: const Text('Change background'),
@@ -568,14 +653,15 @@ class _BrowserLoaded extends ConsumerWidget {
       );
       if (!context.mounted || action == null) return;
       if (action == 'remove') {
-        await notifier.clearBackgroundImage();
+        await notifier.clearBackground();
         return;
       }
       if (action == 'adjust') {
-        final existingPath = existingImagePath;
+        final existingPath = prefs.backgroundImagePath;
         if (existingPath == null || !context.mounted) return;
-        final imageUri =
-            await ref.read(apiServiceProvider).buildStreamUriWithToken(existingPath);
+        final imageUri = await ref
+            .read(apiServiceProvider)
+            .buildStreamUriWithToken(existingPath);
         if (!context.mounted) return;
         final result = await context.push<BackgroundCropResult>(
           '/background-crop?imagePath=${Uri.encodeComponent(existingPath)}',
@@ -591,30 +677,90 @@ class _BrowserLoaded extends ConsumerWidget {
         }
         return;
       }
+      if (action == 'trim') {
+        final existingPath = prefs.backgroundVideoPath;
+        if (existingPath == null || !context.mounted) return;
+        final videoUri = await ref
+            .read(apiServiceProvider)
+            .buildStreamUriWithToken(existingPath);
+        if (!context.mounted) return;
+        final result = await context.push<BackgroundVideoTrimResult>(
+          '/background-video-trim',
+          extra: {
+            'videoUri': videoUri,
+            'videoPath': existingPath,
+            'startMs': prefs.videoLoopStartMs,
+            'endMs': prefs.videoLoopEndMs,
+          },
+        );
+        if (result != null) {
+          await notifier.setBackgroundVideo(
+            result.videoPath,
+            loopStartMs: result.loopStartMs,
+            loopEndMs: result.loopEndMs,
+          );
+        }
+        return;
+      }
       // 'change' falls through to the picker below
     }
-    // Open image picker → crop screen, defaulting to the existing background's folder
-    final pickerStart = existingImagePath != null
-        ? _parentFolderPath(existingImagePath)
-        : listing.path;
-    final picked = await context.push<String>(
-        '/image-picker?path=${Uri.encodeComponent(pickerStart)}');
+    // Open media picker, then route to crop (image) or trim (video)
+    final existingPath = prefs.backgroundImagePath ?? prefs.backgroundVideoPath;
+    final pickerStart =
+        existingPath != null ? _parentFolderPath(existingPath) : listing.path;
+    final picked = await context
+        .push<String>('/image-picker?path=${Uri.encodeComponent(pickerStart)}');
     if (picked == null || !context.mounted) return;
-    final imageUri =
-        await ref.read(apiServiceProvider).buildStreamUriWithToken(picked);
-    if (!context.mounted) return;
-    final result = await context.push<BackgroundCropResult>(
-      '/background-crop?imagePath=${Uri.encodeComponent(picked)}',
-      extra: imageUri,
-    );
-    if (result != null) {
-      await notifier.setBackgroundImage(
-        result.imagePath,
-        cropOffsetDx: result.cropOffsetDx,
-        cropOffsetDy: result.cropOffsetDy,
-        cropScale: result.cropScale,
+
+    if (_isVideoPath(picked)) {
+      final videoUri =
+          await ref.read(apiServiceProvider).buildStreamUriWithToken(picked);
+      if (!context.mounted) return;
+      final result = await context.push<BackgroundVideoTrimResult>(
+        '/background-video-trim',
+        extra: {'videoUri': videoUri, 'videoPath': picked},
       );
+      if (result != null) {
+        await notifier.setBackgroundVideo(
+          result.videoPath,
+          loopStartMs: result.loopStartMs,
+          loopEndMs: result.loopEndMs,
+        );
+      }
+    } else {
+      final imageUri =
+          await ref.read(apiServiceProvider).buildStreamUriWithToken(picked);
+      if (!context.mounted) return;
+      final result = await context.push<BackgroundCropResult>(
+        '/background-crop?imagePath=${Uri.encodeComponent(picked)}',
+        extra: imageUri,
+      );
+      if (result != null) {
+        await notifier.setBackgroundImage(
+          result.imagePath,
+          cropOffsetDx: result.cropOffsetDx,
+          cropOffsetDy: result.cropOffsetDy,
+          cropScale: result.cropScale,
+        );
+      }
     }
+  }
+
+  bool _isVideoPath(String path) {
+    final ext = path.split('.').last.toLowerCase();
+    return {
+      'mp4',
+      'mkv',
+      'mov',
+      'avi',
+      'wmv',
+      'webm',
+      'm4v',
+      'ts',
+      'flv',
+      'mpeg',
+      'mpg'
+    }.contains(ext);
   }
 
   String _parentFolderPath(String filePath) {
@@ -652,7 +798,8 @@ class _BrowserLoaded extends ConsumerWidget {
         }
       case 'external':
         final uri = item.streamUri ?? '';
-        final mime = MediaTypes.getMimeType(MediaTypes.extensionOf(item.entry.name));
+        final mime =
+            MediaTypes.getMimeType(MediaTypes.extensionOf(item.entry.name));
         ref.read(_browserNotifierProvider.notifier).clearSelection();
         await ref.read(externalPlayerServiceProvider).openVideo(uri, mime);
       case 'download':
@@ -674,7 +821,8 @@ class _BrowserLoaded extends ConsumerWidget {
     }
   }
 
-  void _openSplitView(BuildContext context, WidgetRef ref, FolderListing listing) {
+  void _openSplitView(
+      BuildContext context, WidgetRef ref, FolderListing listing) {
     final s = ref.read(_browserNotifierProvider).valueOrNull;
     if (s == null || s.selectedPaths.isEmpty) return;
     final entries = s.items
@@ -694,7 +842,8 @@ class _BrowserLoaded extends ConsumerWidget {
     });
   }
 
-  Future<void> _onTap(BuildContext context, WidgetRef ref, _BrowserItem item) async {
+  Future<void> _onTap(
+      BuildContext context, WidgetRef ref, _BrowserItem item) async {
     // In selection mode, tapping a media item toggles selection
     final s = ref.read(_browserNotifierProvider).valueOrNull;
     if (s != null && s.isSelecting) {
@@ -711,13 +860,15 @@ class _BrowserLoaded extends ConsumerWidget {
         ref.read(_browserNotifierProvider.notifier).navigateTo(e.path);
       case FileType.video:
         final alwaysExternal =
-            ref.read(sharedPrefsProvider).getBool('always_external_player') ?? false;
+            ref.read(sharedPrefsProvider).getBool('always_external_player') ??
+                false;
         if (alwaysExternal) {
           final uri = item.streamUri ?? '';
           final mime = MediaTypes.getMimeType(MediaTypes.extensionOf(e.name));
           await ref.read(externalPlayerServiceProvider).openVideo(uri, mime);
         } else {
-          final listing = ref.read(_browserNotifierProvider).valueOrNull?.listing;
+          final listing =
+              ref.read(_browserNotifierProvider).valueOrNull?.listing;
           final media = listing?.entries
                   .where((x) =>
                       x.type == FileType.image || x.type == FileType.video)
@@ -732,8 +883,8 @@ class _BrowserLoaded extends ConsumerWidget {
       case FileType.image:
         final listing = ref.read(_browserNotifierProvider).valueOrNull?.listing;
         final media = listing?.entries
-                .where((x) =>
-                    x.type == FileType.image || x.type == FileType.video)
+                .where(
+                    (x) => x.type == FileType.image || x.type == FileType.video)
                 .toList() ??
             [];
         final idx = media.indexWhere((x) => x.path == e.path);
@@ -819,12 +970,13 @@ class _BrowserLoaded extends ConsumerWidget {
       case 'open':
         ref.read(_browserNotifierProvider.notifier).navigateTo(e.path);
       case 'bookmark':
-        await ref.read(bookmarkServiceProvider).addBookmark(
-            BookmarkedFolder(path: e.path, displayName: e.name));
+        await ref
+            .read(bookmarkServiceProvider)
+            .addBookmark(BookmarkedFolder(path: e.path, displayName: e.name));
         ref.invalidate(bookmarksProvider);
         if (context.mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text('Bookmarked ${e.name}')));
+          ScaffoldMessenger.of(context)
+              .showSnackBar(SnackBar(content: Text('Bookmarked ${e.name}')));
         }
       case 'play':
         context.push(
@@ -835,8 +987,8 @@ class _BrowserLoaded extends ConsumerWidget {
         await ref.read(externalPlayerServiceProvider).openVideo(uri, mime);
       case 'download':
         if (context.mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text('Downloading ${e.name}…')));
+          ScaffoldMessenger.of(context)
+              .showSnackBar(SnackBar(content: Text('Downloading ${e.name}…')));
         }
         final saved = await ref
             .read(downloadServiceProvider)
@@ -861,7 +1013,6 @@ class _BrowserLoaded extends ConsumerWidget {
 
 // --- Sub-widgets ---
 
-
 class _DensityToolbar extends StatelessWidget {
   const _DensityToolbar({
     required this.count,
@@ -877,10 +1028,7 @@ class _DensityToolbar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final style = hasBackground
-        ? Theme.of(context)
-            .textTheme
-            .bodySmall
-            ?.copyWith(color: Colors.white70)
+        ? Theme.of(context).textTheme.bodySmall?.copyWith(color: Colors.white70)
         : Theme.of(context).textTheme.bodySmall;
 
     return Padding(
@@ -942,10 +1090,7 @@ class _FileGridItem extends StatelessWidget {
                   errorWidget: (_, __, ___) =>
                       Center(child: Icon(icon, size: 40, color: iconColor)),
                 )
-              : Center(
-                  child: Icon(icon,
-                      size: 48,
-                      color: cs.primary)),
+              : Center(child: Icon(icon, size: 48, color: cs.primary)),
         ),
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
@@ -963,8 +1108,7 @@ class _FileGridItem extends StatelessWidget {
     final selectionOverlay = isSelecting
         ? Positioned.fill(
             child: Stack(children: [
-              if (isSelected)
-                const ColoredBox(color: Color(0x4400AAFF)),
+              if (isSelected) const ColoredBox(color: Color(0x4400AAFF)),
               Positioned(
                 top: 6,
                 right: 6,
@@ -985,12 +1129,18 @@ class _FileGridItem extends StatelessWidget {
         borderRadius: BorderRadius.circular(12),
         child: Container(
           decoration: BoxDecoration(
-            color: Theme.of(context).colorScheme.surfaceContainerHigh.withValues(alpha: 0.82),
+            color: Theme.of(context)
+                .colorScheme
+                .surfaceContainerHigh
+                .withValues(alpha: 0.82),
             borderRadius: BorderRadius.circular(12),
             border: Border.all(
                 color: isSelected
                     ? Colors.lightBlue
-                    : Theme.of(context).colorScheme.primary.withValues(alpha: 0.4),
+                    : Theme.of(context)
+                        .colorScheme
+                        .primary
+                        .withValues(alpha: 0.4),
                 width: isSelected ? 2.0 : 1.0),
           ),
           child: InkWell(
