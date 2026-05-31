@@ -30,10 +30,11 @@ dependencies:
   # Image thumbnails
   image: ^4.2.0
 
-  # Video thumbnail extraction (Android/iOS — uses native APIs, no FFmpeg bundling)
-  # video_thumbnail 0.5.x is abandoned and uses jcenter() (removed), incompatible with AGP 9+.
-  # video_thumbnail_plus is the maintained fork with the same API.
-  video_thumbnail_plus: ^0.0.2
+  # Android video thumbnail: no stable cross-platform plugin available yet.
+  # video_thumbnail 0.5.x uses jcenter() (removed) and breaks AGP 9+.
+  # video_thumbnail_plus 0.0.2 only exports VideoThumbnail on Android/iOS at the
+  # Dart level, causing compile errors on Windows. Stubbed out for now; Android
+  # video thumbnails return null until a suitable package is available.
 
   # Network info (local IP display)
   network_info_plus: ^6.0.0

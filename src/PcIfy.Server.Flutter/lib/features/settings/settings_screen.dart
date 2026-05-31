@@ -115,7 +115,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                         setState(() => _draft = _draft.copyWith(autoStart: v)),
                   ),
                   DropdownButtonFormField<String>(
-                    value: _draft.colorMode,
+                    initialValue: _draft.colorMode,
                     decoration:
                         const InputDecoration(labelText: 'Colour Mode'),
                     items: ['System', 'Dark', 'Light']

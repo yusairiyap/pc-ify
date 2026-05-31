@@ -71,7 +71,7 @@ class _MainScreenState extends ConsumerState<MainScreen> {
             onCopyAddress: () => _copyAddress(currentState),
           ),
           const Divider(height: 1),
-          Expanded(child: const LogTableWidget()),
+          const Expanded(child: LogTableWidget()),
         ],
       ),
       floatingActionButton: FloatingActionButton.extended(
