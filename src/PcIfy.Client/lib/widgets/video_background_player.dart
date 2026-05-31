@@ -14,13 +14,22 @@ class VideoBackgroundPlayer extends StatefulWidget {
   State<VideoBackgroundPlayer> createState() => _VideoBackgroundPlayerState();
 }
 
-class _VideoBackgroundPlayerState extends State<VideoBackgroundPlayer> {
+class _VideoBackgroundPlayerState extends State<VideoBackgroundPlayer>
+    with SingleTickerProviderStateMixin {
   late Player _player;
   late VideoController _controller;
+  late AnimationController _fadeController;
+  late Animation<double> _fadeAnimation;
 
   @override
   void initState() {
     super.initState();
+    _fadeController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 700),
+    );
+    _fadeAnimation =
+        CurvedAnimation(parent: _fadeController, curve: Curves.easeIn);
     _initPlayer();
   }
 
@@ -30,6 +39,10 @@ class _VideoBackgroundPlayerState extends State<VideoBackgroundPlayer> {
     _player.setVolume(0);
     _player.setPlaylistMode(PlaylistMode.loop);
     _player.open(Media(widget.videoUri));
+
+    _player.stream.playing.listen((playing) {
+      if (playing && mounted) _fadeController.forward();
+    });
 
     final startMs = widget.prefs.videoLoopStartMs;
     final endMs = widget.prefs.videoLoopEndMs;
@@ -49,6 +62,7 @@ class _VideoBackgroundPlayerState extends State<VideoBackgroundPlayer> {
   void didUpdateWidget(VideoBackgroundPlayer old) {
     super.didUpdateWidget(old);
     if (old.videoUri != widget.videoUri) {
+      _fadeController.reset();
       _player.dispose();
       _initPlayer();
     }
@@ -56,16 +70,20 @@ class _VideoBackgroundPlayerState extends State<VideoBackgroundPlayer> {
 
   @override
   void dispose() {
+    _fadeController.dispose();
     _player.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    return Video(
-      controller: _controller,
-      fit: BoxFit.cover,
-      controls: NoVideoControls,
+    return FadeTransition(
+      opacity: _fadeAnimation,
+      child: Video(
+        controller: _controller,
+        fit: BoxFit.cover,
+        controls: NoVideoControls,
+      ),
     );
   }
 }
