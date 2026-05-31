@@ -77,11 +77,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     if (mounted) context.go('/setup');
   }
 
-  Future<void> _changeServer() async {
-    await ref.read(authTokenServiceProvider).clearToken();
-    if (mounted) context.go('/setup');
-  }
-
   @override
   Widget build(BuildContext context) {
     final themeState = ref.watch(themeNotifierProvider);
@@ -218,12 +213,20 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                     serverUrl.isEmpty ? 'Not configured' : serverUrl,
                     style: Theme.of(context).textTheme.bodySmall,
                   ),
-                  trailing: TextButton(
-                    onPressed: _changeServer,
-                    child: const Text('Change'),
-                  ),
                 ),
               ],
+            ),
+          ),
+          const SizedBox(height: 16),
+          const _SectionLabel('Data'),
+          Card(
+            child: ListTile(
+              title: const Text('Backup & Restore'),
+              subtitle: const Text(
+                  'Export or import bookmarks, backgrounds and settings'),
+              leading: const Icon(Icons.backup),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => context.go('/settings/backup-restore'),
             ),
           ),
           const SizedBox(height: 16),

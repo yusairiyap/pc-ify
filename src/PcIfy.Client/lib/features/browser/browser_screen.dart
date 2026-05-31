@@ -13,6 +13,7 @@ import '../../core/models/folder_listing.dart';
 import '../../core/models/folder_prefs.dart';
 import '../../core/utils/grid_density_helper.dart';
 import '../../providers/services_providers.dart';
+import '../../widgets/folder_background_image.dart';
 import '../home/home_screen.dart';
 
 // --- Data classes ---
@@ -421,18 +422,24 @@ class _BrowserLoaded extends ConsumerWidget {
         actions: [
           IconButton(
             icon: Icon(
-                state.isBookmarked ? Icons.bookmark : Icons.bookmark_outline),
+              state.isBookmarked ? Icons.bookmark : Icons.bookmark_outline,
+              color: hasBg ? Colors.white : Theme.of(context).colorScheme.primary,
+            ),
             onPressed: notifier.toggleBookmark,
           ),
           IconButton(
-            icon: Icon(state.prefs.backgroundImagePath != null
-                ? Icons.wallpaper
-                : Icons.image_outlined),
+            icon: Icon(
+              state.prefs.backgroundImagePath != null
+                  ? Icons.wallpaper
+                  : Icons.image_outlined,
+              color: hasBg ? Colors.white : Theme.of(context).colorScheme.primary,
+            ),
             tooltip: state.prefs.backgroundImagePath != null
                 ? 'Background options'
                 : 'Set background',
             onPressed: () => _onBackgroundTap(context, ref, notifier, listing,
-                hasBackground: state.prefs.backgroundImagePath != null),
+                hasBackground: state.prefs.backgroundImagePath != null,
+                existingImagePath: state.prefs.backgroundImagePath),
           ),
         ],
       );
@@ -478,7 +485,7 @@ class _BrowserLoaded extends ConsumerWidget {
         body: Stack(
           fit: StackFit.expand,
           children: [
-            _BackgroundImage(
+            FolderBackgroundImage(
               imageUri: state.backgroundImageUri!,
               prefs: state.prefs,
             ),
@@ -524,6 +531,7 @@ class _BrowserLoaded extends ConsumerWidget {
     _BrowserNotifier notifier,
     FolderListing listing, {
     required bool hasBackground,
+    String? existingImagePath,
   }) async {
     if (hasBackground) {
       // Ask user to change or remove existing background
@@ -539,6 +547,11 @@ class _BrowserLoaded extends ConsumerWidget {
                     style: TextStyle(fontWeight: FontWeight.w600)),
               ),
               const Divider(height: 1),
+              ListTile(
+                leading: const Icon(Icons.tune_outlined),
+                title: const Text('Adjust image'),
+                onTap: () => Navigator.pop(context, 'adjust'),
+              ),
               ListTile(
                 leading: const Icon(Icons.photo_outlined),
                 title: const Text('Change background'),
@@ -558,11 +571,34 @@ class _BrowserLoaded extends ConsumerWidget {
         await notifier.clearBackgroundImage();
         return;
       }
+      if (action == 'adjust') {
+        final existingPath = existingImagePath;
+        if (existingPath == null || !context.mounted) return;
+        final imageUri =
+            await ref.read(apiServiceProvider).buildStreamUriWithToken(existingPath);
+        if (!context.mounted) return;
+        final result = await context.push<BackgroundCropResult>(
+          '/background-crop?imagePath=${Uri.encodeComponent(existingPath)}',
+          extra: imageUri,
+        );
+        if (result != null) {
+          await notifier.setBackgroundImage(
+            result.imagePath,
+            cropOffsetDx: result.cropOffsetDx,
+            cropOffsetDy: result.cropOffsetDy,
+            cropScale: result.cropScale,
+          );
+        }
+        return;
+      }
       // 'change' falls through to the picker below
     }
-    // Open image picker → crop screen
+    // Open image picker → crop screen, defaulting to the existing background's folder
+    final pickerStart = existingImagePath != null
+        ? _parentFolderPath(existingImagePath)
+        : listing.path;
     final picked = await context.push<String>(
-        '/image-picker?path=${Uri.encodeComponent(listing.path)}');
+        '/image-picker?path=${Uri.encodeComponent(pickerStart)}');
     if (picked == null || !context.mounted) return;
     final imageUri =
         await ref.read(apiServiceProvider).buildStreamUriWithToken(picked);
@@ -579,6 +615,14 @@ class _BrowserLoaded extends ConsumerWidget {
         cropScale: result.cropScale,
       );
     }
+  }
+
+  String _parentFolderPath(String filePath) {
+    final lastSlash = filePath.lastIndexOf('/');
+    if (lastSlash > 0) return filePath.substring(0, lastSlash);
+    final lastBackslash = filePath.lastIndexOf('\\');
+    if (lastBackslash > 0) return filePath.substring(0, lastBackslash);
+    return filePath;
   }
 
   Future<void> _onSelectionMenuAction(
@@ -817,39 +861,6 @@ class _BrowserLoaded extends ConsumerWidget {
 
 // --- Sub-widgets ---
 
-class _BackgroundImage extends StatelessWidget {
-  const _BackgroundImage({required this.imageUri, required this.prefs});
-  final String imageUri;
-  final FolderPrefs prefs;
-
-  @override
-  Widget build(BuildContext context) {
-    if (!prefs.hasCrop) {
-      return CachedNetworkImage(
-        imageUrl: imageUri,
-        fit: BoxFit.cover,
-        width: double.infinity,
-        height: double.infinity,
-      );
-    }
-    final scale = prefs.cropScale ?? 1.0;
-    final dx = prefs.cropOffsetDx ?? 0.0;
-    final dy = prefs.cropOffsetDy ?? 0.0;
-    return ClipRect(
-      child: Transform(
-        transform: Matrix4.identity()
-          ..translateByDouble(dx, dy, 0, 1)
-          ..scaleByDouble(scale, scale, 1, 1),
-        child: CachedNetworkImage(
-          imageUrl: imageUri,
-          fit: BoxFit.cover,
-          width: double.infinity,
-          height: double.infinity,
-        ),
-      ),
-    );
-  }
-}
 
 class _DensityToolbar extends StatelessWidget {
   const _DensityToolbar({

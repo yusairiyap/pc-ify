@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../core/models/file_entry.dart';
 import '../../core/models/folder_listing.dart';
+import '../../core/utils/grid_density_helper.dart';
 import '../../providers/services_providers.dart';
 
 class _PickerState {
@@ -20,8 +21,37 @@ class _PickerNotifier
 
   Future<_PickerState> _load(String path) async {
     final api = ref.read(apiServiceProvider);
-    final listing = await api.getFolderListing(path);
-    if (listing == null) throw Exception('Could not load folder.');
+
+    FolderListing listing;
+    if (path.isEmpty) {
+      final roots = await api.getRoots();
+      if (roots == null || roots.isEmpty) throw Exception('No source directories configured on server.');
+      if (roots.length == 1) {
+        final l = await api.getFolderListing(roots.first.path);
+        if (l == null) throw Exception('Could not load folder.');
+        listing = l;
+      } else {
+        listing = FolderListing(
+          path: '',
+          parentPath: null,
+          displayName: 'Drives',
+          entries: roots
+              .map((r) => FileEntry(
+                    name: r.name,
+                    path: r.path,
+                    type: FileType.folder,
+                    sizeBytes: 0,
+                    lastModified: DateTime.fromMillisecondsSinceEpoch(0),
+                    hasThumbnail: false,
+                  ))
+              .toList(),
+        );
+      }
+    } else {
+      final l = await api.getFolderListing(path);
+      if (l == null) throw Exception('Could not load folder.');
+      listing = l;
+    }
 
     final filtered = listing.entries
         .where((e) =>
@@ -103,66 +133,69 @@ class ImagePickerScreen extends ConsumerWidget {
               ),
             ),
             Expanded(
-              child: GridView.builder(
-                padding: const EdgeInsets.all(8),
-                gridDelegate:
-                    const SliverGridDelegateWithFixedCrossAxisCount(
-                  crossAxisCount: 3,
-                  crossAxisSpacing: 6,
-                  mainAxisSpacing: 6,
-                  childAspectRatio: 0.85,
-                ),
-                itemCount: s.listing.entries.length,
-                itemBuilder: (context, i) {
-                  final entry = s.listing.entries[i];
-                  final thumbUri = s.thumbnails[entry.path];
-
-                  return Card(
-                    clipBehavior: Clip.antiAlias,
-                    child: InkWell(
-                      onTap: () {
-                        if (entry.type == FileType.folder) {
-                          notifier.navigate(entry.path);
-                        } else {
-                          context.pop(entry.path);
-                        }
-                      },
-                      child: Column(
-                        children: [
-                          Expanded(
-                            child: thumbUri != null
-                                ? CachedNetworkImage(
-                                    imageUrl: thumbUri,
-                                    fit: BoxFit.cover,
-                                    width: double.infinity,
-                                  )
-                                : Center(
-                                    child: Icon(
-                                      entry.type == FileType.folder
-                                          ? Icons.folder
-                                          : Icons.image,
-                                      size: 40,
-                                      color: Theme.of(context)
-                                          .colorScheme
-                                          .primary,
-                                    ),
-                                  ),
-                          ),
-                          Padding(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 4, vertical: 4),
-                            child: Text(
-                              entry.name,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              textAlign: TextAlign.center,
-                              style:
-                                  Theme.of(context).textTheme.labelSmall,
-                            ),
-                          ),
-                        ],
-                      ),
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  final density = GridDensityHelper.fromString(
+                    ref.read(sharedPrefsProvider).getString('grid_density') ?? 'normal',
+                  );
+                  final cols = GridDensityHelper.getColumnCount(constraints.maxWidth, density);
+                  return GridView.builder(
+                    padding: const EdgeInsets.all(8),
+                    gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                      crossAxisCount: cols,
+                      crossAxisSpacing: 6,
+                      mainAxisSpacing: 6,
+                      childAspectRatio: 0.85,
                     ),
+                    itemCount: s.listing.entries.length,
+                    itemBuilder: (context, i) {
+                      final entry = s.listing.entries[i];
+                      final thumbUri = s.thumbnails[entry.path];
+                      return Card(
+                        clipBehavior: Clip.antiAlias,
+                        child: InkWell(
+                          onTap: () {
+                            if (entry.type == FileType.folder) {
+                              notifier.navigate(entry.path);
+                            } else {
+                              context.pop(entry.path);
+                            }
+                          },
+                          child: Column(
+                            children: [
+                              Expanded(
+                                child: thumbUri != null
+                                    ? CachedNetworkImage(
+                                        imageUrl: thumbUri,
+                                        fit: BoxFit.cover,
+                                        width: double.infinity,
+                                      )
+                                    : Center(
+                                        child: Icon(
+                                          entry.type == FileType.folder
+                                              ? Icons.folder
+                                              : Icons.image,
+                                          size: 40,
+                                          color: Theme.of(context).colorScheme.primary,
+                                        ),
+                                      ),
+                              ),
+                              Padding(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 4, vertical: 4),
+                                child: Text(
+                                  entry.name,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  textAlign: TextAlign.center,
+                                  style: Theme.of(context).textTheme.labelSmall,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      );
+                    },
                   );
                 },
               ),

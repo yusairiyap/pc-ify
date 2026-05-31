@@ -40,4 +40,25 @@ class FolderPrefsService {
     final file = File('${dir.path}/${_key(folderPath)}.json');
     await file.writeAsString(jsonEncode(prefs.toJson()));
   }
+
+  Future<void> savePrefsForHash(String hash, FolderPrefs prefs) async {
+    final dir = await _getDir();
+    final file = File('${dir.path}/$hash.json');
+    await file.writeAsString(jsonEncode(prefs.toJson()));
+  }
+
+  Future<Map<String, FolderPrefs>> getAllPrefs() async {
+    final dir = await _getDir();
+    final result = <String, FolderPrefs>{};
+    await for (final entity in dir.list()) {
+      if (entity is! File || !entity.path.endsWith('.json')) continue;
+      final hash = entity.uri.pathSegments.last.replaceAll('.json', '');
+      try {
+        final json =
+            jsonDecode(await entity.readAsString()) as Map<String, dynamic>;
+        result[hash] = FolderPrefs.fromJson(json);
+      } catch (_) {}
+    }
+    return result;
+  }
 }

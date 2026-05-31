@@ -8,6 +8,7 @@ import 'features/browser/image_picker_screen.dart';
 import 'features/split_view/split_view_screen.dart';
 import 'features/home/home_screen.dart';
 import 'features/image_gallery/image_gallery_screen.dart';
+import 'features/settings/backup_restore_screen.dart';
 import 'features/settings/settings_screen.dart';
 import 'features/setup/setup_screen.dart';
 import 'features/video_player/video_player_screen.dart';
@@ -67,6 +68,12 @@ final routerProvider = Provider<GoRouter>((ref) {
             GoRoute(
               path: '/settings',
               builder: (_, __) => const SettingsScreen(),
+              routes: [
+                GoRoute(
+                  path: 'backup-restore',
+                  builder: (_, __) => const BackupRestoreScreen(),
+                ),
+              ],
             ),
           ]),
         ],

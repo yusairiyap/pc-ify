@@ -50,6 +50,9 @@ dependencies:
   # Open downloaded files
   open_filex: ^4.4.1
 
+  # File save / open dialog (backup & restore)
+  file_picker: ^8.0.0
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

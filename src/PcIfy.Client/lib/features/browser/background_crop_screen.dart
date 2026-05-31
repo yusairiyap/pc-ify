@@ -31,44 +31,29 @@ class BackgroundCropScreen extends StatefulWidget {
 }
 
 class _BackgroundCropScreenState extends State<BackgroundCropScreen> {
-  double _scale = 1.0;
-  Offset _offset = Offset.zero;
+  final _transformController = TransformationController();
+  bool _showGrid = true;
 
-  // Gesture tracking
-  double? _initialScale;
-  Offset? _initialFocalPoint;
-  Offset? _initialOffset;
-
-  void _onScaleStart(ScaleStartDetails d) {
-    _initialScale = _scale;
-    _initialFocalPoint = d.localFocalPoint;
-    _initialOffset = _offset;
-  }
-
-  void _onScaleUpdate(ScaleUpdateDetails d) {
-    final newScale = (_initialScale! * d.scale).clamp(1.0, 8.0);
-    // Keep the focal point fixed on the image while panning / zooming
-    final ratio = newScale / _initialScale!;
-    final newOffset = d.localFocalPoint + (_initialOffset! - _initialFocalPoint!) * ratio;
-    setState(() {
-      _scale = newScale;
-      _offset = newOffset;
-    });
-  }
-
-  void _reset() => setState(() {
-        _scale = 1.0;
-        _offset = Offset.zero;
-      });
+  void _reset() => _transformController.value = Matrix4.identity();
 
   void _save() {
-    final hasCrop = _scale != 1.0 || _offset != Offset.zero;
+    final m = _transformController.value;
+    final scale = m.getMaxScaleOnAxis();
+    final dx = m.entry(0, 3);
+    final dy = m.entry(1, 3);
+    final hasCrop = (scale - 1.0).abs() > 0.001 || dx.abs() > 0.5 || dy.abs() > 0.5;
     context.pop(BackgroundCropResult(
       imagePath: widget.imagePath,
-      cropOffsetDx: hasCrop ? _offset.dx : null,
-      cropOffsetDy: hasCrop ? _offset.dy : null,
-      cropScale: hasCrop ? _scale : null,
+      cropOffsetDx: hasCrop ? dx : null,
+      cropOffsetDy: hasCrop ? dy : null,
+      cropScale: hasCrop ? scale : null,
     ));
+  }
+
+  @override
+  void dispose() {
+    _transformController.dispose();
+    super.dispose();
   }
 
   @override
@@ -84,6 +69,11 @@ class _BackgroundCropScreenState extends State<BackgroundCropScreen> {
         title: const Text('Set Background'),
         actions: [
           IconButton(
+            icon: Icon(_showGrid ? Icons.grid_on : Icons.grid_off),
+            tooltip: 'Toggle grid',
+            onPressed: () => setState(() => _showGrid = !_showGrid),
+          ),
+          IconButton(
             icon: const Icon(Icons.refresh_rounded),
             tooltip: 'Reset',
             onPressed: _reset,
@@ -95,142 +85,90 @@ class _BackgroundCropScreenState extends State<BackgroundCropScreen> {
           ),
         ],
       ),
-      body: GestureDetector(
-        onScaleStart: _onScaleStart,
-        onScaleUpdate: _onScaleUpdate,
-        child: SizedBox.expand(
-          child: Stack(
-            fit: StackFit.expand,
-            children: [
-              // Image — BoxFit.cover base, transform applied on top
-              ClipRect(
-                child: Transform(
-                  transform: Matrix4.identity()
-                    ..setEntry(0, 0, _scale)
-                    ..setEntry(1, 1, _scale)
-                    ..setEntry(0, 3, _offset.dx)
-                    ..setEntry(1, 3, _offset.dy),
-                  child: CachedNetworkImage(
-                    imageUrl: widget.imageUri,
-                    fit: BoxFit.cover,
-                    width: double.infinity,
-                    height: double.infinity,
-                    placeholder: (_, __) => const Center(
-                        child: CircularProgressIndicator(color: Colors.white)),
-                    errorWidget: (_, __, ___) => const Icon(
-                        Icons.broken_image,
-                        color: Colors.white54,
-                        size: 64),
-                  ),
-                ),
-              ),
-              // Crop overlay: dashed border, rule-of-thirds, handles
-              const IgnorePointer(
-                child: CustomPaint(
-                  painter: _CropOverlayPainter(),
-                ),
-              ),
-              // Bottom hint
-              Positioned(
-                bottom: mq.padding.bottom + 16,
-                left: 0,
-                right: 0,
-                child: const Center(
-                  child: Text(
-                    'Pinch to zoom · Drag to pan',
-                    style: TextStyle(
-                        color: Colors.white60,
-                        fontSize: 12,
-                        letterSpacing: 0.5),
-                  ),
-                ),
-              ),
-            ],
+      body: Stack(
+        fit: StackFit.expand,
+        children: [
+          InteractiveViewer(
+            transformationController: _transformController,
+            boundaryMargin: const EdgeInsets.all(double.infinity),
+            minScale: 0.1,
+            maxScale: 8.0,
+            child: CachedNetworkImage(
+              imageUrl: widget.imageUri,
+              fit: BoxFit.contain,
+              width: mq.size.width,
+              height: mq.size.height,
+              placeholder: (_, __) => const Center(
+                  child: CircularProgressIndicator(color: Colors.white)),
+              errorWidget: (_, __, ___) =>
+                  const Icon(Icons.broken_image, color: Colors.white54, size: 64),
+            ),
           ),
-        ),
+          if (_showGrid)
+            const IgnorePointer(
+              child: CustomPaint(painter: _GridOverlayPainter()),
+            ),
+          Positioned(
+            bottom: mq.padding.bottom + 16,
+            left: 0,
+            right: 0,
+            child: const Center(
+              child: Text(
+                'Pinch to zoom · Drag to pan',
+                style: TextStyle(
+                    color: Colors.white60, fontSize: 12, letterSpacing: 0.5),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
 }
 
-// ─── Crop overlay painter ────────────────────────────────────────────────────
+// ─── Grid overlay (rule-of-thirds, no crop handles) ─────────────────────────
 
-class _CropOverlayPainter extends CustomPainter {
-  const _CropOverlayPainter();
+class _GridOverlayPainter extends CustomPainter {
+  const _GridOverlayPainter();
 
   @override
   void paint(Canvas canvas, Size size) {
     final w = size.width;
     final h = size.height;
-    const padding = 0.0; // crop rect fills the screen edge-to-edge
-    final rect = Rect.fromLTWH(padding, padding, w - padding * 2, h - padding * 2);
+    final rect = Rect.fromLTWH(0, 0, w, h);
 
-    // ── Rule-of-thirds grid ──────────────────────────────────────────────────
+    // Rule-of-thirds lines
     final gridPaint = Paint()
-      ..color = Colors.white.withValues(alpha: 0.25)
+      ..color = Colors.white.withValues(alpha: 0.2)
       ..strokeWidth = 0.8;
-    final thirdX1 = rect.left + rect.width / 3;
-    final thirdX2 = rect.left + rect.width * 2 / 3;
-    final thirdY1 = rect.top + rect.height / 3;
-    final thirdY2 = rect.top + rect.height * 2 / 3;
-    canvas.drawLine(Offset(thirdX1, rect.top), Offset(thirdX1, rect.bottom), gridPaint);
-    canvas.drawLine(Offset(thirdX2, rect.top), Offset(thirdX2, rect.bottom), gridPaint);
-    canvas.drawLine(Offset(rect.left, thirdY1), Offset(rect.right, thirdY1), gridPaint);
-    canvas.drawLine(Offset(rect.left, thirdY2), Offset(rect.right, thirdY2), gridPaint);
+    for (var i = 1; i <= 2; i++) {
+      final x = w * i / 3;
+      final y = h * i / 3;
+      canvas.drawLine(Offset(x, 0), Offset(x, h), gridPaint);
+      canvas.drawLine(Offset(0, y), Offset(w, y), gridPaint);
+    }
 
-    // ── Dashed border ────────────────────────────────────────────────────────
+    // Dashed screen-edge border (= crop frame)
     final borderPaint = Paint()
-      ..color = Colors.white.withValues(alpha: 0.85)
+      ..color = Colors.white.withValues(alpha: 0.6)
       ..strokeWidth = 1.5
       ..style = PaintingStyle.stroke;
-    _drawDashedRect(canvas, rect, borderPaint, dashLen: 12, gapLen: 6);
-
-    // ── Corner handles ───────────────────────────────────────────────────────
-    final handlePaint = Paint()..color = Colors.white;
-    const hr = 7.0; // handle radius
-    final corners = [
-      rect.topLeft,
-      rect.topRight,
-      rect.bottomLeft,
-      rect.bottomRight,
-    ];
-    for (final c in corners) {
-      canvas.drawCircle(c, hr, handlePaint);
-      canvas.drawCircle(c, hr, Paint()..color = Colors.black38..style = PaintingStyle.stroke..strokeWidth = 1);
-    }
-
-    // ── Edge mid-point handles ───────────────────────────────────────────────
-    const er = 5.0;
-    final edges = [
-      Offset(rect.center.dx, rect.top),
-      Offset(rect.center.dx, rect.bottom),
-      Offset(rect.left, rect.center.dy),
-      Offset(rect.right, rect.center.dy),
-    ];
-    for (final e in edges) {
-      canvas.drawCircle(e, er, handlePaint);
-      canvas.drawCircle(e, er, Paint()..color = Colors.black38..style = PaintingStyle.stroke..strokeWidth = 1);
-    }
+    _drawDashedRect(canvas, rect.deflate(1), borderPaint);
   }
 
-  void _drawDashedRect(
-    Canvas canvas,
-    Rect rect,
-    Paint paint, {
-    required double dashLen,
-    required double gapLen,
-  }) {
+  void _drawDashedRect(Canvas canvas, Rect rect, Paint paint) {
+    const dashLen = 12.0;
+    const gapLen = 6.0;
     final path = Path()..addRect(rect);
     final metric = path.computeMetrics().first;
-    final total = metric.length;
     var dist = 0.0;
-    bool drawing = true;
+    var drawing = true;
     final dashes = Path();
-    while (dist < total) {
+    while (dist < metric.length) {
       final segLen = drawing ? dashLen : gapLen;
       if (drawing) {
         dashes.addPath(
-          metric.extractPath(dist, math.min(dist + segLen, total)),
+          metric.extractPath(dist, math.min(dist + segLen, metric.length)),
           Offset.zero,
         );
       }
@@ -241,5 +179,5 @@ class _CropOverlayPainter extends CustomPainter {
   }
 
   @override
-  bool shouldRepaint(_CropOverlayPainter oldDelegate) => false;
+  bool shouldRepaint(_GridOverlayPainter _) => false;
 }
