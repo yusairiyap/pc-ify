@@ -91,23 +91,21 @@ class HttpServerService {
 
     // Protected endpoints
     r.get(ApiRoutes.filesRoots,
-        _withAuth(authSvc, (req, _) => _handleRoots(req, fileSvc)));
+        _withAuth(authSvc, (req) => _handleRoots(req)));
     r.get(ApiRoutes.filesList,
-        _withAuth(authSvc, (req, _) => _handleList(req, fileSvc)));
+        _withAuth(authSvc, (req) => _handleList(req)));
     r.get(
         '${ApiRoutes.filesStream}/<filePath|[^]*>',
-        _withStreamingAuth(
-            authSvc, (req, params) => _handleStream(req, params, fileSvc)));
+        _streamGuard(authSvc,
+            (req, fp) => _handleStream(req, fp, fileSvc)));
     r.get(
         '${ApiRoutes.filesDownload}/<filePath|[^]*>',
-        _withStreamingAuth(
-            authSvc, (req, params) => _handleDownload(req, params, fileSvc)));
+        _streamGuard(authSvc,
+            (req, fp) => _handleDownload(req, fp, fileSvc)));
     r.get(
         '${ApiRoutes.thumbnails}/<filePath|[^]*>',
-        _withStreamingAuth(
-            authSvc,
-            (req, params) =>
-                _handleThumbnail(req, params, fileSvc, thumbSvc)));
+        _streamGuard(authSvc,
+            (req, fp) => _handleThumbnail(req, fp, fileSvc, thumbSvc)));
 
     r.all('/<ignored|.*>', (_) => Response.notFound('Not found'));
     return r;
@@ -147,13 +145,12 @@ class HttpServerService {
 
   // ── File handlers ─────────────────────────────────────────────────────────
 
-  Response _handleRoots(Request req, Map<String, String> _) {
+  Response _handleRoots(Request req) {
     final fileSvc = FileService(settings);
     return _json(fileSvc.getRoots().map((r) => r.toJson()).toList());
   }
 
-  Future<Response> _handleList(
-      Request req, Map<String, String> _) async {
+  Future<Response> _handleList(Request req) async {
     final path = req.url.queryParameters['path'];
     if (path == null) {
       return Response.badRequest(body: 'Missing path parameter');
@@ -168,10 +165,10 @@ class HttpServerService {
 
   Future<Response> _handleStream(
     Request req,
-    Map<String, String> params,
+    String encodedPath,
     FileService fileSvc,
   ) async {
-    final filePath = Uri.decodeComponent(params['filePath'] ?? '');
+    final filePath = Uri.decodeComponent(encodedPath);
     if (!fileSvc.isPathAllowed(filePath)) {
       return Response.forbidden('Path not allowed');
     }
@@ -215,10 +212,10 @@ class HttpServerService {
 
   Future<Response> _handleDownload(
     Request req,
-    Map<String, String> params,
+    String encodedPath,
     FileService fileSvc,
   ) async {
-    final filePath = Uri.decodeComponent(params['filePath'] ?? '');
+    final filePath = Uri.decodeComponent(encodedPath);
     if (!fileSvc.isPathAllowed(filePath)) {
       return Response.forbidden('Path not allowed');
     }
@@ -240,11 +237,11 @@ class HttpServerService {
 
   Future<Response> _handleThumbnail(
     Request req,
-    Map<String, String> params,
+    String encodedPath,
     FileService fileSvc,
     ThumbnailService thumbSvc,
   ) async {
-    final filePath = Uri.decodeComponent(params['filePath'] ?? '');
+    final filePath = Uri.decodeComponent(encodedPath);
     if (!fileSvc.isPathAllowed(filePath)) {
       return Response.forbidden('Path not allowed');
     }
@@ -300,10 +297,10 @@ class HttpServerService {
 
   // ── Auth middleware helpers ───────────────────────────────────────────────
 
-  /// Wraps a handler to require Bearer token auth (header only).
-  Handler Function(Request) _withAuth(
+  /// Wraps a no-param handler to require Bearer token auth (header only).
+  Handler _withAuth(
     AuthService authSvc,
-    Future<Response> Function(Request, Map<String, String>) inner,
+    FutureOr<Response> Function(Request) inner,
   ) {
     return (Request req) async {
       final token = _bearerToken(req);
@@ -311,23 +308,23 @@ class HttpServerService {
         return Response.unauthorized('Unauthorized',
             headers: {'www-authenticate': 'Bearer'});
       }
-      return inner(req, {});
+      return inner(req);
     };
   }
 
-  /// Wraps a handler to require Bearer token auth OR ?token= query param
-  /// (used for streaming/thumbnail routes where headers can't be set).
-  Handler Function(Request, Map<String, String>) _withStreamingAuth(
+  /// Wraps a shelf_router param handler (Request, String filePath) to require
+  /// Bearer token OR ?token= query param (needed for streaming/thumbnail routes).
+  FutureOr<Response> Function(Request, String) _streamGuard(
     AuthService authSvc,
-    Future<Response> Function(Request, Map<String, String>) inner,
+    FutureOr<Response> Function(Request, String) inner,
   ) {
-    return (Request req, Map<String, String> params) async {
+    return (Request req, String filePath) async {
       final token = _extractToken(req);
       if (token == null || authSvc.verifyToken(token) == null) {
         return Response.unauthorized('Unauthorized',
             headers: {'www-authenticate': 'Bearer'});
       }
-      return inner(req, params);
+      return inner(req, filePath);
     };
   }
 

@@ -70,13 +70,17 @@ class _AppWithWindowManager extends ConsumerStatefulWidget {
       _AppWithWindowManagerState();
 }
 
-class _AppWithWindowManagerState extends ConsumerState<_AppWithWindowManager>
-    implements WindowListener {
+class _AppWithWindowManagerState extends ConsumerState<_AppWithWindowManager> {
+  // Separate listener object so we only need to override onWindowClose,
+  // inheriting default no-op stubs for all other WindowListener methods.
+  late final _CloseListener _windowListener;
+
   @override
   void initState() {
     super.initState();
     if (Platform.isWindows || Platform.isMacOS) {
-      windowManager.addListener(this);
+      _windowListener = _CloseListener();
+      windowManager.addListener(_windowListener);
     }
     if (widget.autoStart) {
       WidgetsBinding.instance.addPostFrameCallback((_) => _autoStart());
@@ -86,7 +90,7 @@ class _AppWithWindowManagerState extends ConsumerState<_AppWithWindowManager>
   @override
   void dispose() {
     if (Platform.isWindows || Platform.isMacOS) {
-      windowManager.removeListener(this);
+      windowManager.removeListener(_windowListener);
     }
     super.dispose();
   }
@@ -97,39 +101,16 @@ class _AppWithWindowManagerState extends ConsumerState<_AppWithWindowManager>
     await svc.start(settings.port);
   }
 
-  // Minimize to tray instead of closing.
+  @override
+  Widget build(BuildContext context) => const PcIfyServerApp();
+}
+
+/// Extends (not implements) WindowListener so only onWindowClose needs
+/// an override — all other callbacks inherit empty default bodies.
+class _CloseListener extends WindowListener {
   @override
   Future<void> onWindowClose() async {
     await windowManager.hide();
   }
-
-  @override
-  Widget build(BuildContext context) => const PcIfyServerApp();
-
-  // Unused WindowListener callbacks.
-  @override void onWindowBlur() {}
-  @override void onWindowDocked() {}
-  @override void onWindowEnterFullScreen() {}
-  @override void onWindowEvent(String eventName) {}
-  @override void onWindowFocus() {}
-  @override void onWindowLeaveFullScreen() {}
-  @override void onWindowMaximize() {}
-  @override void onWindowMinimize() {}
-  @override void onWindowMinimizeStart() {}
-  @override void onWindowMinimizeEnd() {}
-  @override void onWindowMaximizeStart() {}
-  @override void onWindowMaximizeEnd() {}
-  @override void onWindowMove() {}
-  @override void onWindowMoveStart() {}
-  @override void onWindowMoveEnd() {}
-  @override void onWindowResize() {}
-  @override void onWindowResizeStart() {}
-  @override void onWindowResizeEnd() {}
-  @override void onWindowRestore() {}
-  @override void onWindowScrollTouchBegin() {}
-  @override void onWindowScrollTouchEnd() {}
-  @override void onWindowScrollTouchUpdate() {}
-  @override void onWindowUndocked() {}
-  @override void onWindowUnmaximize() {}
 }
 
