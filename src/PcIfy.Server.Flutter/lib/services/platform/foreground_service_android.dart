@@ -33,6 +33,13 @@ class ForegroundServiceImpl extends ForegroundService {
 
   @override
   Future<void> start(int port) async {
+    // Android 13+ requires POST_NOTIFICATIONS to be granted at runtime before
+    // the foreground-service notification can appear in the notification panel.
+    final permission = await FlutterForegroundTask.checkNotificationPermission();
+    if (permission != NotificationPermission.granted) {
+      await FlutterForegroundTask.requestNotificationPermission();
+    }
+
     FlutterForegroundTask.init(
       androidNotificationOptions: AndroidNotificationOptions(
         channelId: 'pcify_server',

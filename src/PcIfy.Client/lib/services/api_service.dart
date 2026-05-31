@@ -52,7 +52,7 @@ class ApiService {
       final list = resp.data as List<dynamic>;
       return list.map((e) {
         final m = e as Map<String, dynamic>;
-        return (path: m['path'] as String, name: m['name'] as String);
+        return (path: m['path'] as String, name: m['displayName'] as String);
       }).toList();
     } catch (_) {
       return null;
