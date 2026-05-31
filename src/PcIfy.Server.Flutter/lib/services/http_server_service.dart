@@ -360,7 +360,7 @@ class HttpServerService {
     if (startStr.isEmpty && endStr.isNotEmpty) {
       final suffixLen = int.tryParse(endStr);
       if (suffixLen == null || suffixLen <= 0) return null;
-      final start = totalSize - min(suffixLen, totalSize);
+      final start = totalSize - min<int>(suffixLen, totalSize);
       return (start, totalSize - 1);
     }
 
@@ -369,7 +369,7 @@ class HttpServerService {
     // content-length - 1 (satisfiable, not 416).
     final end = endStr.isEmpty
         ? totalSize - 1
-        : min(int.tryParse(endStr) ?? totalSize - 1, totalSize - 1);
+        : min<int>(int.tryParse(endStr) ?? totalSize - 1, totalSize - 1);
 
     if (start >= totalSize || start > end) return null;
     return (start, end);
