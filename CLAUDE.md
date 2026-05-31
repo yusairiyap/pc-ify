@@ -5,7 +5,9 @@
 **pc-ify** is a local-network home entertainment system:
 - **PcIfy.Server.Flutter** — Flutter server app (Windows · Android · macOS) that embeds a `shelf`-based HTTP API to serve files on the local network
 - **PcIfy.Client** — Flutter client app (Android · iOS · macOS · Windows) for browsing and streaming those files
-- **PcIfy.Server** *(legacy)* — .NET 10 WinForms app kept for reference; still builds and runs independently
+- **PcIfy.Server** *(legacy, recommended for Windows)* — .NET 10 WinForms app; the stable Windows option while the Flutter server is in preview
+
+> **Flutter server on Windows — Preview status:** The Flutter server is functional but not yet production-ready on Windows. Known rough edges include slower thumbnail processing compared to the legacy server. For day-to-day Windows use, prefer `PcIfy.Server` (WinForms) until the Flutter version matures.
 
 ## Solution Layout
 

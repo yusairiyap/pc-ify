@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -153,12 +154,25 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   }
 
   Future<void> _save() async {
-    await ref.read(settingsProvider.notifier).update(_draft);
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Settings saved')));
-      Navigator.of(context).pop();
+    final svc = ref.read(httpServerServiceProvider);
+
+    // Stop first so the old server releases the port before settings change.
+    await svc.stop();
+    if (Platform.isAndroid) {
+      await ref.read(foregroundServiceProvider).stop();
     }
+
+    await ref.read(settingsProvider.notifier).update(_draft);
+
+    // Restart if there is enough config to run.
+    if (_draft.sourceDirectories.isNotEmpty && _draft.users.isNotEmpty) {
+      await ref.read(httpServerServiceProvider).start(_draft.port);
+      if (Platform.isAndroid) {
+        await ref.read(foregroundServiceProvider).start(_draft.port);
+      }
+    }
+
+    if (mounted) Navigator.of(context).pop();
   }
 
   void _applyColorMode(String mode) {

@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:tray_manager/tray_manager.dart';
 import 'package:window_manager/window_manager.dart';
 import 'tray_service.dart';
@@ -49,8 +50,10 @@ class TrayServiceImpl extends TrayService implements TrayListener {
         : 'pc-ify — Stopped';
     await trayManager.setToolTip(tooltip);
 
-    // Use a simple PNG/ICO asset; real app should provide proper icon files.
-    await trayManager.setIcon('assets/icons/tray_icon.png');
+    final iconPath = Platform.isWindows
+        ? 'assets/icons/tray_icon.ico'
+        : 'assets/icons/tray_icon.png';
+    await trayManager.setIcon(iconPath);
 
     final menu = Menu(items: [
       MenuItem(key: 'show', label: 'Show pc-ify'),

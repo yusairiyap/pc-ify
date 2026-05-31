@@ -23,8 +23,10 @@ class SettingsService {
         final file = File(legacy);
         if (await file.exists()) {
           await _readFile(file);
-          // Persist to new location and stop reading legacy path.
+          // Persist to new location then remove legacy file so subsequent
+          // launches read from the new path and don't clobber saved changes.
           await save();
+          await file.delete();
           return;
         }
       }
@@ -37,6 +39,9 @@ class SettingsService {
       return;
     }
     await _readFile(file);
+    if (_settings.users.isEmpty) {
+      await _seedDefaultUser();
+    }
   }
 
   Future<void> save() async {
@@ -63,11 +68,16 @@ class SettingsService {
   }
 
   Future<void> _createDefaults() async {
+    _settings = AppSettings.defaults();
+    await _seedDefaultUser();
+  }
+
+  Future<void> _seedDefaultUser() async {
     final defaultUser = UserCredential(
       username: 'admin',
       passwordHash: AuthService.hashPassword('admin'),
     );
-    _settings = AppSettings.defaults().copyWith(users: [defaultUser]);
+    _settings = _settings.copyWith(users: [defaultUser]);
     await save();
   }
 
