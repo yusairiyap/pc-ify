@@ -4,6 +4,13 @@
     <!-- Network access for the local HTTP server -->
     <uses-permission android:name="android.permission.INTERNET"/>
 
+    <!-- Read local network interface / WiFi IP address -->
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"/>
+    <uses-permission android:name="android.permission.ACCESS_WIFI_STATE"/>
+
+    <!-- Android 13+: required to post any notification (including foreground-service) -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
+
     <!-- Foreground service to keep server alive in background -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
     <!-- Android 14+: dataSync is the correct type for a local file-transfer

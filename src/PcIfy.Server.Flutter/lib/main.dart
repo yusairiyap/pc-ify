@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:window_manager/window_manager.dart';
@@ -36,8 +37,12 @@ Future<void> main() async {
     await FFmpegSetupService.configure();
   }
 
-  // Android: register foreground service + video thumbnail helper.
+  // Android: flutter_foreground_task v8 requires initCommunicationPort() to
+  // be called in main() before runApp(). Without it the callback isolate
+  // cannot register its handler and startService() fails silently — no
+  // notification channel is ever created.
   if (Platform.isAndroid) {
+    FlutterForegroundTask.initCommunicationPort();
     _registerAndroidServices();
   }
 

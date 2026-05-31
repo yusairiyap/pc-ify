@@ -315,8 +315,13 @@ class _BrowserBody extends ConsumerWidget {
           skipLoadingOnReload: true,
           loading: () =>
               const Scaffold(body: Center(child: CircularProgressIndicator())),
-          error: (err, _) => Scaffold(
-              appBar: AppBar(), body: Center(child: Text('Error: $err'))),
+          error: (err, _) {
+            final msg = err is Exception
+                ? err.toString().replaceFirst('Exception: ', '')
+                : err.toString();
+            return Scaffold(
+                appBar: AppBar(), body: Center(child: Text(msg)));
+          },
           data: (s) => AnimatedSwitcher(
             duration: const Duration(milliseconds: 200),
             child: _BrowserLoaded(

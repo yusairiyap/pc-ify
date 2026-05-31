@@ -33,13 +33,24 @@ class ForegroundServiceImpl extends ForegroundService {
 
   @override
   Future<void> start(int port) async {
+    // Android 13+ requires POST_NOTIFICATIONS to be granted at runtime before
+    // the foreground-service notification can appear in the notification panel.
+    final permission = await FlutterForegroundTask.checkNotificationPermission();
+    if (permission != NotificationPermission.granted) {
+      await FlutterForegroundTask.requestNotificationPermission();
+    }
+
     FlutterForegroundTask.init(
       androidNotificationOptions: AndroidNotificationOptions(
-        channelId: 'pcify_server',
+        // Use a versioned channel ID so that Android creates a fresh channel
+        // with DEFAULT importance on devices that already cached the old
+        // 'pcify_server' channel as LOW (Android does not let apps downgrade
+        // an existing channel's importance once set by the user/system).
+        channelId: 'pcify_server_v2',
         channelName: 'pc-ify Server',
         channelDescription: 'Keeps the pc-ify server running in background',
-        channelImportance: NotificationChannelImportance.LOW,
-        priority: NotificationPriority.LOW,
+        channelImportance: NotificationChannelImportance.DEFAULT,
+        priority: NotificationPriority.DEFAULT,
       ),
       // v8: IOSNotificationOptions no longer accepts showNotification.
       iosNotificationOptions: const IOSNotificationOptions(),

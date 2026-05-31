@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:math' show min;
+import 'package:network_info_plus/network_info_plus.dart';
 import 'package:path/path.dart' as p;
 import 'package:shelf/shelf.dart';
 import 'package:shelf/shelf_io.dart' as shelf_io;
@@ -290,10 +291,8 @@ class HttpServerService {
           logService.log(ConnectionLogEntry(
             timestamp: DateTime.now(),
             clientIp: req.headers['x-forwarded-for'] ??
-                req.context['shelf.io.connection_info']
-                    ?.toString()
-                    .split(':')
-                    .first ??
+                (req.context['shelf.io.connection_info'] as HttpConnectionInfo?)
+                    ?.remoteAddress.address ??
                 'unknown',
             username: username,
             method: req.method,
@@ -384,6 +383,16 @@ class HttpServerService {
       );
 
   Future<List<String>> _getLocalIps() async {
+    // On Android, NetworkInterface.list() may return empty or fail even with
+    // INTERNET permission. Use network_info_plus to get the WiFi IP directly.
+    if (Platform.isAndroid) {
+      try {
+        final ip = await NetworkInfo().getWifiIP();
+        if (ip != null && ip.isNotEmpty) return [ip];
+      } catch (_) {}
+      return [];
+    }
+
     try {
       final interfaces = await NetworkInterface.list(
           type: InternetAddressType.IPv4, includeLinkLocal: false);
