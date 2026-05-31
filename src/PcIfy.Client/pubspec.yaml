@@ -44,6 +44,9 @@ dependencies:
   android_intent_plus: ^4.0.3
   url_launcher: ^6.3.0
 
+  # Biometric / device PIN authentication
+  local_auth: ^3.0.0
+
   # Crypto (SHA-256 for folder prefs keys)
   crypto: ^3.0.3
 

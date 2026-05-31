@@ -2,7 +2,9 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:local_auth/local_auth.dart';
 import '../../core/utils/grid_density_helper.dart';
+import '../../features/app_lock/app_lock_providers.dart';
 import '../../providers/services_providers.dart';
 import '../../providers/theme_providers.dart';
 import '../../services/theme_service.dart';
@@ -19,6 +21,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   late bool _alwaysExternal;
   late BoxFit _videoFit;
   late bool _videoRepeat;
+  late AppLockType _lockType;
+  late int _lockGrace;
 
   @override
   void initState() {
@@ -33,6 +37,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       _ => BoxFit.contain,
     };
     _videoRepeat = prefs.getBool('video_auto_repeat') ?? false;
+    final lockService = ref.read(appLockServiceProvider);
+    _lockType = lockService.getLockType();
+    _lockGrace = lockService.gracePeriodSeconds;
   }
 
   Future<void> _onThemeModeChanged(ThemeMode mode) async {
@@ -203,19 +210,12 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             ),
           ),
           const SizedBox(height: 16),
-          const _SectionLabel('Connection'),
-          Card(
-            child: Column(
-              children: [
-                ListTile(
-                  title: const Text('Server'),
-                  subtitle: Text(
-                    serverUrl.isEmpty ? 'Not configured' : serverUrl,
-                    style: Theme.of(context).textTheme.bodySmall,
-                  ),
-                ),
-              ],
-            ),
+          const _SectionLabel('Security'),
+          _SecurityCard(
+            lockType: _lockType,
+            gracePeriodSeconds: _lockGrace,
+            onLockTypeChanged: (t) => setState(() => _lockType = t),
+            onGraceChanged: (s) => setState(() => _lockGrace = s),
           ),
           const SizedBox(height: 16),
           const _SectionLabel('Data'),
@@ -232,13 +232,25 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           const SizedBox(height: 16),
           const _SectionLabel('Account'),
           Card(
-            child: ListTile(
-              title: Text('Log Out',
-                  style: TextStyle(
-                      color: Theme.of(context).colorScheme.error)),
-              leading: Icon(Icons.logout,
-                  color: Theme.of(context).colorScheme.error),
-              onTap: _logout,
+            child: Column(
+              children: [
+                ListTile(
+                  title: const Text('Server'),
+                  subtitle: Text(
+                    serverUrl.isEmpty ? 'Not configured' : serverUrl,
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                ),
+                const Divider(height: 1, indent: 16, endIndent: 16),
+                ListTile(
+                  title: Text('Log Out',
+                      style: TextStyle(
+                          color: Theme.of(context).colorScheme.error)),
+                  leading: Icon(Icons.logout,
+                      color: Theme.of(context).colorScheme.error),
+                  onTap: _logout,
+                ),
+              ],
             ),
           ),
           if (Platform.isAndroid) ...[
@@ -246,6 +258,275 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             _AndroidDisclaimerCard(),
           ],
         ],
+      ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Security card
+// ---------------------------------------------------------------------------
+
+class _SecurityCard extends ConsumerWidget {
+  const _SecurityCard({
+    required this.lockType,
+    required this.gracePeriodSeconds,
+    required this.onLockTypeChanged,
+    required this.onGraceChanged,
+  });
+
+  final AppLockType lockType;
+  final int gracePeriodSeconds;
+  final ValueChanged<AppLockType> onLockTypeChanged;
+  final ValueChanged<int> onGraceChanged;
+
+  String get _lockLabel => switch (lockType) {
+        AppLockType.biometric => 'Device Biometric / PIN',
+        AppLockType.pin => 'Custom PIN',
+        AppLockType.password => 'Password',
+        AppLockType.none => '',
+      };
+
+  String _graceLabel(int s) =>
+      s == 0 ? 'Immediately' : 'After ${s}s';
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final enabled = lockType != AppLockType.none;
+    return Card(
+      child: Column(
+        children: [
+          SwitchListTile(
+            title: const Text('App Lock'),
+            subtitle: Text(enabled
+                ? _lockLabel
+                : 'Require authentication to open the app'),
+            value: enabled,
+            onChanged: (on) {
+              if (on) {
+                _showTypeSheet(context, ref);
+              } else {
+                _disableLock(context, ref);
+              }
+            },
+          ),
+          if (enabled) ...[
+            const Divider(height: 1, indent: 16, endIndent: 16),
+            ListTile(
+              title: const Text('Lock method'),
+              subtitle: Text(_lockLabel),
+              trailing: TextButton(
+                onPressed: () => _showTypeSheet(context, ref),
+                child: const Text('Change'),
+              ),
+            ),
+            if (lockType == AppLockType.pin ||
+                lockType == AppLockType.password) ...[
+              const Divider(height: 1, indent: 16, endIndent: 16),
+              ListTile(
+                title: Text(lockType == AppLockType.pin
+                    ? 'Change PIN'
+                    : 'Change Password'),
+                leading: const Icon(Icons.key_outlined),
+                onTap: () {
+                  final path = lockType == AppLockType.pin
+                      ? '/settings/security/setup-pin?change=true'
+                      : '/settings/security/setup-password?change=true';
+                  context.push(path);
+                },
+              ),
+            ],
+            const Divider(height: 1, indent: 16, endIndent: 16),
+            ListTile(
+              title: const Text('Lock after'),
+              subtitle: Text(_graceLabel(gracePeriodSeconds)),
+              leading: const Icon(Icons.timer_outlined),
+              onTap: () => _showGraceSheet(context, ref),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Future<void> _showTypeSheet(BuildContext context, WidgetRef ref) async {
+    final auth = LocalAuthentication();
+    final biometricAvailable = await auth.isDeviceSupported();
+
+    if (!context.mounted) return;
+
+    final chosen = await showModalBottomSheet<AppLockType>(
+      context: context,
+      builder: (_) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+              child: Text('Choose lock method',
+                  style: Theme.of(context).textTheme.titleMedium),
+            ),
+            ListTile(
+              leading: const Icon(Icons.fingerprint),
+              title: const Text('Device Biometric / PIN'),
+              subtitle: biometricAvailable
+                  ? null
+                  : const Text('Not available on this device'),
+              enabled: biometricAvailable,
+              onTap: () => Navigator.pop(context, AppLockType.biometric),
+            ),
+            ListTile(
+              leading: const Icon(Icons.dialpad),
+              title: const Text('Custom PIN (4 digits)'),
+              onTap: () => Navigator.pop(context, AppLockType.pin),
+            ),
+            ListTile(
+              leading: const Icon(Icons.password),
+              title: const Text('Password'),
+              onTap: () => Navigator.pop(context, AppLockType.password),
+            ),
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
+    );
+
+    if (chosen == null || !context.mounted) return;
+
+    if (chosen == AppLockType.biometric) {
+      final ok = await auth.authenticate(
+        localizedReason: 'Confirm your device credential to enable app lock',
+        persistAcrossBackgrounding: true,
+      );
+      if (!ok || !context.mounted) return;
+      final service = ref.read(appLockServiceProvider);
+      await service.setLockType(AppLockType.biometric);
+      ref.read(lockNotifierProvider.notifier).refreshType();
+      onLockTypeChanged(AppLockType.biometric);
+    } else if (chosen == AppLockType.pin) {
+      context.push('/settings/security/setup-pin').then((_) {
+        final t = ref.read(appLockServiceProvider).getLockType();
+        onLockTypeChanged(t);
+      });
+    } else if (chosen == AppLockType.password) {
+      context.push('/settings/security/setup-password').then((_) {
+        final t = ref.read(appLockServiceProvider).getLockType();
+        onLockTypeChanged(t);
+      });
+    }
+  }
+
+  Future<void> _disableLock(BuildContext context, WidgetRef ref) async {
+    final service = ref.read(appLockServiceProvider);
+    // Re-authenticate before disabling.
+    if (lockType == AppLockType.biometric) {
+      final auth = LocalAuthentication();
+      final ok = await auth.authenticate(
+        localizedReason: 'Confirm to disable app lock',
+        persistAcrossBackgrounding: true,
+      );
+      if (!ok || !context.mounted) return;
+    } else {
+      final confirmed = await _showCredentialDialog(context, service);
+      if (!confirmed || !context.mounted) return;
+    }
+    await service.clearCredential();
+    await service.setLockType(AppLockType.none);
+    ref.read(lockNotifierProvider.notifier).refreshType();
+    onLockTypeChanged(AppLockType.none);
+  }
+
+  Future<bool> _showCredentialDialog(
+      BuildContext context, AppLockService service) async {
+    final ctrl = TextEditingController();
+    bool result = false;
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Confirm to disable'),
+        content: TextField(
+          controller: ctrl,
+          obscureText: true,
+          autofocus: true,
+          decoration: InputDecoration(
+            labelText: lockType == AppLockType.pin ? 'Enter PIN' : 'Enter password',
+            border: const OutlineInputBorder(),
+          ),
+        ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Cancel')),
+          FilledButton(
+            onPressed: () async {
+              result = await service.verifyCredential(ctrl.text);
+              if (ctx.mounted) Navigator.pop(ctx);
+            },
+            child: const Text('Confirm'),
+          ),
+        ],
+      ),
+    );
+    return result;
+  }
+
+  Future<void> _showGraceSheet(BuildContext context, WidgetRef ref) async {
+    double sliderVal = gracePeriodSeconds.toDouble();
+    await showModalBottomSheet<void>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setLocal) => SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(24, 16, 24, 24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text('Lock after',
+                    style: Theme.of(ctx).textTheme.titleMedium),
+                const SizedBox(height: 16),
+                Text(
+                  sliderVal == 0
+                      ? 'Immediately'
+                      : 'After ${sliderVal.toInt()}s',
+                  textAlign: TextAlign.center,
+                  style: Theme.of(ctx).textTheme.headlineSmall,
+                ),
+                Slider(
+                  value: sliderVal,
+                  min: 0,
+                  max: 300,
+                  divisions: 60,
+                  label: sliderVal == 0
+                      ? 'Immediately'
+                      : '${sliderVal.toInt()}s',
+                  onChanged: (v) => setLocal(() => sliderVal = v),
+                ),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text('Immediately',
+                        style: Theme.of(ctx).textTheme.bodySmall),
+                    Text('5 min',
+                        style: Theme.of(ctx).textTheme.bodySmall),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                FilledButton(
+                  onPressed: () async {
+                    final seconds = sliderVal.toInt();
+                    await ref
+                        .read(appLockServiceProvider)
+                        .setGracePeriod(seconds);
+                    onGraceChanged(seconds);
+                    if (ctx.mounted) Navigator.pop(ctx);
+                  },
+                  child: const Text('Done'),
+                ),
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }

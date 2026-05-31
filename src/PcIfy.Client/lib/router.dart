@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import 'features/app_lock/setup_password_screen.dart';
+import 'features/app_lock/setup_pin_screen.dart';
 import 'features/browser/background_crop_screen.dart';
 import 'features/browser/background_video_trim_screen.dart';
 import 'features/browser/browser_screen.dart';
@@ -73,6 +75,18 @@ final routerProvider = Provider<GoRouter>((ref) {
                 GoRoute(
                   path: 'backup-restore',
                   builder: (_, __) => const BackupRestoreScreen(),
+                ),
+                GoRoute(
+                  path: 'security/setup-pin',
+                  builder: (_, state) => SetupPinScreen(
+                    isChange: state.uri.queryParameters['change'] == 'true',
+                  ),
+                ),
+                GoRoute(
+                  path: 'security/setup-password',
+                  builder: (_, state) => SetupPasswordScreen(
+                    isChange: state.uri.queryParameters['change'] == 'true',
+                  ),
                 ),
               ],
             ),
