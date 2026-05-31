@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!-- Required to bind a listening TCP socket -->
+    <key>com.apple.security.network.server</key>
+    <true/>
+    <!-- Required to download FFmpeg and make outbound HTTP requests -->
+    <key>com.apple.security.network.client</key>
+    <true/>
+    <!-- Required to read files from directories the user picks with file_picker -->
+    <key>com.apple.security.files.user-selected.read-only</key>
+    <true/>
+    <!-- Required for app sandbox -->
+    <key>com.apple.security.app-sandbox</key>
+    <true/>
+    <!-- JIT needed for Flutter debug/profile builds -->
+    <key>com.apple.security.cs.allow-jit</key>
+    <true/>
+</dict>
+</plist>
