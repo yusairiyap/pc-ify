@@ -39,6 +39,11 @@ set(CMAKE_CXX_FLAGS_PROFILE "${CMAKE_CXX_FLAGS_RELEASE}")
 # Use Unicode for all projects.
 add_definitions(-DUNICODE -D_UNICODE)
 
+# local_auth_windows uses /await (experimental coroutines) which triggers a
+# static_assert in MSVC 14.51+ (VS 18). Suppress it globally so the plugin
+# builds; the underlying CppWinRT usage is unaffected.
+add_compile_definitions(_SILENCE_EXPERIMENTAL_COROUTINE_DEPRECATION_WARNINGS)
+
 # Compilation settings that should be applied to most targets.
 #
 # Be cautious about adding new options here, as plugins use this function by
