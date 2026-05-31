@@ -8,6 +8,7 @@ import 'features/browser/image_picker_screen.dart';
 import 'features/split_view/split_view_screen.dart';
 import 'features/home/home_screen.dart';
 import 'features/image_gallery/image_gallery_screen.dart';
+import 'features/settings/backup_restore_screen.dart';
 import 'features/settings/settings_screen.dart';
 import 'features/setup/setup_screen.dart';
 import 'features/video_player/video_player_screen.dart';
@@ -67,6 +68,12 @@ final routerProvider = Provider<GoRouter>((ref) {
             GoRoute(
               path: '/settings',
               builder: (_, __) => const SettingsScreen(),
+              routes: [
+                GoRoute(
+                  path: 'backup-restore',
+                  builder: (_, __) => const BackupRestoreScreen(),
+                ),
+              ],
             ),
           ]),
         ],
@@ -102,27 +109,11 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/background-crop',
         pageBuilder: (context, state) {
-          final extra = state.extra;
-          final String imageUri;
-          double? cropScale, cropOffsetDx, cropOffsetDy;
-          if (extra is Map<String, dynamic>) {
-            imageUri = extra['imageUri'] as String? ?? '';
-            cropScale = (extra['cropScale'] as num?)?.toDouble();
-            cropOffsetDx = (extra['cropOffsetDx'] as num?)?.toDouble();
-            cropOffsetDy = (extra['cropOffsetDy'] as num?)?.toDouble();
-          } else {
-            imageUri = extra as String? ?? '';
-          }
+          final imageUri = state.extra as String? ?? '';
           final imagePath = state.uri.queryParameters['imagePath'] ?? '';
           return _slideUpPage(
             state,
-            BackgroundCropScreen(
-              imageUri: imageUri,
-              imagePath: imagePath,
-              initialCropScale: cropScale,
-              initialCropOffsetDx: cropOffsetDx,
-              initialCropOffsetDy: cropOffsetDy,
-            ),
+            BackgroundCropScreen(imageUri: imageUri, imagePath: imagePath),
           );
         },
       ),

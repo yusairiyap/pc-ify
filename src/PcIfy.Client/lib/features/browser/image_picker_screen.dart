@@ -21,8 +21,37 @@ class _PickerNotifier
 
   Future<_PickerState> _load(String path) async {
     final api = ref.read(apiServiceProvider);
-    final listing = await api.getFolderListing(path);
-    if (listing == null) throw Exception('Could not load folder.');
+
+    FolderListing listing;
+    if (path.isEmpty) {
+      final roots = await api.getRoots();
+      if (roots == null || roots.isEmpty) throw Exception('No source directories configured on server.');
+      if (roots.length == 1) {
+        final l = await api.getFolderListing(roots.first.path);
+        if (l == null) throw Exception('Could not load folder.');
+        listing = l;
+      } else {
+        listing = FolderListing(
+          path: '',
+          parentPath: null,
+          displayName: 'Drives',
+          entries: roots
+              .map((r) => FileEntry(
+                    name: r.name,
+                    path: r.path,
+                    type: FileType.folder,
+                    sizeBytes: 0,
+                    lastModified: DateTime.fromMillisecondsSinceEpoch(0),
+                    hasThumbnail: false,
+                  ))
+              .toList(),
+        );
+      }
+    } else {
+      final l = await api.getFolderListing(path);
+      if (l == null) throw Exception('Could not load folder.');
+      listing = l;
+    }
 
     final filtered = listing.entries
         .where((e) =>
@@ -107,10 +136,9 @@ class ImagePickerScreen extends ConsumerWidget {
               child: LayoutBuilder(
                 builder: (context, constraints) {
                   final density = GridDensityHelper.fromString(
-                      ref.read(sharedPrefsProvider).getString('grid_density') ??
-                          'normal');
-                  final cols = GridDensityHelper.getColumnCount(
-                      constraints.maxWidth, density);
+                    ref.read(sharedPrefsProvider).getString('grid_density') ?? 'normal',
+                  );
+                  final cols = GridDensityHelper.getColumnCount(constraints.maxWidth, density);
                   return GridView.builder(
                     padding: const EdgeInsets.all(8),
                     gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
@@ -148,9 +176,7 @@ class ImagePickerScreen extends ConsumerWidget {
                                               ? Icons.folder
                                               : Icons.image,
                                           size: 40,
-                                          color: Theme.of(context)
-                                              .colorScheme
-                                              .primary,
+                                          color: Theme.of(context).colorScheme.primary,
                                         ),
                                       ),
                               ),
@@ -180,4 +206,3 @@ class ImagePickerScreen extends ConsumerWidget {
     );
   }
 }
-

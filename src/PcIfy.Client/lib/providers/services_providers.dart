@@ -5,6 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../services/api_service.dart';
 import '../services/auth_token_service.dart';
+import '../services/backup_restore_service.dart';
 import '../services/bookmark_service.dart';
 import '../services/connection_service.dart';
 import '../services/download_service.dart';
@@ -40,6 +41,18 @@ final bookmarkServiceProvider = Provider<BookmarkService>((ref) {
 
 final folderPrefsServiceProvider = Provider<FolderPrefsService>((ref) {
   return FolderPrefsService();
+});
+
+/// Incremented whenever folder prefs are bulk-changed (e.g. after a restore),
+/// so persistent screens like HomeScreen know to reload their background.
+final folderPrefsVersionProvider = StateProvider<int>((ref) => 0);
+
+final backupRestoreServiceProvider = Provider<BackupRestoreService>((ref) {
+  return BackupRestoreService(
+    ref.watch(sharedPrefsProvider),
+    ref.watch(bookmarkServiceProvider),
+    ref.watch(folderPrefsServiceProvider),
+  );
 });
 
 final downloadServiceProvider = Provider<DownloadService>((ref) {

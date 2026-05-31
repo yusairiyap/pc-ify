@@ -13,6 +13,7 @@ import '../../core/models/folder_listing.dart';
 import '../../core/models/folder_prefs.dart';
 import '../../core/utils/grid_density_helper.dart';
 import '../../providers/services_providers.dart';
+import '../../widgets/folder_background_image.dart';
 import '../home/home_screen.dart';
 
 // --- Data classes ---
@@ -421,22 +422,24 @@ class _BrowserLoaded extends ConsumerWidget {
         actions: [
           IconButton(
             icon: Icon(
-                state.isBookmarked ? Icons.bookmark : Icons.bookmark_outline),
+              state.isBookmarked ? Icons.bookmark : Icons.bookmark_outline,
+              color: hasBg ? Colors.white : Theme.of(context).colorScheme.primary,
+            ),
             onPressed: notifier.toggleBookmark,
           ),
           IconButton(
-            icon: Icon(state.prefs.backgroundImagePath != null
-                ? Icons.wallpaper
-                : Icons.image_outlined),
+            icon: Icon(
+              state.prefs.backgroundImagePath != null
+                  ? Icons.wallpaper
+                  : Icons.image_outlined,
+              color: hasBg ? Colors.white : Theme.of(context).colorScheme.primary,
+            ),
             tooltip: state.prefs.backgroundImagePath != null
                 ? 'Background options'
                 : 'Set background',
             onPressed: () => _onBackgroundTap(context, ref, notifier, listing,
                 hasBackground: state.prefs.backgroundImagePath != null,
-                existingImagePath: state.prefs.backgroundImagePath,
-                existingCropScale: state.prefs.cropScale,
-                existingCropOffsetDx: state.prefs.cropOffsetDx,
-                existingCropOffsetDy: state.prefs.cropOffsetDy),
+                existingImagePath: state.prefs.backgroundImagePath),
           ),
         ],
       );
@@ -482,7 +485,7 @@ class _BrowserLoaded extends ConsumerWidget {
         body: Stack(
           fit: StackFit.expand,
           children: [
-            _BackgroundImage(
+            FolderBackgroundImage(
               imageUri: state.backgroundImageUri!,
               prefs: state.prefs,
             ),
@@ -529,9 +532,6 @@ class _BrowserLoaded extends ConsumerWidget {
     FolderListing listing, {
     required bool hasBackground,
     String? existingImagePath,
-    double? existingCropScale,
-    double? existingCropOffsetDx,
-    double? existingCropOffsetDy,
   }) async {
     if (hasBackground) {
       // Ask user to change or remove existing background
@@ -579,12 +579,7 @@ class _BrowserLoaded extends ConsumerWidget {
         if (!context.mounted) return;
         final result = await context.push<BackgroundCropResult>(
           '/background-crop?imagePath=${Uri.encodeComponent(existingPath)}',
-          extra: {
-            'imageUri': imageUri,
-            'cropScale': existingCropScale,
-            'cropOffsetDx': existingCropOffsetDx,
-            'cropOffsetDy': existingCropOffsetDy,
-          },
+          extra: imageUri,
         );
         if (result != null) {
           await notifier.setBackgroundImage(
@@ -610,7 +605,7 @@ class _BrowserLoaded extends ConsumerWidget {
     if (!context.mounted) return;
     final result = await context.push<BackgroundCropResult>(
       '/background-crop?imagePath=${Uri.encodeComponent(picked)}',
-      extra: {'imageUri': imageUri},
+      extra: imageUri,
     );
     if (result != null) {
       await notifier.setBackgroundImage(
@@ -866,39 +861,6 @@ class _BrowserLoaded extends ConsumerWidget {
 
 // --- Sub-widgets ---
 
-class _BackgroundImage extends StatelessWidget {
-  const _BackgroundImage({required this.imageUri, required this.prefs});
-  final String imageUri;
-  final FolderPrefs prefs;
-
-  @override
-  Widget build(BuildContext context) {
-    if (!prefs.hasCrop) {
-      return CachedNetworkImage(
-        imageUrl: imageUri,
-        fit: BoxFit.cover,
-        width: double.infinity,
-        height: double.infinity,
-      );
-    }
-    final scale = prefs.cropScale ?? 1.0;
-    final dx = prefs.cropOffsetDx ?? 0.0;
-    final dy = prefs.cropOffsetDy ?? 0.0;
-    return ClipRect(
-      child: Transform(
-        transform: Matrix4.identity()
-          ..translateByDouble(dx, dy, 0, 1)
-          ..scaleByDouble(scale, scale, 1, 1),
-        child: CachedNetworkImage(
-          imageUrl: imageUri,
-          fit: BoxFit.cover,
-          width: double.infinity,
-          height: double.infinity,
-        ),
-      ),
-    );
-  }
-}
 
 class _DensityToolbar extends StatelessWidget {
   const _DensityToolbar({
