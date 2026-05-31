@@ -1,7 +1,12 @@
 # Flutter-related
 **/Flutter/ephemeral/
+Flutter/GeneratedPluginRegistrant.swift
+Flutter/Generated.xcconfig
+Flutter/flutter_export_environment.sh
 **/Pods/
 
 # Xcode-related
 **/dgph
 **/xcuserdata/
+**/.symlinks/
+**/.generated/
