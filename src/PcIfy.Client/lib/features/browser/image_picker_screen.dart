@@ -56,11 +56,14 @@ class _PickerNotifier
     final filtered = listing.entries
         .where((e) =>
             e.type == FileType.folder ||
-            e.type == FileType.image)
+            e.type == FileType.image ||
+            e.type == FileType.video)
         .toList()
       ..sort((a, b) {
         if (a.type == b.type) return a.name.compareTo(b.name);
-        return a.type == FileType.folder ? -1 : 1;
+        if (a.type == FileType.folder) return -1;
+        if (b.type == FileType.folder) return 1;
+        return 0;
       });
 
     final thumbs = <String, String>{};
@@ -127,7 +130,7 @@ class ImagePickerScreen extends ConsumerWidget {
                 children: [
                   const Icon(Icons.info_outline, size: 16),
                   const SizedBox(width: 8),
-                  Text('Tap an image to use it as background',
+                  Text('Tap an image or video to use it as background',
                       style: Theme.of(context).textTheme.bodySmall),
                 ],
               ),
@@ -174,7 +177,9 @@ class ImagePickerScreen extends ConsumerWidget {
                                         child: Icon(
                                           entry.type == FileType.folder
                                               ? Icons.folder
-                                              : Icons.image,
+                                              : entry.type == FileType.video
+                                                  ? Icons.videocam_outlined
+                                                  : Icons.image_outlined,
                                           size: 40,
                                           color: Theme.of(context).colorScheme.primary,
                                         ),

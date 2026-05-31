@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import 'features/browser/background_crop_screen.dart';
+import 'features/browser/background_video_trim_screen.dart';
 import 'features/browser/browser_screen.dart';
 import 'features/browser/image_picker_screen.dart';
 import 'features/split_view/split_view_screen.dart';
@@ -114,6 +115,21 @@ final routerProvider = Provider<GoRouter>((ref) {
           return _slideUpPage(
             state,
             BackgroundCropScreen(imageUri: imageUri, imagePath: imagePath),
+          );
+        },
+      ),
+      GoRoute(
+        path: '/background-video-trim',
+        pageBuilder: (context, state) {
+          final extra = state.extra as Map<String, dynamic>? ?? {};
+          return _slideUpPage(
+            state,
+            BackgroundVideoTrimScreen(
+              videoUri: extra['videoUri'] as String? ?? '',
+              videoPath: extra['videoPath'] as String? ?? '',
+              initialStartMs: extra['startMs'] as int?,
+              initialEndMs: extra['endMs'] as int?,
+            ),
           );
         },
       ),

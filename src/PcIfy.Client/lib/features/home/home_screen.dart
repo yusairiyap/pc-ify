@@ -7,7 +7,9 @@ import '../../core/models/file_entry.dart';
 import '../../core/models/folder_prefs.dart';
 import '../../providers/services_providers.dart';
 import '../../widgets/folder_background_image.dart';
+import '../../widgets/video_background_player.dart';
 import '../browser/background_crop_screen.dart';
+import '../browser/background_video_trim_screen.dart';
 
 final bookmarksProvider = Provider<List<BookmarkedFolder>>((ref) {
   return ref.watch(bookmarkServiceProvider).getBookmarks();
@@ -47,6 +49,7 @@ class HomeScreen extends ConsumerStatefulWidget {
 class _HomeScreenState extends ConsumerState<HomeScreen> {
   FolderPrefs _prefs = const FolderPrefs();
   String? _backgroundImageUri;
+  String? _backgroundVideoUri;
   ProviderSubscription<int>? _prefsVersionSub;
 
   @override
@@ -70,39 +73,58 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   }
 
   Future<void> _loadBackground() async {
-    final prefs = await ref.read(folderPrefsServiceProvider).getPrefs(_homePrefsKey);
+    final prefs =
+        await ref.read(folderPrefsServiceProvider).getPrefs(_homePrefsKey);
     if (!mounted) return;
-    String? uri;
+    String? imageUri;
     if (prefs.backgroundImagePath != null) {
-      uri = await ref.read(apiServiceProvider).buildStreamUriWithToken(prefs.backgroundImagePath!);
+      imageUri = await ref
+          .read(apiServiceProvider)
+          .buildStreamUriWithToken(prefs.backgroundImagePath!);
+    }
+    String? videoUri;
+    if (prefs.backgroundVideoPath != null) {
+      videoUri = await ref
+          .read(apiServiceProvider)
+          .buildStreamUriWithToken(prefs.backgroundVideoPath!);
     }
     if (!mounted) return;
     setState(() {
       _prefs = prefs;
-      _backgroundImageUri = uri;
+      _backgroundImageUri = imageUri;
+      _backgroundVideoUri = videoUri;
     });
   }
 
   Future<void> _onBackgroundTap() async {
-    final hasBackground = _prefs.backgroundImagePath != null;
-    if (hasBackground) {
+    if (_prefs.hasBackground) {
+      final isVideo = _prefs.isVideoBackground;
       final action = await showModalBottomSheet<String>(
         context: context,
         builder: (_) => SafeArea(
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Padding(
-                padding: EdgeInsets.fromLTRB(16, 16, 16, 8),
-                child: Text('Background Image',
-                    style: TextStyle(fontWeight: FontWeight.w600)),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+                child: Text(
+                  isVideo ? 'Background Video' : 'Background Image',
+                  style: const TextStyle(fontWeight: FontWeight.w600),
+                ),
               ),
               const Divider(height: 1),
-              ListTile(
-                leading: const Icon(Icons.tune_outlined),
-                title: const Text('Adjust image'),
-                onTap: () => Navigator.pop(context, 'adjust'),
-              ),
+              if (isVideo)
+                ListTile(
+                  leading: const Icon(Icons.content_cut_outlined),
+                  title: const Text('Trim video'),
+                  onTap: () => Navigator.pop(context, 'trim'),
+                )
+              else
+                ListTile(
+                  leading: const Icon(Icons.tune_outlined),
+                  title: const Text('Adjust image'),
+                  onTap: () => Navigator.pop(context, 'adjust'),
+                ),
               ListTile(
                 leading: const Icon(Icons.photo_outlined),
                 title: const Text('Change background'),
@@ -124,57 +146,134 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       }
       if (action == 'adjust') {
         final existingPath = _prefs.backgroundImagePath!;
-        final imageUri = await ref.read(apiServiceProvider).buildStreamUriWithToken(existingPath);
+        final imageUri = await ref
+            .read(apiServiceProvider)
+            .buildStreamUriWithToken(existingPath);
         if (!mounted) return;
         final result = await context.push<BackgroundCropResult>(
           '/background-crop?imagePath=${Uri.encodeComponent(existingPath)}',
           extra: imageUri,
         );
-        if (result != null) await _saveBackground(result);
+        if (result != null) await _saveImageBackground(result);
+        return;
+      }
+      if (action == 'trim') {
+        final existingPath = _prefs.backgroundVideoPath!;
+        final videoUri = await ref
+            .read(apiServiceProvider)
+            .buildStreamUriWithToken(existingPath);
+        if (!mounted) return;
+        final result = await context.push<BackgroundVideoTrimResult>(
+          '/background-video-trim',
+          extra: {
+            'videoUri': videoUri,
+            'videoPath': existingPath,
+            'startMs': _prefs.videoLoopStartMs,
+            'endMs': _prefs.videoLoopEndMs,
+          },
+        );
+        if (result != null) await _saveVideoBackground(result);
         return;
       }
       // 'change' falls through to picker
     }
-    final pickerStart = _prefs.backgroundImagePath != null
-        ? _parentOf(_prefs.backgroundImagePath!)
-        : '';
-    final picked = await context.push<String>(
-        '/image-picker?path=${Uri.encodeComponent(pickerStart)}');
+    final existingPath =
+        _prefs.backgroundImagePath ?? _prefs.backgroundVideoPath;
+    final pickerStart = existingPath != null ? _parentOf(existingPath) : '';
+    final picked = await context
+        .push<String>('/image-picker?path=${Uri.encodeComponent(pickerStart)}');
     if (picked == null || !mounted) return;
-    final imageUri = await ref.read(apiServiceProvider).buildStreamUriWithToken(picked);
-    if (!mounted) return;
-    final result = await context.push<BackgroundCropResult>(
-      '/background-crop?imagePath=${Uri.encodeComponent(picked)}',
-      extra: imageUri,
-    );
-    if (result != null) await _saveBackground(result);
+
+    if (_isVideoPath(picked)) {
+      final videoUri =
+          await ref.read(apiServiceProvider).buildStreamUriWithToken(picked);
+      if (!mounted) return;
+      final result = await context.push<BackgroundVideoTrimResult>(
+        '/background-video-trim',
+        extra: {'videoUri': videoUri, 'videoPath': picked},
+      );
+      if (result != null) await _saveVideoBackground(result);
+    } else {
+      final imageUri =
+          await ref.read(apiServiceProvider).buildStreamUriWithToken(picked);
+      if (!mounted) return;
+      final result = await context.push<BackgroundCropResult>(
+        '/background-crop?imagePath=${Uri.encodeComponent(picked)}',
+        extra: imageUri,
+      );
+      if (result != null) await _saveImageBackground(result);
+    }
   }
 
-  Future<void> _saveBackground(BackgroundCropResult result) async {
-    final updated = _prefs.copyWith(
+  Future<void> _saveImageBackground(BackgroundCropResult result) async {
+    final updated = FolderPrefs(
       backgroundImagePath: result.imagePath,
       cropOffsetDx: result.cropOffsetDx,
       cropOffsetDy: result.cropOffsetDy,
       cropScale: result.cropScale,
-      clearCrop: result.cropOffsetDx == null,
     );
-    await ref.read(folderPrefsServiceProvider).savePrefs(_homePrefsKey, updated);
-    final uri = await ref.read(apiServiceProvider).buildStreamUriWithToken(result.imagePath);
+    await ref
+        .read(folderPrefsServiceProvider)
+        .savePrefs(_homePrefsKey, updated);
+    final uri = await ref
+        .read(apiServiceProvider)
+        .buildStreamUriWithToken(result.imagePath);
     if (!mounted) return;
     setState(() {
       _prefs = updated;
       _backgroundImageUri = uri;
+      _backgroundVideoUri = null;
+    });
+  }
+
+  Future<void> _saveVideoBackground(BackgroundVideoTrimResult result) async {
+    final updated = FolderPrefs(
+      backgroundVideoPath: result.videoPath,
+      videoLoopStartMs: result.loopStartMs,
+      videoLoopEndMs: result.loopEndMs,
+    );
+    await ref
+        .read(folderPrefsServiceProvider)
+        .savePrefs(_homePrefsKey, updated);
+    final uri = await ref
+        .read(apiServiceProvider)
+        .buildStreamUriWithToken(result.videoPath);
+    if (!mounted) return;
+    setState(() {
+      _prefs = updated;
+      _backgroundImageUri = null;
+      _backgroundVideoUri = uri;
     });
   }
 
   Future<void> _clearBackground() async {
     final updated = _prefs.copyWith(clearBackground: true);
-    await ref.read(folderPrefsServiceProvider).savePrefs(_homePrefsKey, updated);
+    await ref
+        .read(folderPrefsServiceProvider)
+        .savePrefs(_homePrefsKey, updated);
     if (!mounted) return;
     setState(() {
       _prefs = updated;
       _backgroundImageUri = null;
+      _backgroundVideoUri = null;
     });
+  }
+
+  bool _isVideoPath(String path) {
+    final ext = path.split('.').last.toLowerCase();
+    return {
+      'mp4',
+      'mkv',
+      'mov',
+      'avi',
+      'wmv',
+      'webm',
+      'm4v',
+      'ts',
+      'flv',
+      'mpeg',
+      'mpg'
+    }.contains(ext);
   }
 
   String _parentOf(String path) {
@@ -190,7 +289,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     final bookmarks = ref.watch(bookmarksProvider);
     final cs = Theme.of(context).colorScheme;
     final tt = Theme.of(context).textTheme;
-    final hasBg = _backgroundImageUri != null;
+    final hasBg = _backgroundImageUri != null || _backgroundVideoUri != null;
 
     final appBar = AppBar(
       backgroundColor: hasBg ? Colors.transparent : null,
@@ -200,19 +299,16 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       actions: [
         IconButton(
           icon: Icon(
-            _prefs.backgroundImagePath != null
-                ? Icons.wallpaper
-                : Icons.image_outlined,
+            _prefs.hasBackground ? Icons.wallpaper : Icons.image_outlined,
             color: hasBg ? Colors.white : cs.primary,
           ),
-          tooltip: _prefs.backgroundImagePath != null
-              ? 'Background options'
-              : 'Set background',
+          tooltip:
+              _prefs.hasBackground ? 'Background options' : 'Set background',
           onPressed: _onBackgroundTap,
         ),
         IconButton(
-          icon: Icon(Icons.folder_open,
-              color: hasBg ? Colors.white : cs.primary),
+          icon:
+              Icon(Icons.folder_open, color: hasBg ? Colors.white : cs.primary),
           tooltip: 'Browse All',
           onPressed: () => context.go('/browse'),
         ),
@@ -224,18 +320,18 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Icon(Icons.bookmark_outline, size: 72,
-                    color: hasBg ? Colors.white54 : cs.outline),
+                Icon(Icons.bookmark_outline,
+                    size: 72, color: hasBg ? Colors.white54 : cs.outline),
                 const SizedBox(height: 16),
                 Text('No bookmarks yet',
-                    style: tt.titleMedium?.copyWith(
-                        color: hasBg ? Colors.white : null)),
+                    style: tt.titleMedium
+                        ?.copyWith(color: hasBg ? Colors.white : null)),
                 const SizedBox(height: 8),
                 Text(
                   'Browse folders and bookmark them for quick access.',
                   textAlign: TextAlign.center,
-                  style: tt.bodySmall?.copyWith(
-                      color: hasBg ? Colors.white70 : cs.outline),
+                  style: tt.bodySmall
+                      ?.copyWith(color: hasBg ? Colors.white70 : cs.outline),
                 ),
               ],
             ),
@@ -258,8 +354,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
               SliverPadding(
                 padding: const EdgeInsets.fromLTRB(8, 0, 8, 24),
                 sliver: SliverGrid(
-                  gridDelegate:
-                      const SliverGridDelegateWithMaxCrossAxisExtent(
+                  gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
                     maxCrossAxisExtent: 160,
                     crossAxisSpacing: 8,
                     mainAxisSpacing: 8,
@@ -297,9 +392,15 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         body: Stack(
           fit: StackFit.expand,
           children: [
-            FolderBackgroundImage(imageUri: _backgroundImageUri!, prefs: _prefs),
+            if (_backgroundVideoUri != null)
+              VideoBackgroundPlayer(
+                  videoUri: _backgroundVideoUri!, prefs: _prefs)
+            else
+              FolderBackgroundImage(
+                  imageUri: _backgroundImageUri!, prefs: _prefs),
             DecoratedBox(
-              decoration: BoxDecoration(color: Colors.black.withValues(alpha: 0.35)),
+              decoration:
+                  BoxDecoration(color: Colors.black.withValues(alpha: 0.35)),
             ),
             Padding(
               padding: EdgeInsets.only(
@@ -451,8 +552,7 @@ class _ThumbnailStack extends StatelessWidget {
               borderRadius: BorderRadius.circular(10),
               boxShadow: [
                 BoxShadow(
-                  color: Colors.black
-                      .withValues(alpha: isFront ? 0.40 : 0.20),
+                  color: Colors.black.withValues(alpha: isFront ? 0.40 : 0.20),
                   blurRadius: isFront ? 12 : 5,
                   spreadRadius: isFront ? 1 : 0,
                   offset: Offset(0, isFront ? 5 : 2),
