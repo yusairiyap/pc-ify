@@ -432,7 +432,11 @@ class _BrowserLoaded extends ConsumerWidget {
                 ? 'Background options'
                 : 'Set background',
             onPressed: () => _onBackgroundTap(context, ref, notifier, listing,
-                hasBackground: state.prefs.backgroundImagePath != null),
+                hasBackground: state.prefs.backgroundImagePath != null,
+                existingImagePath: state.prefs.backgroundImagePath,
+                existingCropScale: state.prefs.cropScale,
+                existingCropOffsetDx: state.prefs.cropOffsetDx,
+                existingCropOffsetDy: state.prefs.cropOffsetDy),
           ),
         ],
       );
@@ -524,6 +528,10 @@ class _BrowserLoaded extends ConsumerWidget {
     _BrowserNotifier notifier,
     FolderListing listing, {
     required bool hasBackground,
+    String? existingImagePath,
+    double? existingCropScale,
+    double? existingCropOffsetDx,
+    double? existingCropOffsetDy,
   }) async {
     if (hasBackground) {
       // Ask user to change or remove existing background
@@ -539,6 +547,11 @@ class _BrowserLoaded extends ConsumerWidget {
                     style: TextStyle(fontWeight: FontWeight.w600)),
               ),
               const Divider(height: 1),
+              ListTile(
+                leading: const Icon(Icons.tune_outlined),
+                title: const Text('Adjust image'),
+                onTap: () => Navigator.pop(context, 'adjust'),
+              ),
               ListTile(
                 leading: const Icon(Icons.photo_outlined),
                 title: const Text('Change background'),
@@ -558,18 +571,46 @@ class _BrowserLoaded extends ConsumerWidget {
         await notifier.clearBackgroundImage();
         return;
       }
+      if (action == 'adjust') {
+        final existingPath = existingImagePath;
+        if (existingPath == null || !context.mounted) return;
+        final imageUri =
+            await ref.read(apiServiceProvider).buildStreamUriWithToken(existingPath);
+        if (!context.mounted) return;
+        final result = await context.push<BackgroundCropResult>(
+          '/background-crop?imagePath=${Uri.encodeComponent(existingPath)}',
+          extra: {
+            'imageUri': imageUri,
+            'cropScale': existingCropScale,
+            'cropOffsetDx': existingCropOffsetDx,
+            'cropOffsetDy': existingCropOffsetDy,
+          },
+        );
+        if (result != null) {
+          await notifier.setBackgroundImage(
+            result.imagePath,
+            cropOffsetDx: result.cropOffsetDx,
+            cropOffsetDy: result.cropOffsetDy,
+            cropScale: result.cropScale,
+          );
+        }
+        return;
+      }
       // 'change' falls through to the picker below
     }
-    // Open image picker → crop screen
+    // Open image picker → crop screen, defaulting to the existing background's folder
+    final pickerStart = existingImagePath != null
+        ? _parentFolderPath(existingImagePath)
+        : listing.path;
     final picked = await context.push<String>(
-        '/image-picker?path=${Uri.encodeComponent(listing.path)}');
+        '/image-picker?path=${Uri.encodeComponent(pickerStart)}');
     if (picked == null || !context.mounted) return;
     final imageUri =
         await ref.read(apiServiceProvider).buildStreamUriWithToken(picked);
     if (!context.mounted) return;
     final result = await context.push<BackgroundCropResult>(
       '/background-crop?imagePath=${Uri.encodeComponent(picked)}',
-      extra: imageUri,
+      extra: {'imageUri': imageUri},
     );
     if (result != null) {
       await notifier.setBackgroundImage(
@@ -579,6 +620,14 @@ class _BrowserLoaded extends ConsumerWidget {
         cropScale: result.cropScale,
       );
     }
+  }
+
+  String _parentFolderPath(String filePath) {
+    final lastSlash = filePath.lastIndexOf('/');
+    if (lastSlash > 0) return filePath.substring(0, lastSlash);
+    final lastBackslash = filePath.lastIndexOf('\\');
+    if (lastBackslash > 0) return filePath.substring(0, lastBackslash);
+    return filePath;
   }
 
   Future<void> _onSelectionMenuAction(

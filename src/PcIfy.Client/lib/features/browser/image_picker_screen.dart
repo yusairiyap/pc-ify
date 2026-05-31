@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../core/models/file_entry.dart';
 import '../../core/models/folder_listing.dart';
+import '../../core/utils/grid_density_helper.dart';
 import '../../providers/services_providers.dart';
 
 class _PickerState {
@@ -103,66 +104,72 @@ class ImagePickerScreen extends ConsumerWidget {
               ),
             ),
             Expanded(
-              child: GridView.builder(
-                padding: const EdgeInsets.all(8),
-                gridDelegate:
-                    const SliverGridDelegateWithFixedCrossAxisCount(
-                  crossAxisCount: 3,
-                  crossAxisSpacing: 6,
-                  mainAxisSpacing: 6,
-                  childAspectRatio: 0.85,
-                ),
-                itemCount: s.listing.entries.length,
-                itemBuilder: (context, i) {
-                  final entry = s.listing.entries[i];
-                  final thumbUri = s.thumbnails[entry.path];
-
-                  return Card(
-                    clipBehavior: Clip.antiAlias,
-                    child: InkWell(
-                      onTap: () {
-                        if (entry.type == FileType.folder) {
-                          notifier.navigate(entry.path);
-                        } else {
-                          context.pop(entry.path);
-                        }
-                      },
-                      child: Column(
-                        children: [
-                          Expanded(
-                            child: thumbUri != null
-                                ? CachedNetworkImage(
-                                    imageUrl: thumbUri,
-                                    fit: BoxFit.cover,
-                                    width: double.infinity,
-                                  )
-                                : Center(
-                                    child: Icon(
-                                      entry.type == FileType.folder
-                                          ? Icons.folder
-                                          : Icons.image,
-                                      size: 40,
-                                      color: Theme.of(context)
-                                          .colorScheme
-                                          .primary,
-                                    ),
-                                  ),
-                          ),
-                          Padding(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 4, vertical: 4),
-                            child: Text(
-                              entry.name,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              textAlign: TextAlign.center,
-                              style:
-                                  Theme.of(context).textTheme.labelSmall,
-                            ),
-                          ),
-                        ],
-                      ),
+              child: LayoutBuilder(
+                builder: (context, constraints) {
+                  final density = GridDensityHelper.fromString(
+                      ref.read(sharedPrefsProvider).getString('grid_density') ??
+                          'normal');
+                  final cols = GridDensityHelper.getColumnCount(
+                      constraints.maxWidth, density);
+                  return GridView.builder(
+                    padding: const EdgeInsets.all(8),
+                    gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                      crossAxisCount: cols,
+                      crossAxisSpacing: 6,
+                      mainAxisSpacing: 6,
+                      childAspectRatio: 0.85,
                     ),
+                    itemCount: s.listing.entries.length,
+                    itemBuilder: (context, i) {
+                      final entry = s.listing.entries[i];
+                      final thumbUri = s.thumbnails[entry.path];
+                      return Card(
+                        clipBehavior: Clip.antiAlias,
+                        child: InkWell(
+                          onTap: () {
+                            if (entry.type == FileType.folder) {
+                              notifier.navigate(entry.path);
+                            } else {
+                              context.pop(entry.path);
+                            }
+                          },
+                          child: Column(
+                            children: [
+                              Expanded(
+                                child: thumbUri != null
+                                    ? CachedNetworkImage(
+                                        imageUrl: thumbUri,
+                                        fit: BoxFit.cover,
+                                        width: double.infinity,
+                                      )
+                                    : Center(
+                                        child: Icon(
+                                          entry.type == FileType.folder
+                                              ? Icons.folder
+                                              : Icons.image,
+                                          size: 40,
+                                          color: Theme.of(context)
+                                              .colorScheme
+                                              .primary,
+                                        ),
+                                      ),
+                              ),
+                              Padding(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 4, vertical: 4),
+                                child: Text(
+                                  entry.name,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  textAlign: TextAlign.center,
+                                  style: Theme.of(context).textTheme.labelSmall,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      );
+                    },
                   );
                 },
               ),
@@ -173,3 +180,4 @@ class ImagePickerScreen extends ConsumerWidget {
     );
   }
 }
+

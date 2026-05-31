@@ -102,11 +102,27 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/background-crop',
         pageBuilder: (context, state) {
-          final imageUri = state.extra as String? ?? '';
+          final extra = state.extra;
+          final String imageUri;
+          double? cropScale, cropOffsetDx, cropOffsetDy;
+          if (extra is Map<String, dynamic>) {
+            imageUri = extra['imageUri'] as String? ?? '';
+            cropScale = (extra['cropScale'] as num?)?.toDouble();
+            cropOffsetDx = (extra['cropOffsetDx'] as num?)?.toDouble();
+            cropOffsetDy = (extra['cropOffsetDy'] as num?)?.toDouble();
+          } else {
+            imageUri = extra as String? ?? '';
+          }
           final imagePath = state.uri.queryParameters['imagePath'] ?? '';
           return _slideUpPage(
             state,
-            BackgroundCropScreen(imageUri: imageUri, imagePath: imagePath),
+            BackgroundCropScreen(
+              imageUri: imageUri,
+              imagePath: imagePath,
+              initialCropScale: cropScale,
+              initialCropOffsetDx: cropOffsetDx,
+              initialCropOffsetDy: cropOffsetDy,
+            ),
           );
         },
       ),
