@@ -291,10 +291,8 @@ class HttpServerService {
           logService.log(ConnectionLogEntry(
             timestamp: DateTime.now(),
             clientIp: req.headers['x-forwarded-for'] ??
-                req.context['shelf.io.connection_info']
-                    ?.toString()
-                    .split(':')
-                    .first ??
+                (req.context['shelf.io.connection_info'] as HttpConnectionInfo?)
+                    ?.remoteAddress.address ??
                 'unknown',
             username: username,
             method: req.method,
