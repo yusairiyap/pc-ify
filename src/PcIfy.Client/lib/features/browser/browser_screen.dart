@@ -13,7 +13,6 @@ import '../../core/models/folder_listing.dart';
 import '../../core/models/folder_prefs.dart';
 import '../../core/utils/grid_density_helper.dart';
 import '../../providers/services_providers.dart';
-import '../home/home_screen.dart';
 
 // --- Data classes ---
 

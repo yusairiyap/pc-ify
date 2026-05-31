@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import 'features/browser/background_crop_screen.dart';
 import 'features/browser/browser_screen.dart';
 import 'features/browser/image_picker_screen.dart';
+import 'features/import_export/import_export_screen.dart';
 import 'features/split_view/split_view_screen.dart';
 import 'features/home/home_screen.dart';
 import 'features/image_gallery/image_gallery_screen.dart';
@@ -121,6 +122,11 @@ final routerProvider = Provider<GoRouter>((ref) {
             SplitViewScreen(folderPath: folderPath, selectedItems: entries),
           );
         },
+      ),
+      GoRoute(
+        path: '/import-export',
+        pageBuilder: (context, state) =>
+            _slideUpPage(state, const ImportExportScreen()),
       ),
     ],
   );

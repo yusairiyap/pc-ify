@@ -5,10 +5,6 @@ import 'package:go_router/go_router.dart';
 import '../../core/models/bookmarked_folder.dart';
 import '../../providers/services_providers.dart';
 
-final bookmarksProvider = Provider<List<BookmarkedFolder>>((ref) {
-  return ref.watch(bookmarkServiceProvider).getBookmarks();
-});
-
 class HomeScreen extends ConsumerWidget {
   const HomeScreen({super.key});
 

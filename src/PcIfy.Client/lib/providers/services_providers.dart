@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../core/models/bookmarked_folder.dart';
 import '../services/api_service.dart';
 import '../services/auth_token_service.dart';
 import '../services/bookmark_service.dart';
@@ -10,6 +11,7 @@ import '../services/connection_service.dart';
 import '../services/download_service.dart';
 import '../services/external_player_service.dart';
 import '../services/folder_prefs_service.dart';
+import '../services/import_export_service.dart';
 import '../services/theme_service.dart';
 import 'http_providers.dart';
 
@@ -38,6 +40,10 @@ final bookmarkServiceProvider = Provider<BookmarkService>((ref) {
   return BookmarkService(ref.watch(sharedPrefsProvider));
 });
 
+final bookmarksProvider = Provider<List<BookmarkedFolder>>((ref) {
+  return ref.watch(bookmarkServiceProvider).getBookmarks();
+});
+
 final folderPrefsServiceProvider = Provider<FolderPrefsService>((ref) {
   return FolderPrefsService();
 });
@@ -52,6 +58,10 @@ final externalPlayerServiceProvider = Provider<ExternalPlayerService>((ref) {
 
 final themeServiceProvider = Provider<ThemeService>((ref) {
   return ThemeService(ref.watch(sharedPrefsProvider));
+});
+
+final importExportServiceProvider = Provider<ImportExportService>((ref) {
+  return ImportExportService(ref.watch(sharedPrefsProvider));
 });
 
 // Persisted video fit mode: 'contain' | 'cover' | 'fill'. Default: 'contain'.

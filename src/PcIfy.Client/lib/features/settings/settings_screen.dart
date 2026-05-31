@@ -226,6 +226,18 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             ),
           ),
           const SizedBox(height: 16),
+          const _SectionLabel('Data'),
+          Card(
+            child: ListTile(
+              leading: const Icon(Icons.import_export),
+              title: const Text('Import / Export'),
+              subtitle: const Text(
+                  'Back up or restore settings, bookmarks, and folder backgrounds'),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => context.push('/import-export'),
+            ),
+          ),
+          const SizedBox(height: 16),
           const _SectionLabel('Account'),
           Card(
             child: ListTile(
