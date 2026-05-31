@@ -40,8 +40,6 @@ class ForegroundServiceImpl extends ForegroundService {
         channelDescription: 'Keeps the pc-ify server running in background',
         channelImportance: NotificationChannelImportance.LOW,
         priority: NotificationPriority.LOW,
-        // iconData / NotificationIconData removed in flutter_foreground_task v8;
-        // the app icon is used automatically.
       ),
       // v8: IOSNotificationOptions no longer accepts showNotification.
       iosNotificationOptions: const IOSNotificationOptions(),

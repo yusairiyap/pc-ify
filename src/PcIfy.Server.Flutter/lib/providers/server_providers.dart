@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../services/http_server_service.dart';
 import '../services/platform/foreground_service.dart';
@@ -8,7 +9,15 @@ final httpServerServiceProvider = Provider<HttpServerService>((ref) {
   final settings = ref.watch(settingsProvider);
   final logSvc = ref.watch(connectionLogServiceProvider);
   final svc = HttpServerService(settings, logSvc);
-  ref.onDispose(svc.dispose);
+  ref.onDispose(() async {
+    await svc.dispose();
+    // If settings change while the server is running, Riverpod disposes this
+    // provider and recreates it. Ensure the foreground service notification
+    // is also removed so it doesn't stay visible after the server stops.
+    if (Platform.isAndroid) {
+      await ForegroundServiceHelper.instance.stop();
+    }
+  });
   return svc;
 });
 

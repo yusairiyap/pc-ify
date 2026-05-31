@@ -6,8 +6,10 @@
 
     <!-- Foreground service to keep server alive in background -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
-    <!-- Android 14+ requires a foreground service type -->
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE"/>
+    <!-- Android 14+: dataSync is the correct type for a local file-transfer
+         server. connectedDevice is for Bluetooth/USB/NFC device interactions
+         (the wrong direction — this app IS the server, not the client). -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC"/>
 
     <!-- Wake lock to keep CPU active while serving -->
     <uses-permission android:name="android.permission.WAKE_LOCK"/>
@@ -52,7 +54,7 @@
         <service
             android:name="com.pravera.flutter_foreground_task.service.ForegroundTaskService"
             android:exported="false"
-            android:foregroundServiceType="connectedDevice"/>
+            android:foregroundServiceType="dataSync"/>
 
         <!-- flutter_foreground_task restart receiver (auto-restart on boot / crash) -->
         <receiver
