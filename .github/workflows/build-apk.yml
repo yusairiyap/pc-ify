@@ -1,11 +1,9 @@
 name: Build Android APKs
 
 on:
-  push:
-    branches: [main, 'claude/**']
-    paths:
-      - 'src/PcIfy.Client/**'
-      - 'src/PcIfy.Server.Flutter/**'
+  pull_request:
+    types: [closed]
+    branches: [main]
   workflow_dispatch:
     inputs:
       build_note:
@@ -16,10 +14,7 @@ on:
 jobs:
   build-client-apk:
     runs-on: ubuntu-latest
-    # No per-job 'if' condition — the workflow-level path filter above already
-    # controls when this file runs. Per-job conditions using
-    # github.event.commits[0].modified only see modified files, not newly
-    # added ones, causing jobs to be incorrectly skipped on first push.
+    if: github.event_name == 'workflow_dispatch' || github.event.pull_request.merged == true
     defaults:
       run:
         working-directory: src/PcIfy.Client
@@ -66,6 +61,7 @@ jobs:
 
   build-server-apk:
     runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch' || github.event.pull_request.merged == true
     defaults:
       run:
         working-directory: src/PcIfy.Server.Flutter
