@@ -33,7 +33,7 @@ dependencies:
   # Video thumbnail extraction (Android/iOS — uses native APIs, no FFmpeg bundling)
   # video_thumbnail 0.5.x is abandoned and uses jcenter() (removed), incompatible with AGP 9+.
   # video_thumbnail_plus is the maintained fork with the same API.
-  video_thumbnail_plus: ^1.0.4
+  video_thumbnail_plus: ^0.0.2
 
   # Network info (local IP display)
   network_info_plus: ^6.0.0
