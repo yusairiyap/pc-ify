@@ -8,9 +8,10 @@ void startCallback() {
 }
 
 class _ServerTaskHandler extends TaskHandler {
+  // v8 API: onStart now receives a TaskStarter alongside the timestamp.
   @override
-  Future<void> onStart(DateTime timestamp) async {
-    // The HTTP server lifecycle is managed by the main isolate via sendDataToTask.
+  Future<void> onStart(DateTime timestamp, TaskStarter starter) async {
+    // The HTTP server lifecycle is managed by the main isolate.
     // The foreground service just keeps the process alive.
   }
 
@@ -39,16 +40,13 @@ class ForegroundServiceImpl extends ForegroundService {
         channelDescription: 'Keeps the pc-ify server running in background',
         channelImportance: NotificationChannelImportance.LOW,
         priority: NotificationPriority.LOW,
-        iconData: const NotificationIconData(
-          resType: ResourceType.drawable,
-          resPrefix: ResourcePrefix.ic,
-          name: 'launcher_foreground',
-        ),
+        // iconData / NotificationIconData removed in flutter_foreground_task v8;
+        // the app icon is used automatically.
       ),
-      iosNotificationOptions: const IOSNotificationOptions(
-        showNotification: false,
-      ),
-      foregroundTaskOptions: const ForegroundTaskOptions(
+      // v8: IOSNotificationOptions no longer accepts showNotification.
+      iosNotificationOptions: const IOSNotificationOptions(),
+      // v8: ForegroundTaskOptions constructor is not const.
+      foregroundTaskOptions: ForegroundTaskOptions(
         eventAction: ForegroundTaskEventAction.nothing(),
         autoRunOnBoot: false,
         allowWifiLock: true,

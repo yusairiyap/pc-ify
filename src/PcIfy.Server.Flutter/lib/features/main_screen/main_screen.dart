@@ -182,7 +182,7 @@ class _StatusCard extends StatelessWidget {
                 const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
             decoration: BoxDecoration(
               color: isRunning
-                  ? Colors.green.withOpacity(0.2)
+                  ? Colors.green.withValues(alpha: 0.2)
                   : colorScheme.surfaceContainerHighest,
               borderRadius: BorderRadius.circular(20),
               border: Border.all(

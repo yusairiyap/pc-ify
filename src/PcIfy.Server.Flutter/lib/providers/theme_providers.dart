@@ -27,7 +27,7 @@ class ThemeNotifier extends StateNotifier<ThemeState> {
 
   Future<void> apply(ThemeMode mode, Color color) async {
     await _prefs.setString(_modeKey, mode.name);
-    await _prefs.setInt(_colorKey, color.value);
+    await _prefs.setInt(_colorKey, color.toARGB32());
     state = ThemeState(mode: mode, accentColor: color);
   }
 

@@ -73,10 +73,17 @@ class TrayServiceImpl extends TrayService implements TrayListener {
     windowManager.focus();
   }
 
+  // Required by newer tray_manager versions.
+  @override
+  void onTrayIconMouseUp() {}
+
   @override
   void onTrayIconRightMouseDown() {
     trayManager.popUpContextMenu();
   }
+
+  @override
+  void onTrayIconRightMouseUp() {}
 
   @override
   void onTrayMenuItemClick(MenuItem menuItem) {

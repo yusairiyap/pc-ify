@@ -42,9 +42,7 @@ Future<void> main() async {
     ProviderScope(
       overrides: [
         settingsServiceProvider.overrideWithValue(settingsSvc),
-        settingsProvider.overrideWith(
-            (ref) => SettingsNotifier(settingsSvc)
-              ..state = settingsSvc.settings),
+        settingsProvider.overrideWith((ref) => SettingsNotifier(settingsSvc)),
         sharedPrefsProvider.overrideWithValue(prefs),
       ],
       child: _AppWithWindowManager(
