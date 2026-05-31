@@ -1,6 +1,6 @@
 import 'dart:typed_data';
 import 'package:image/image.dart' as img;
-import 'package:video_thumbnail/video_thumbnail.dart';
+import 'package:video_thumbnail_plus/video_thumbnail_plus.dart';
 
 /// Called only on Android/iOS via PlatformThumbnailHelper.register in main.dart.
 Future<Uint8List?> getMobileVideoThumbnail(String path, int maxDim) async {
