@@ -1,6 +1,7 @@
 using System.Runtime.InteropServices;
 using PcIfy.Server.DTOs.System;
 using PcIfy.Server.Services.Interfaces;
+using Timer = System.Threading.Timer;
 
 namespace PcIfy.Server.Services;
 
