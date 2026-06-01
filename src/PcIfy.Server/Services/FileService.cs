@@ -14,8 +14,23 @@ public class FileService : IFileService
 
     public IEnumerable<string> GetConfiguredRoots() => _settings.SourceDirectories;
 
+    public IEnumerable<string> GetConfiguredRoots(string username) =>
+        GetEffectiveRoots(username);
+
     public bool IsPathAllowed(string path) =>
         PathSanitizer.IsPathAllowed(path, _settings.SourceDirectories);
+
+    public bool IsPathAllowed(string path, string username) =>
+        PathSanitizer.IsPathAllowed(path, GetEffectiveRoots(username));
+
+    private IEnumerable<string> GetEffectiveRoots(string username)
+    {
+        var user = _settings.Users.FirstOrDefault(u =>
+            string.Equals(u.Username, username, StringComparison.OrdinalIgnoreCase));
+        if (user is null || user.AllowedDirectories.Count == 0)
+            return _settings.SourceDirectories;
+        return user.AllowedDirectories;
+    }
 
     public Task<FolderListingDto> GetFolderListingAsync(string path)
     {

@@ -94,21 +94,21 @@ class HttpServerService {
 
     // Protected endpoints
     r.get(ApiRoutes.filesRoots,
-        _withAuth(authSvc, (req) => _handleRoots(req, fileSvc)));
+        _withAuth(authSvc, (req) => _handleRoots(req, fileSvc, authSvc)));
     r.get(ApiRoutes.filesList,
-        _withAuth(authSvc, (req) => _handleList(req, fileSvc)));
+        _withAuth(authSvc, (req) => _handleList(req, fileSvc, authSvc)));
     r.get(
         '${ApiRoutes.filesStream}/<filePath|[^]*>',
         _streamGuard(authSvc,
-            (req, fp) => _handleStream(req, fp, fileSvc)));
+            (req, fp) => _handleStream(req, fp, fileSvc, authSvc)));
     r.get(
         '${ApiRoutes.filesDownload}/<filePath|[^]*>',
         _streamGuard(authSvc,
-            (req, fp) => _handleDownload(req, fp, fileSvc)));
+            (req, fp) => _handleDownload(req, fp, fileSvc, authSvc)));
     r.get(
         '${ApiRoutes.thumbnails}/<filePath|[^]*>',
         _streamGuard(authSvc,
-            (req, fp) => _handleThumbnail(req, fp, fileSvc, thumbSvc)));
+            (req, fp) => _handleThumbnail(req, fp, fileSvc, thumbSvc, authSvc)));
 
     r.all('/<ignored|.*>', (_) => Response.notFound('Not found'));
     return r;
@@ -154,18 +154,43 @@ class HttpServerService {
     });
   }
 
-  // ── File handlers ─────────────────────────────────────────────────────────
+  // ── Per-user directory access helpers ────────────────────────────────────
 
-  Response _handleRoots(Request req, FileService fileSvc) {
-    return _json(fileSvc.getRoots().map((r) => r.toJson()).toList());
+  String? _getUsername(Request req, AuthService authSvc) {
+    final token = _extractToken(req);
+    if (token == null) return null;
+    return authSvc.verifyToken(token);
   }
 
-  Future<Response> _handleList(Request req, FileService fileSvc) async {
+  List<String> _effectiveRoots(String? username) {
+    if (username == null) return settings.sourceDirectories;
+    final user = settings.users.where(
+      (u) => u.username.toLowerCase() == username.toLowerCase(),
+    ).firstOrNull;
+    if (user == null || user.allowedDirectories.isEmpty) {
+      return settings.sourceDirectories;
+    }
+    return user.allowedDirectories;
+  }
+
+  // ── File handlers ─────────────────────────────────────────────────────────
+
+  Response _handleRoots(Request req, FileService fileSvc, AuthService authSvc) {
+    final roots = _effectiveRoots(_getUsername(req, authSvc));
+    return _json(fileSvc.getRoots(allowedRoots: roots).map((r) => r.toJson()).toList());
+  }
+
+  Future<Response> _handleList(
+    Request req,
+    FileService fileSvc,
+    AuthService authSvc,
+  ) async {
     final path = req.url.queryParameters['path'];
     if (path == null) {
       return Response.badRequest(body: 'Missing path parameter');
     }
-    final listing = await fileSvc.getFolderListing(path);
+    final roots = _effectiveRoots(_getUsername(req, authSvc));
+    final listing = await fileSvc.getFolderListing(path, allowedRoots: roots);
     if (listing == null) {
       return Response.forbidden('Path not allowed or not found');
     }
@@ -176,13 +201,15 @@ class HttpServerService {
     Request req,
     String encodedPath,
     FileService fileSvc,
+    AuthService authSvc,
   ) async {
     final filePath = Uri.decodeComponent(encodedPath);
-    if (!fileSvc.isPathAllowed(filePath)) {
+    final roots = _effectiveRoots(_getUsername(req, authSvc));
+    if (!fileSvc.isPathAllowed(filePath, allowedRoots: roots)) {
       return Response.forbidden('Path not allowed');
     }
 
-    final size = await fileSvc.getFileSize(filePath);
+    final size = await fileSvc.getFileSize(filePath, allowedRoots: roots);
     if (size == null) return Response.notFound('File not found');
 
     final mimeType = fileSvc.getMimeType(filePath);
@@ -194,7 +221,7 @@ class HttpServerService {
         return Response(416, headers: {'content-range': 'bytes */$size'});
       }
       final stream = fileSvc.openStream(filePath,
-          start: range.$1, end: range.$2);
+          start: range.$1, end: range.$2, allowedRoots: roots);
       if (stream == null) return Response.internalServerError();
 
       final length = range.$2 - range.$1 + 1;
@@ -210,7 +237,7 @@ class HttpServerService {
       );
     }
 
-    final stream = fileSvc.openStream(filePath);
+    final stream = fileSvc.openStream(filePath, allowedRoots: roots);
     if (stream == null) return Response.internalServerError();
     return Response.ok(stream, headers: {
       'content-type': mimeType,
@@ -223,18 +250,20 @@ class HttpServerService {
     Request req,
     String encodedPath,
     FileService fileSvc,
+    AuthService authSvc,
   ) async {
     final filePath = Uri.decodeComponent(encodedPath);
-    if (!fileSvc.isPathAllowed(filePath)) {
+    final roots = _effectiveRoots(_getUsername(req, authSvc));
+    if (!fileSvc.isPathAllowed(filePath, allowedRoots: roots)) {
       return Response.forbidden('Path not allowed');
     }
 
-    final size = await fileSvc.getFileSize(filePath);
+    final size = await fileSvc.getFileSize(filePath, allowedRoots: roots);
     if (size == null) return Response.notFound('File not found');
 
     final fileName = p.basename(filePath);
     final mimeType = fileSvc.getMimeType(filePath);
-    final stream = fileSvc.openStream(filePath);
+    final stream = fileSvc.openStream(filePath, allowedRoots: roots);
     if (stream == null) return Response.internalServerError();
 
     return Response.ok(stream, headers: {
@@ -249,16 +278,17 @@ class HttpServerService {
     String encodedPath,
     FileService fileSvc,
     ThumbnailService thumbSvc,
+    AuthService authSvc,
   ) async {
     final filePath = Uri.decodeComponent(encodedPath);
-    if (!fileSvc.isPathAllowed(filePath)) {
+    final roots = _effectiveRoots(_getUsername(req, authSvc));
+    if (!fileSvc.isPathAllowed(filePath, allowedRoots: roots)) {
       return Response.forbidden('Path not allowed');
     }
 
     final sizeParam = req.url.queryParameters['size'];
     final size = ThumbnailSizeExt.fromString(sizeParam);
-    final bytes =
-        await thumbSvc.getOrCreate(filePath, settings.sourceDirectories, size);
+    final bytes = await thumbSvc.getOrCreate(filePath, roots, size);
     if (bytes == null) return Response.notFound('Cannot generate thumbnail');
 
     return Response.ok(bytes, headers: {'content-type': 'image/jpeg'});

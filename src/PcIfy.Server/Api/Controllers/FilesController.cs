@@ -14,15 +14,17 @@ public class FilesController : ControllerBase
 
     public FilesController(IFileService files) => _files = files;
 
+    private string CurrentUsername => User.Identity?.Name ?? string.Empty;
+
     [HttpGet(ApiRoutes.FilesRoots)]
     public IActionResult GetRoots() =>
-        Ok(_files.GetConfiguredRoots().Select(r => new { path = r, displayName = Path.GetFileName(r) ?? r }));
+        Ok(_files.GetConfiguredRoots(CurrentUsername).Select(r => new { path = r, displayName = Path.GetFileName(r) ?? r }));
 
     [HttpGet(ApiRoutes.FilesList)]
     public async Task<IActionResult> List([FromQuery] string path)
     {
         if (string.IsNullOrWhiteSpace(path)) return BadRequest("path is required.");
-        if (!_files.IsPathAllowed(path)) return StatusCode(403, "Access denied.");
+        if (!_files.IsPathAllowed(path, CurrentUsername)) return StatusCode(403, "Access denied.");
 
         try
         {
@@ -42,7 +44,7 @@ public class FilesController : ControllerBase
         if (!System.IO.Path.IsPathRooted(fullPath))
             fullPath = System.IO.Path.DirectorySeparatorChar + fullPath;
 
-        if (!_files.IsPathAllowed(fullPath)) return StatusCode(403, "Access denied.");
+        if (!_files.IsPathAllowed(fullPath, CurrentUsername)) return StatusCode(403, "Access denied.");
         if (!System.IO.File.Exists(fullPath)) return NotFound();
 
         var info = _files.GetFileInfo(fullPath);
@@ -73,7 +75,7 @@ public class FilesController : ControllerBase
         if (!System.IO.Path.IsPathRooted(fullPath))
             fullPath = System.IO.Path.DirectorySeparatorChar + fullPath;
 
-        if (!_files.IsPathAllowed(fullPath)) return StatusCode(403, "Access denied.");
+        if (!_files.IsPathAllowed(fullPath, CurrentUsername)) return StatusCode(403, "Access denied.");
         if (!System.IO.File.Exists(fullPath)) return NotFound();
 
         var info = _files.GetFileInfo(fullPath);
