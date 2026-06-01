@@ -66,6 +66,7 @@ public class KestrelHostService : IKestrelHostService
                 services.AddSingleton<IAuthService, AuthService>();
                 services.AddSingleton<IFileService, FileService>();
                 services.AddSingleton<IThumbnailService, ThumbnailService>();
+                services.AddSingleton<ISystemControlService, WindowsSystemControlService>();
 
                 services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
                     .AddJwtBearer(opts => JwtHelper.ConfigureJwtBearerOptions(opts, _settings.JwtSecret));
