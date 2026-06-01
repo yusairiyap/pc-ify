@@ -2,40 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../core/models/bookmarked_folder.dart';
-import '../../core/models/file_entry.dart';
 import '../../core/models/folder_prefs.dart';
+import '../../providers/dashboard_providers.dart';
 import '../../providers/services_providers.dart';
 import '../../widgets/folder_background_image.dart';
 import '../../widgets/video_background_player.dart';
 import '../browser/background_crop_screen.dart';
 import '../browser/background_video_trim_screen.dart';
-
-final bookmarksProvider = Provider<List<BookmarkedFolder>>((ref) {
-  return ref.watch(bookmarkServiceProvider).getBookmarks();
-});
-
-final _bookmarkThumbnailsProvider =
-    FutureProvider.autoDispose.family<List<String>, String>(
-  (ref, folderPath) async {
-    final api = ref.watch(apiServiceProvider);
-    final listing = await api.getFolderListing(folderPath);
-    if (listing == null) return [];
-
-    final mediaFiles = listing.entries
-        .where((e) =>
-            (e.type == FileType.image || e.type == FileType.video) &&
-            e.hasThumbnail)
-        .take(3)
-        .toList();
-
-    return Future.wait(
-      mediaFiles.map(
-        (e) => api.buildThumbnailUriWithToken(e.path, size: 'small'),
-      ),
-    );
-  },
-);
+import 'dashboard_body.dart';
 
 const _homePrefsKey = '__home__';
 
@@ -286,9 +260,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final bookmarks = ref.watch(bookmarksProvider);
     final cs = Theme.of(context).colorScheme;
-    final tt = Theme.of(context).textTheme;
     final hasBg = _backgroundImageUri != null || _backgroundVideoUri != null;
 
     final appBar = AppBar(
@@ -297,6 +269,18 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       elevation: hasBg ? 0 : null,
       title: const Text('Home'),
       actions: [
+        Consumer(builder: (context, ref, _) {
+          final editMode = ref.watch(dashboardEditModeProvider);
+          return IconButton(
+            icon: Icon(
+              editMode ? Icons.check_circle_outline : Icons.tune_outlined,
+              color: hasBg ? Colors.white : cs.primary,
+            ),
+            tooltip: editMode ? 'Done editing' : 'Customize dashboard',
+            onPressed: () =>
+                ref.read(dashboardEditModeProvider.notifier).state = !editMode,
+          );
+        }),
         IconButton(
           icon: Icon(
             _prefs.hasBackground ? Icons.wallpaper : Icons.image_outlined,
@@ -315,45 +299,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       ],
     );
 
-    final body = bookmarks.isEmpty
-        ? Center(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(Icons.bookmark_outline,
-                    size: 72, color: hasBg ? Colors.white54 : cs.outline),
-                const SizedBox(height: 16),
-                Text('No bookmarks yet',
-                    style: tt.titleMedium
-                        ?.copyWith(color: hasBg ? Colors.white : null)),
-                const SizedBox(height: 8),
-                Text(
-                  'Browse folders and bookmark them for quick access.',
-                  textAlign: TextAlign.center,
-                  style: tt.bodySmall
-                      ?.copyWith(color: hasBg ? Colors.white70 : cs.outline),
-                ),
-              ],
-            ),
-          )
-        : _BookmarkGrid(
-            bookmarks: bookmarks,
-            hasBg: hasBg,
-            cs: cs,
-            tt: tt,
-            onNavigate: (b) => context.go(
-              '/browse?path=${Uri.encodeComponent(b.path)}'
-              '&t=${DateTime.now().millisecondsSinceEpoch}',
-            ),
-            onRemove: (b) {
-              ref.read(bookmarkServiceProvider).removeBookmark(b.path);
-              ref.invalidate(bookmarksProvider);
-            },
-            onReorder: (newOrder) {
-              ref.read(bookmarkServiceProvider).reorder(newOrder);
-              ref.invalidate(bookmarksProvider);
-            },
-          );
+    final body = DashboardBody(hasBg: hasBg);
 
     if (hasBg) {
       return Scaffold(
@@ -384,342 +330,5 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     }
 
     return Scaffold(appBar: appBar, body: body);
-  }
-}
-
-// ---------------------------------------------------------------------------
-// Draggable bookmark grid
-// ---------------------------------------------------------------------------
-
-class _BookmarkGrid extends StatefulWidget {
-  const _BookmarkGrid({
-    required this.bookmarks,
-    required this.hasBg,
-    required this.cs,
-    required this.tt,
-    required this.onNavigate,
-    required this.onRemove,
-    required this.onReorder,
-  });
-  final List<BookmarkedFolder> bookmarks;
-  final bool hasBg;
-  final ColorScheme cs;
-  final TextTheme tt;
-  final ValueChanged<BookmarkedFolder> onNavigate;
-  final ValueChanged<BookmarkedFolder> onRemove;
-  final ValueChanged<List<BookmarkedFolder>> onReorder;
-
-  @override
-  State<_BookmarkGrid> createState() => _BookmarkGridState();
-}
-
-class _BookmarkGridState extends State<_BookmarkGrid> {
-  late List<BookmarkedFolder> _items;
-  int? _draggingIndex;
-  int? _hoverIndex;
-
-  @override
-  void initState() {
-    super.initState();
-    _items = List.from(widget.bookmarks);
-  }
-
-  @override
-  void didUpdateWidget(_BookmarkGrid old) {
-    super.didUpdateWidget(old);
-    // Sync if external source changes (e.g. restore) but not while dragging
-    if (_draggingIndex == null) {
-      _items = List.from(widget.bookmarks);
-    }
-  }
-
-  void _moveItem(int from, int to) {
-    if (from == to) return;
-    setState(() {
-      final item = _items.removeAt(from);
-      _items.insert(to, item);
-      _draggingIndex = to;
-      _hoverIndex = to;
-    });
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return CustomScrollView(
-      slivers: [
-        SliverToBoxAdapter(
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(16, 20, 16, 10),
-            child: Text(
-              'My Bookmarks',
-              style: widget.tt.labelMedium?.copyWith(
-                color: widget.hasBg
-                    ? Colors.white70
-                    : widget.cs.onSurfaceVariant,
-                fontWeight: FontWeight.w700,
-                letterSpacing: 0.8,
-              ),
-            ),
-          ),
-        ),
-        SliverPadding(
-          padding: const EdgeInsets.fromLTRB(8, 0, 8, 24),
-          sliver: SliverGrid(
-            gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-              maxCrossAxisExtent: 160,
-              crossAxisSpacing: 8,
-              mainAxisSpacing: 8,
-              childAspectRatio: 0.82,
-            ),
-            delegate: SliverChildBuilderDelegate(
-              (context, i) {
-                final b = _items[i];
-                final isHovered = _hoverIndex == i && _draggingIndex != i;
-                return DragTarget<int>(
-                  key: ValueKey(b.path),
-                  onWillAcceptWithDetails: (details) {
-                    setState(() => _hoverIndex = i);
-                    return details.data != i;
-                  },
-                  onLeave: (_) => setState(() => _hoverIndex = null),
-                  onAcceptWithDetails: (details) {
-                    _moveItem(details.data, i);
-                    setState(() {
-                      _draggingIndex = null;
-                      _hoverIndex = null;
-                    });
-                    widget.onReorder(List.from(_items));
-                  },
-                  builder: (context, candidateData, rejectedData) {
-                    return AnimatedContainer(
-                      duration: const Duration(milliseconds: 150),
-                      decoration: isHovered
-                          ? BoxDecoration(
-                              borderRadius: BorderRadius.circular(12),
-                              border: Border.all(
-                                color: widget.cs.primary,
-                                width: 2,
-                              ),
-                            )
-                          : null,
-                      child: LongPressDraggable<int>(
-                        data: i,
-                        delay: const Duration(milliseconds: 350),
-                        onDragStarted: () =>
-                            setState(() => _draggingIndex = i),
-                        onDragEnd: (_) => setState(() {
-                          _draggingIndex = null;
-                          _hoverIndex = null;
-                        }),
-                        feedback: SizedBox(
-                          width: 140,
-                          height: 140 / 0.82,
-                          child: Material(
-                            elevation: 8,
-                            borderRadius: BorderRadius.circular(12),
-                            child: Opacity(
-                              opacity: 0.85,
-                              child: _BookmarkCard(
-                                bookmark: b,
-                                hasBackground: widget.hasBg,
-                                onTap: () {},
-                                onRemove: () {},
-                              ),
-                            ),
-                          ),
-                        ),
-                        childWhenDragging: Opacity(
-                          opacity: 0.3,
-                          child: _BookmarkCard(
-                            bookmark: b,
-                            hasBackground: widget.hasBg,
-                            onTap: () {},
-                            onRemove: () {},
-                          ),
-                        ),
-                        child: _BookmarkCard(
-                          bookmark: b,
-                          hasBackground: widget.hasBg,
-                          onTap: () => widget.onNavigate(b),
-                          onRemove: () => widget.onRemove(b),
-                        ),
-                      ),
-                    );
-                  },
-                );
-              },
-              childCount: _items.length,
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class _BookmarkCard extends ConsumerWidget {
-  const _BookmarkCard({
-    required this.bookmark,
-    required this.onTap,
-    required this.onRemove,
-    this.hasBackground = false,
-  });
-
-  final BookmarkedFolder bookmark;
-  final VoidCallback onTap;
-  final VoidCallback onRemove;
-  final bool hasBackground;
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final cs = Theme.of(context).colorScheme;
-    final tt = Theme.of(context).textTheme;
-    final thumbsAsync = ref.watch(_bookmarkThumbnailsProvider(bookmark.path));
-
-    return Card(
-      clipBehavior: Clip.antiAlias,
-      elevation: 2,
-      child: InkWell(
-        onTap: onTap,
-        onLongPress: () async {
-          final action = await showModalBottomSheet<String>(
-            context: context,
-            builder: (_) => SafeArea(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  ListTile(
-                    leading: const Icon(Icons.delete_outline),
-                    title: const Text('Remove bookmark'),
-                    onTap: () => Navigator.pop(context, 'remove'),
-                  ),
-                ],
-              ),
-            ),
-          );
-          if (action == 'remove') onRemove();
-        },
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Expanded(
-              child: thumbsAsync.when(
-                data: (urls) => urls.isEmpty
-                    ? _FolderPlaceholder(cs: cs)
-                    : _ThumbnailStack(urls: urls, cs: cs),
-                loading: () => _FolderPlaceholder(cs: cs),
-                error: (_, __) => _FolderPlaceholder(cs: cs),
-              ),
-            ),
-            Container(
-              padding: const EdgeInsets.fromLTRB(8, 6, 8, 8),
-              child: Text(
-                bookmark.displayName,
-                textAlign: TextAlign.center,
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                style: tt.labelSmall?.copyWith(
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _FolderPlaceholder extends StatelessWidget {
-  const _FolderPlaceholder({required this.cs});
-  final ColorScheme cs;
-
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Icon(Icons.folder_rounded, size: 52, color: cs.primary),
-    );
-  }
-}
-
-class _ThumbnailStack extends StatelessWidget {
-  const _ThumbnailStack({required this.urls, required this.cs});
-
-  final List<String> urls;
-  final ColorScheme cs;
-
-  @override
-  Widget build(BuildContext context) {
-    final layers = <Widget>[];
-
-    // Furthest back card — tilted left
-    if (urls.length >= 3) {
-      layers.add(_card(urls[2], angle: -0.20, tx: -12.0, ty: 6.0));
-    }
-
-    // Middle card — tilted right
-    if (urls.length >= 2) {
-      layers.add(_card(urls[1], angle: 0.16, tx: 12.0, ty: 4.0));
-    }
-
-    // Front card — upright with shadow
-    layers.add(_card(urls[0], angle: 0, tx: 0, ty: 0, isFront: true));
-
-    return Stack(
-      alignment: Alignment.center,
-      children: layers,
-    );
-  }
-
-  Widget _card(
-    String url, {
-    required double angle,
-    required double tx,
-    required double ty,
-    bool isFront = false,
-  }) {
-    return Transform.translate(
-      offset: Offset(tx, ty),
-      child: Transform.rotate(
-        angle: angle,
-        alignment: Alignment.center,
-        child: FractionallySizedBox(
-          widthFactor: 0.78,
-          heightFactor: 0.82,
-          child: DecoratedBox(
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(10),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withValues(alpha: isFront ? 0.40 : 0.20),
-                  blurRadius: isFront ? 12 : 5,
-                  spreadRadius: isFront ? 1 : 0,
-                  offset: Offset(0, isFront ? 5 : 2),
-                ),
-              ],
-            ),
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(10),
-              child: Image.network(
-                url,
-                fit: BoxFit.cover,
-                width: double.infinity,
-                height: double.infinity,
-                errorBuilder: (_, __, ___) => ColoredBox(
-                  color: cs.surfaceContainerHighest,
-                  child: Center(
-                    child: Icon(
-                      Icons.image_not_supported_outlined,
-                      color: cs.outline,
-                      size: 20,
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          ),
-        ),
-      ),
-    );
   }
 }
