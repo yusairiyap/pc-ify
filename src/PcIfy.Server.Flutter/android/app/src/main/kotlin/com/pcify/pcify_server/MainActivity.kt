@@ -203,26 +203,52 @@ class MainActivity : FlutterActivity() {
     private fun startCpuSampling() {
         cpuScope.launch {
             while (isActive) {
-                try {
-                    val (idle1, total1) = readCpuStats()
-                    delay(500)
-                    val (idle2, total2) = readCpuStats()
-                    val deltaTotal = total2 - total1
-                    val deltaIdle = idle2 - idle1
-                    cachedCpuUsage = if (deltaTotal > 0)
-                        ((deltaTotal - deltaIdle).toDouble() / deltaTotal * 100.0)
-                    else 0.0
-                } catch (_: Exception) {}
+                cachedCpuUsage = measureCpuUsage()
                 delay(2000)
             }
         }
     }
 
-    private fun readCpuStats(): Pair<Long, Long> {
-        val line = java.io.BufferedReader(java.io.FileReader("/proc/stat")).use { it.readLine() }
-        val parts = line.trim().split("\\s+".toRegex()).drop(1).map { it.toLong() }
-        val idle = parts.getOrElse(3) { 0L }
-        val total = parts.sum()
-        return Pair(idle, total)
+    private suspend fun measureCpuUsage(): Double {
+        // Try /proc/stat (may be restricted on Android 9+)
+        try {
+            val line1 = java.io.File("/proc/stat").bufferedReader().use { it.readLine() }
+            val parts1 = line1.trim().split("\\s+".toRegex()).drop(1).mapNotNull { it.toLongOrNull() }
+            if (parts1.isNotEmpty()) {
+                val total1 = parts1.sum()
+                val idle1 = parts1.getOrElse(3) { 0L }
+                delay(500)
+                val line2 = java.io.File("/proc/stat").bufferedReader().use { it.readLine() }
+                val parts2 = line2.trim().split("\\s+".toRegex()).drop(1).mapNotNull { it.toLongOrNull() }
+                val total2 = parts2.sum()
+                val idle2 = parts2.getOrElse(3) { 0L }
+                val dt = total2 - total1
+                val di = idle2 - idle1
+                // Validate: dt must be positive and idle delta in range
+                if (dt > 0 && di in 0..dt) {
+                    return (dt - di).toDouble() / dt * 100.0
+                }
+            }
+        } catch (_: Exception) {}
+        // Fallback: use CPU frequency as a proxy for load
+        return readCpuFromFrequency()
+    }
+
+    private fun readCpuFromFrequency(): Double {
+        var totalPct = 0.0
+        var count = 0
+        for (i in 0 until Runtime.getRuntime().availableProcessors()) {
+            try {
+                val cur = java.io.File("/sys/devices/system/cpu/cpu$i/cpufreq/scaling_cur_freq")
+                    .readText().trim().toLong()
+                val max = java.io.File("/sys/devices/system/cpu/cpu$i/cpufreq/scaling_max_freq")
+                    .readText().trim().toLong()
+                if (max > 0) {
+                    totalPct += cur.toDouble() / max * 100.0
+                    count++
+                }
+            } catch (_: Exception) {}
+        }
+        return if (count > 0) totalPct / count else 0.0
     }
 }

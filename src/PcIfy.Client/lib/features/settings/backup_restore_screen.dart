@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../providers/dashboard_providers.dart' show bookmarksProvider;
+import '../../providers/dashboard_providers.dart'
+    show bookmarksProvider, dashboardLayoutProvider;
 import '../../providers/services_providers.dart';
 import '../../providers/theme_providers.dart';
 import '../../services/backup_restore_service.dart';
@@ -19,6 +20,7 @@ class _BackupRestoreScreenState extends ConsumerState<BackupRestoreScreen> {
   bool _exportBookmarkFolderPrefs = true;
   bool _exportOtherFolderPrefs = true;
   bool _exportSettings = true;
+  bool _exportDashboardLayout = true;
   bool _isExporting = false;
   bool _isImporting = false;
 
@@ -26,7 +28,8 @@ class _BackupRestoreScreenState extends ConsumerState<BackupRestoreScreen> {
       !_exportBookmarks &&
       !_exportBookmarkFolderPrefs &&
       !_exportOtherFolderPrefs &&
-      !_exportSettings;
+      !_exportSettings &&
+      !_exportDashboardLayout;
 
   Future<void> _export() async {
     setState(() => _isExporting = true);
@@ -37,6 +40,7 @@ class _BackupRestoreScreenState extends ConsumerState<BackupRestoreScreen> {
         includeBookmarkFolderPrefs: _exportBookmarkFolderPrefs,
         includeOtherFolderPrefs: _exportOtherFolderPrefs,
         includeSettings: _exportSettings,
+        includeDashboardLayout: _exportDashboardLayout,
       );
       final path = await service.exportToFile(data);
       if (!mounted) return;
@@ -75,6 +79,9 @@ class _BackupRestoreScreenState extends ConsumerState<BackupRestoreScreen> {
     bool restoreBookmarkFolderPrefs = data.hasBookmarkFolderPrefs;
     bool restoreOtherFolderPrefs = data.hasOtherFolderPrefs;
     bool restoreSettings = data.hasSettings;
+    final hasDashboardLayout =
+        data.settings?.containsKey('dashboard_layout_v1') ?? false;
+    bool restoreDashboardLayout = hasDashboardLayout;
 
     final confirmed = await showDialog<bool>(
       context: context,
@@ -139,6 +146,18 @@ class _BackupRestoreScreenState extends ConsumerState<BackupRestoreScreen> {
                       : null,
                   contentPadding: EdgeInsets.zero,
                 ),
+                CheckboxListTile(
+                  title: const Text('Home Widgets placement'),
+                  subtitle: !hasDashboardLayout
+                      ? const Text('Not in backup')
+                      : null,
+                  value: restoreDashboardLayout,
+                  onChanged: hasDashboardLayout
+                      ? (v) => setDialogState(
+                          () => restoreDashboardLayout = v!)
+                      : null,
+                  contentPadding: EdgeInsets.zero,
+                ),
                 const SizedBox(height: 8),
                 Text(
                   'Bookmarks are merged with your existing list — '
@@ -175,6 +194,7 @@ class _BackupRestoreScreenState extends ConsumerState<BackupRestoreScreen> {
         restoreBookmarkFolderPrefs: restoreBookmarkFolderPrefs,
         restoreOtherFolderPrefs: restoreOtherFolderPrefs,
         restoreSettings: restoreSettings,
+        restoreDashboardLayout: restoreDashboardLayout,
       );
 
       // Propagate restored settings to live providers immediately.
@@ -217,6 +237,10 @@ class _BackupRestoreScreenState extends ConsumerState<BackupRestoreScreen> {
       // Refresh the bookmark list on HomeScreen if bookmarks were restored.
       if (restoreBookmarks) {
         ref.invalidate(bookmarksProvider);
+      }
+      // Refresh the dashboard layout live so it reflects immediately.
+      if (restoreDashboardLayout) {
+        ref.invalidate(dashboardLayoutProvider);
       }
 
       if (!mounted) return;
@@ -287,6 +311,15 @@ class _BackupRestoreScreenState extends ConsumerState<BackupRestoreScreen> {
                         const Text('Theme, playback and display preferences'),
                     value: _exportSettings,
                     onChanged: (v) => setState(() => _exportSettings = v!),
+                  ),
+                  const Divider(height: 1, indent: 16, endIndent: 16),
+                  CheckboxListTile(
+                    title: const Text('Home Widgets placement'),
+                    subtitle: const Text(
+                        'Dashboard sections, widget order and sizes'),
+                    value: _exportDashboardLayout,
+                    onChanged: (v) =>
+                        setState(() => _exportDashboardLayout = v!),
                   ),
                 ],
               ),

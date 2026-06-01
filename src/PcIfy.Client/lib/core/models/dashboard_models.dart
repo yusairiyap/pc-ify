@@ -1,19 +1,46 @@
 enum WidgetType { battery, volume, cpu, ram, screenLock, notifications }
 
+enum WidgetSize { halfWidth, fullWidth }
+
 class DashboardItem {
-  const DashboardItem({required this.id, required this.type});
+  const DashboardItem({required this.id, required this.type, this.size});
   final String id;
   final WidgetType type;
+  final WidgetSize? size; // null = use type default
 
-  factory DashboardItem.fromJson(Map<String, dynamic> json) => DashboardItem(
-        id: json['id'] as String,
-        type: WidgetType.values.firstWhere(
-          (e) => e.name == (json['type'] as String),
-          orElse: () => WidgetType.battery,
-        ),
-      );
+  WidgetSize get effectiveSize =>
+      size ?? _defaultSizeFor(type);
 
-  Map<String, dynamic> toJson() => {'id': id, 'type': type.name};
+  static WidgetSize _defaultSizeFor(WidgetType t) =>
+      (t == WidgetType.battery || t == WidgetType.cpu || t == WidgetType.ram)
+          ? WidgetSize.halfWidth
+          : WidgetSize.fullWidth;
+
+  DashboardItem copyWith({WidgetSize? size}) =>
+      DashboardItem(id: id, type: type, size: size ?? this.size);
+
+  factory DashboardItem.fromJson(Map<String, dynamic> json) {
+    final sizeStr = json['size'] as String?;
+    return DashboardItem(
+      id: json['id'] as String,
+      type: WidgetType.values.firstWhere(
+        (e) => e.name == (json['type'] as String),
+        orElse: () => WidgetType.battery,
+      ),
+      size: sizeStr == null
+          ? null
+          : WidgetSize.values.firstWhere(
+              (e) => e.name == sizeStr,
+              orElse: () => WidgetSize.fullWidth,
+            ),
+    );
+  }
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'type': type.name,
+        if (size != null) 'size': size!.name,
+      };
 }
 
 class DashboardSection {
@@ -28,7 +55,8 @@ class DashboardSection {
   final bool isBookmarks;
   final List<DashboardItem> items;
 
-  factory DashboardSection.fromJson(Map<String, dynamic> json) => DashboardSection(
+  factory DashboardSection.fromJson(Map<String, dynamic> json) =>
+      DashboardSection(
         id: json['id'] as String,
         name: json['name'] as String,
         isBookmarks: (json['isBookmarks'] as bool?) ?? false,
@@ -44,7 +72,8 @@ class DashboardSection {
         'items': items.map((e) => e.toJson()).toList(),
       };
 
-  DashboardSection copyWith({String? name, List<DashboardItem>? items}) => DashboardSection(
+  DashboardSection copyWith({String? name, List<DashboardItem>? items}) =>
+      DashboardSection(
         id: id,
         name: name ?? this.name,
         isBookmarks: isBookmarks,
@@ -56,10 +85,11 @@ class DashboardLayout {
   const DashboardLayout({required this.sections});
   final List<DashboardSection> sections;
 
-  factory DashboardLayout.defaultLayout() => const DashboardLayout(sections: [
+  factory DashboardLayout.defaultLayout() =>
+      const DashboardLayout(sections: [
         DashboardSection(
           id: 'system',
-          name: 'System',
+          name: 'Server Overview',
           items: [
             DashboardItem(id: 'battery', type: WidgetType.battery),
             DashboardItem(id: 'volume', type: WidgetType.volume),
@@ -70,7 +100,7 @@ class DashboardLayout {
         ),
         DashboardSection(
           id: 'notifications',
-          name: 'Notifications',
+          name: 'Server Notifications',
           items: [
             DashboardItem(id: 'notifications', type: WidgetType.notifications),
           ],
@@ -82,9 +112,11 @@ class DashboardLayout {
         ),
       ]);
 
-  factory DashboardLayout.fromJson(Map<String, dynamic> json) => DashboardLayout(
+  factory DashboardLayout.fromJson(Map<String, dynamic> json) =>
+      DashboardLayout(
         sections: (json['sections'] as List<dynamic>)
-            .map((e) => DashboardSection.fromJson(e as Map<String, dynamic>))
+            .map((e) =>
+                DashboardSection.fromJson(e as Map<String, dynamic>))
             .toList(),
       );
 

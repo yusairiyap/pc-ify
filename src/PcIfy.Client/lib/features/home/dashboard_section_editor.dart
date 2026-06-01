@@ -10,6 +10,7 @@ class DashboardSectionEditor extends StatelessWidget {
     required this.onRename,
     required this.onAddWidget,
     required this.onRemoveWidget,
+    required this.onResizeWidget,
     required this.onReorderWidgets,
   });
 
@@ -19,6 +20,7 @@ class DashboardSectionEditor extends StatelessWidget {
   final VoidCallback onRename;
   final VoidCallback onAddWidget;
   final ValueChanged<String> onRemoveWidget;
+  final void Function(String itemId, WidgetSize size) onResizeWidget;
   final ValueChanged<List<DashboardItem>> onReorderWidgets;
 
   @override
@@ -33,7 +35,6 @@ class DashboardSectionEditor extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            // Section header row
             Row(children: [
               const Icon(Icons.drag_handle, size: 20, color: Colors.grey),
               const SizedBox(width: 8),
@@ -42,7 +43,8 @@ class DashboardSectionEditor extends StatelessWidget {
                   onTap: section.isBookmarks ? null : onRename,
                   child: Text(
                     section.name,
-                    style: tt.labelLarge?.copyWith(fontWeight: FontWeight.w700),
+                    style:
+                        tt.labelLarge?.copyWith(fontWeight: FontWeight.w700),
                   ),
                 ),
               ),
@@ -62,7 +64,8 @@ class DashboardSectionEditor extends StatelessWidget {
                     ? 'Remove bookmarks section'
                     : 'Delete section',
                 child: IconButton(
-                  icon: Icon(Icons.delete_outline, size: 18, color: cs.error),
+                  icon: Icon(Icons.delete_outline,
+                      size: 18, color: cs.error),
                   padding: EdgeInsets.zero,
                   constraints:
                       const BoxConstraints(minWidth: 32, minHeight: 32),
@@ -71,13 +74,13 @@ class DashboardSectionEditor extends StatelessWidget {
               ),
             ]),
             const Divider(height: 12),
-            // Content
             if (section.isBookmarks)
               Padding(
                 padding: const EdgeInsets.symmetric(vertical: 4),
                 child: Text(
                   'Bookmark folders (manage from Browse tab)',
-                  style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
+                  style:
+                      TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
                 ),
               )
             else ...[
@@ -87,13 +90,16 @@ class DashboardSectionEditor extends StatelessWidget {
                   physics: const NeverScrollableScrollPhysics(),
                   itemCount: section.items.length,
                   onReorderItem: (oldIndex, newIndex) {
-                    final newItems = List<DashboardItem>.from(section.items);
+                    final newItems =
+                        List<DashboardItem>.from(section.items);
                     final item = newItems.removeAt(oldIndex);
                     newItems.insert(newIndex, item);
                     onReorderWidgets(newItems);
                   },
                   itemBuilder: (context, index) {
                     final item = section.items[index];
+                    final isHalf =
+                        item.effectiveSize == WidgetSize.halfWidth;
                     return ListTile(
                       key: ValueKey(item.id),
                       dense: true,
@@ -104,6 +110,29 @@ class DashboardSectionEditor extends StatelessWidget {
                       trailing: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
+                          Tooltip(
+                            message: isHalf
+                                ? 'Expand to full width'
+                                : 'Shrink to half width',
+                            child: IconButton(
+                              icon: Icon(
+                                isHalf
+                                    ? Icons.open_in_full
+                                    : Icons.close_fullscreen,
+                                size: 16,
+                                color: cs.onSurfaceVariant,
+                              ),
+                              padding: EdgeInsets.zero,
+                              constraints: const BoxConstraints(
+                                  minWidth: 32, minHeight: 32),
+                              onPressed: () => onResizeWidget(
+                                item.id,
+                                isHalf
+                                    ? WidgetSize.fullWidth
+                                    : WidgetSize.halfWidth,
+                              ),
+                            ),
+                          ),
                           IconButton(
                             icon: Icon(Icons.remove_circle_outline,
                                 size: 18, color: cs.error),

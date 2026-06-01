@@ -92,8 +92,8 @@ class BackupRestoreService {
     'always_external_player',
     'video_fit_mode',
     'video_auto_repeat',
-    'dashboard_layout_v1',
   ];
+  static const _dashboardLayoutKey = 'dashboard_layout_v1';
 
   String _hashPath(String path) =>
       sha256.convert(utf8.encode(path)).toString();
@@ -103,6 +103,7 @@ class BackupRestoreService {
     bool includeBookmarkFolderPrefs = true,
     bool includeOtherFolderPrefs = true,
     bool includeSettings = true,
+    bool includeDashboardLayout = true,
   }) async {
     final currentBookmarks = _bookmarkService.getBookmarks();
     final bookmarkHashes = {
@@ -135,11 +136,19 @@ class BackupRestoreService {
       }
     }
 
-    if (includeSettings) {
-      settings = {
-        for (final key in _settingsKeys)
-          if (_prefs.get(key) != null) key: _prefs.get(key)!,
-      };
+    if (includeSettings || includeDashboardLayout) {
+      settings = {};
+      if (includeSettings) {
+        for (final key in _settingsKeys) {
+          final v = _prefs.get(key);
+          if (v != null) settings[key] = v;
+        }
+      }
+      if (includeDashboardLayout) {
+        final v = _prefs.get(_dashboardLayoutKey);
+        if (v != null) settings[_dashboardLayoutKey] = v;
+      }
+      if (settings.isEmpty) settings = null;
     }
 
     return BackupData(
@@ -203,6 +212,7 @@ class BackupRestoreService {
     bool restoreBookmarkFolderPrefs = true,
     bool restoreOtherFolderPrefs = true,
     bool restoreSettings = true,
+    bool restoreDashboardLayout = true,
   }) async {
     if (restoreBookmarks && data.bookmarks != null) {
       for (final b in data.bookmarks!) {
@@ -228,8 +238,11 @@ class BackupRestoreService {
       }
     }
 
-    if (restoreSettings && data.settings != null) {
+    if (data.settings != null) {
       for (final entry in data.settings!.entries) {
+        final isDashboard = entry.key == _dashboardLayoutKey;
+        if (isDashboard && !restoreDashboardLayout) continue;
+        if (!isDashboard && !restoreSettings) continue;
         final v = entry.value;
         if (v is String) {
           await _prefs.setString(entry.key, v);

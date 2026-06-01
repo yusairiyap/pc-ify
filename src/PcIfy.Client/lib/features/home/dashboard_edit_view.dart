@@ -41,13 +41,14 @@ class DashboardEditView extends ConsumerWidget {
                 onAddWidget: () => _addWidget(context, ref, section),
                 onRemoveWidget: (itemId) =>
                     _removeWidget(ref, section, itemId),
+                onResizeWidget: (itemId, size) =>
+                    _resizeWidget(ref, section, itemId, size),
                 onReorderWidgets: (newItems) =>
                     _reorderWidgets(ref, section, newItems),
               );
             },
           ),
         ),
-        // Add section footer
         Padding(
           padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
           child: OutlinedButton.icon(
@@ -77,7 +78,7 @@ class DashboardEditView extends ConsumerWidget {
         label: 'Undo',
         onPressed: () => ref
             .read(dashboardLayoutProvider.notifier)
-            .update(layout), // restore original
+            .update(layout),
       ),
       duration: const Duration(seconds: 4),
     ));
@@ -85,7 +86,7 @@ class DashboardEditView extends ConsumerWidget {
 
   Future<void> _renameSection(
       BuildContext context, WidgetRef ref, DashboardSection section) async {
-    if (section.isBookmarks) return; // can't rename bookmarks section
+    if (section.isBookmarks) return;
     final controller = TextEditingController(text: section.name);
     final newName = await showDialog<String>(
       context: context,
@@ -141,6 +142,21 @@ class DashboardEditView extends ConsumerWidget {
   void _removeWidget(WidgetRef ref, DashboardSection section, String itemId) {
     final updated = section.copyWith(
         items: section.items.where((i) => i.id != itemId).toList());
+    final newSections = layout.sections
+        .map((s) => s.id == section.id ? updated : s)
+        .toList();
+    ref
+        .read(dashboardLayoutProvider.notifier)
+        .update(layout.copyWith(sections: newSections));
+  }
+
+  void _resizeWidget(WidgetRef ref, DashboardSection section, String itemId,
+      WidgetSize size) {
+    final updated = section.copyWith(
+      items: section.items
+          .map((i) => i.id == itemId ? i.copyWith(size: size) : i)
+          .toList(),
+    );
     final newSections = layout.sections
         .map((s) => s.id == section.id ? updated : s)
         .toList();
