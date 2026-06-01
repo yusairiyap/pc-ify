@@ -5,11 +5,26 @@ on:
     types: [closed]
     branches: [main]
   workflow_dispatch:
+    inputs:
+      build_target:
+        description: 'Which Windows build to run'
+        required: true
+        default: 'both'
+        type: choice
+        options:
+          - both
+          - client only
+          - server only
 
 jobs:
   build-windows-client:
     runs-on: windows-latest
-    if: github.event_name == 'workflow_dispatch' || github.event.pull_request.merged == true
+    if: >
+      github.event.pull_request.merged == true ||
+      github.event_name == 'workflow_dispatch' && (
+        inputs.build_target == 'both' ||
+        inputs.build_target == 'client only'
+      )
     defaults:
       run:
         working-directory: src/PcIfy.Client
@@ -73,7 +88,12 @@ jobs:
 
   build-windows-server:
     runs-on: windows-latest
-    if: github.event_name == 'workflow_dispatch' || github.event.pull_request.merged == true
+    if: >
+      github.event.pull_request.merged == true ||
+      github.event_name == 'workflow_dispatch' && (
+        inputs.build_target == 'both' ||
+        inputs.build_target == 'server only'
+      )
     defaults:
       run:
         working-directory: src/PcIfy.Server.Flutter

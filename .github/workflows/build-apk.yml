@@ -6,6 +6,15 @@ on:
     branches: [main]
   workflow_dispatch:
     inputs:
+      build_target:
+        description: 'Which APK to build'
+        required: true
+        default: 'both'
+        type: choice
+        options:
+          - both
+          - client only
+          - server only
       build_note:
         description: 'Optional build note'
         required: false
@@ -14,7 +23,12 @@ on:
 jobs:
   build-client-apk:
     runs-on: ubuntu-latest
-    if: github.event_name == 'workflow_dispatch' || github.event.pull_request.merged == true
+    if: >
+      github.event.pull_request.merged == true ||
+      github.event_name == 'workflow_dispatch' && (
+        inputs.build_target == 'both' ||
+        inputs.build_target == 'client only'
+      )
     defaults:
       run:
         working-directory: src/PcIfy.Client
@@ -61,7 +75,12 @@ jobs:
 
   build-server-apk:
     runs-on: ubuntu-latest
-    if: github.event_name == 'workflow_dispatch' || github.event.pull_request.merged == true
+    if: >
+      github.event.pull_request.merged == true ||
+      github.event_name == 'workflow_dispatch' && (
+        inputs.build_target == 'both' ||
+        inputs.build_target == 'server only'
+      )
     defaults:
       run:
         working-directory: src/PcIfy.Server.Flutter
