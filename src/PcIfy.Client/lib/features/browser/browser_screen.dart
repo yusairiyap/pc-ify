@@ -504,6 +504,13 @@ class _BrowserLoaded extends ConsumerWidget {
                 child: Text(
                     selectedItems.length > 1 ? 'Download all' : 'Download'),
               ),
+              if (single && (singleVideo || singleImage))
+                const PopupMenuItem(
+                    value: 'set_bg',
+                    child: Text('Set as folder background')),
+              if (single)
+                const PopupMenuItem(
+                    value: 'properties', child: Text('Properties')),
             ],
           ),
         ],
@@ -858,6 +865,20 @@ class _BrowserLoaded extends ConsumerWidget {
                     ? 'Saved: ${sel.entry.name}'
                     : 'Download failed: ${sel.entry.name}')));
           }
+        }
+      case 'set_bg':
+        ref.read(_browserNotifierProvider.notifier).clearSelection();
+        if (context.mounted) {
+          await _setItemAsBackground(context, ref, item, listing);
+        }
+      case 'properties':
+        ref.read(_browserNotifierProvider.notifier).clearSelection();
+        if (context.mounted) {
+          showDialog(
+            context: context,
+            builder: (_) =>
+                _PropertiesDialog(entry: item.entry, ref: ref),
+          );
         }
     }
   }

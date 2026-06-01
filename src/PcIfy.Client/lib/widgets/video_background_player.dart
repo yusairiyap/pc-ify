@@ -47,6 +47,15 @@ class _VideoBackgroundPlayerState extends State<VideoBackgroundPlayer>
     final startMs = widget.prefs.videoLoopStartMs;
     final endMs = widget.prefs.videoLoopEndMs;
     if (startMs != null || endMs != null) {
+      // Seek to the trim start once the duration is known
+      if (startMs != null && startMs > 0) {
+        var didSeekToStart = false;
+        _player.stream.duration.listen((d) {
+          if (!mounted || didSeekToStart || d.inMilliseconds == 0) return;
+          didSeekToStart = true;
+          _player.seek(Duration(milliseconds: startMs));
+        });
+      }
       _player.stream.position.listen((pos) {
         if (!mounted) return;
         final end = endMs;
