@@ -190,14 +190,14 @@ class _BackgroundVideoTrimScreenState
       body: Stack(
         fit: StackFit.expand,
         children: [
-          Video(
-            controller: _controller,
-            fit: BoxFit.cover,
-            controls: NoVideoControls,
-          ),
-          // Black overlay until playback reaches the initial start position
-          if (!_videoVisible)
-            const ColoredBox(color: Colors.black),
+          // Only added to the tree once the player is confirmed at the correct
+          // start position — prevents the native texture flashing frame 0.
+          if (_videoVisible)
+            Video(
+              controller: _controller,
+              fit: BoxFit.cover,
+              controls: NoVideoControls,
+            ),
           // Timeline overlay raised above system gesture zone
           Positioned(
             left: 0,

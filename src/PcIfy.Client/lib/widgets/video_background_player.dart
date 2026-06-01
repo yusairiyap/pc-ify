@@ -21,6 +21,11 @@ class _VideoBackgroundPlayerState extends State<VideoBackgroundPlayer>
   late AnimationController _fadeController;
   late Animation<double> _fadeAnimation;
 
+  // The Video widget is kept out of the tree entirely until the player is
+  // confirmed at the correct position, which prevents the native texture from
+  // ever flashing frame 0 — no overlay widget can guarantee that.
+  bool _showVideo = false;
+
   @override
   void initState() {
     super.initState();
@@ -42,9 +47,7 @@ class _VideoBackgroundPlayerState extends State<VideoBackgroundPlayer>
     final startMs = widget.prefs.videoLoopStartMs ?? 0;
     final endMs = widget.prefs.videoLoopEndMs;
 
-    // Enforce trim boundaries and delay the fade-in until the video is
-    // actually at the correct position (prevents showing position 0).
-    bool fadedIn = false;
+    bool revealed = false;
     _player.stream.position.listen((pos) {
       if (!mounted) return;
       final ms = pos.inMilliseconds;
@@ -53,17 +56,20 @@ class _VideoBackgroundPlayerState extends State<VideoBackgroundPlayer>
       // resetting to 0 after a natural loop-end.
       if (startMs > 0 && ms < startMs) {
         _player.seek(Duration(milliseconds: startMs));
-        return; // don't fade in yet
+        return;
       }
       // Jump back to trim start at the custom loop end.
       if (endMs != null && ms >= endMs) {
         _player.seek(Duration(milliseconds: startMs));
-        return; // don't fade in yet
+        return;
       }
 
-      // Position is in the valid range — start the fade on the first valid tick.
-      if (!fadedIn) {
-        fadedIn = true;
+      // Position is in the valid range — add the Video widget then fade in.
+      // Doing both together ensures the texture is already at the correct
+      // position when it first appears on screen.
+      if (!revealed) {
+        revealed = true;
+        setState(() => _showVideo = true);
         _fadeController.forward();
       }
     });
@@ -77,6 +83,7 @@ class _VideoBackgroundPlayerState extends State<VideoBackgroundPlayer>
     if (old.videoUri != widget.videoUri ||
         old.prefs.videoLoopStartMs != widget.prefs.videoLoopStartMs ||
         old.prefs.videoLoopEndMs != widget.prefs.videoLoopEndMs) {
+      setState(() => _showVideo = false);
       _fadeController.reset();
       _player.dispose();
       _initPlayer();
@@ -92,6 +99,7 @@ class _VideoBackgroundPlayerState extends State<VideoBackgroundPlayer>
 
   @override
   Widget build(BuildContext context) {
+    if (!_showVideo) return const SizedBox.shrink();
     return FadeTransition(
       opacity: _fadeAnimation,
       child: Video(
