@@ -6,6 +6,9 @@ if [ "${CLAUDE_CODE_REMOTE:-}" != "true" ]; then
   exit 0
 fi
 
+# Run in background — session starts immediately while Flutter installs
+echo '{"async": true, "asyncTimeout": 300000}'
+
 FLUTTER_DIR="/opt/flutter"
 FLUTTER_BIN="$FLUTTER_DIR/bin/flutter"
 
