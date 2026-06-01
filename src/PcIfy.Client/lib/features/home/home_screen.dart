@@ -336,53 +336,23 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
               ],
             ),
           )
-        : CustomScrollView(
-            slivers: [
-              SliverToBoxAdapter(
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 20, 16, 10),
-                  child: Text(
-                    'My Bookmarks',
-                    style: tt.labelMedium?.copyWith(
-                      color: hasBg ? Colors.white70 : cs.onSurfaceVariant,
-                      fontWeight: FontWeight.w700,
-                      letterSpacing: 0.8,
-                    ),
-                  ),
-                ),
-              ),
-              SliverPadding(
-                padding: const EdgeInsets.fromLTRB(8, 0, 8, 24),
-                sliver: SliverGrid(
-                  gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-                    maxCrossAxisExtent: 160,
-                    crossAxisSpacing: 8,
-                    mainAxisSpacing: 8,
-                    childAspectRatio: 0.82,
-                  ),
-                  delegate: SliverChildBuilderDelegate(
-                    (context, i) {
-                      final b = bookmarks[i];
-                      return _BookmarkCard(
-                        bookmark: b,
-                        hasBackground: hasBg,
-                        onTap: () => context.go(
-                          '/browse?path=${Uri.encodeComponent(b.path)}'
-                          '&t=${DateTime.now().millisecondsSinceEpoch}',
-                        ),
-                        onRemove: () {
-                          ref
-                              .read(bookmarkServiceProvider)
-                              .removeBookmark(b.path);
-                          ref.invalidate(bookmarksProvider);
-                        },
-                      );
-                    },
-                    childCount: bookmarks.length,
-                  ),
-                ),
-              ),
-            ],
+        : _BookmarkGrid(
+            bookmarks: bookmarks,
+            hasBg: hasBg,
+            cs: cs,
+            tt: tt,
+            onNavigate: (b) => context.go(
+              '/browse?path=${Uri.encodeComponent(b.path)}'
+              '&t=${DateTime.now().millisecondsSinceEpoch}',
+            ),
+            onRemove: (b) {
+              ref.read(bookmarkServiceProvider).removeBookmark(b.path);
+              ref.invalidate(bookmarksProvider);
+            },
+            onReorder: (newOrder) {
+              ref.read(bookmarkServiceProvider).reorder(newOrder);
+              ref.invalidate(bookmarksProvider);
+            },
           );
 
     if (hasBg) {
@@ -414,6 +384,176 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     }
 
     return Scaffold(appBar: appBar, body: body);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Draggable bookmark grid
+// ---------------------------------------------------------------------------
+
+class _BookmarkGrid extends StatefulWidget {
+  const _BookmarkGrid({
+    required this.bookmarks,
+    required this.hasBg,
+    required this.cs,
+    required this.tt,
+    required this.onNavigate,
+    required this.onRemove,
+    required this.onReorder,
+  });
+  final List<BookmarkedFolder> bookmarks;
+  final bool hasBg;
+  final ColorScheme cs;
+  final TextTheme tt;
+  final ValueChanged<BookmarkedFolder> onNavigate;
+  final ValueChanged<BookmarkedFolder> onRemove;
+  final ValueChanged<List<BookmarkedFolder>> onReorder;
+
+  @override
+  State<_BookmarkGrid> createState() => _BookmarkGridState();
+}
+
+class _BookmarkGridState extends State<_BookmarkGrid> {
+  late List<BookmarkedFolder> _items;
+  int? _draggingIndex;
+  int? _hoverIndex;
+
+  @override
+  void initState() {
+    super.initState();
+    _items = List.from(widget.bookmarks);
+  }
+
+  @override
+  void didUpdateWidget(_BookmarkGrid old) {
+    super.didUpdateWidget(old);
+    // Sync if external source changes (e.g. restore) but not while dragging
+    if (_draggingIndex == null) {
+      _items = List.from(widget.bookmarks);
+    }
+  }
+
+  void _moveItem(int from, int to) {
+    if (from == to) return;
+    setState(() {
+      final item = _items.removeAt(from);
+      _items.insert(to, item);
+      _draggingIndex = to;
+      _hoverIndex = to;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return CustomScrollView(
+      slivers: [
+        SliverToBoxAdapter(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(16, 20, 16, 10),
+            child: Text(
+              'My Bookmarks',
+              style: widget.tt.labelMedium?.copyWith(
+                color: widget.hasBg
+                    ? Colors.white70
+                    : widget.cs.onSurfaceVariant,
+                fontWeight: FontWeight.w700,
+                letterSpacing: 0.8,
+              ),
+            ),
+          ),
+        ),
+        SliverPadding(
+          padding: const EdgeInsets.fromLTRB(8, 0, 8, 24),
+          sliver: SliverGrid(
+            gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+              maxCrossAxisExtent: 160,
+              crossAxisSpacing: 8,
+              mainAxisSpacing: 8,
+              childAspectRatio: 0.82,
+            ),
+            delegate: SliverChildBuilderDelegate(
+              (context, i) {
+                final b = _items[i];
+                final isHovered = _hoverIndex == i && _draggingIndex != i;
+                return DragTarget<int>(
+                  key: ValueKey(b.path),
+                  onWillAcceptWithDetails: (details) {
+                    setState(() => _hoverIndex = i);
+                    return details.data != i;
+                  },
+                  onLeave: (_) => setState(() => _hoverIndex = null),
+                  onAcceptWithDetails: (details) {
+                    _moveItem(details.data, i);
+                    setState(() {
+                      _draggingIndex = null;
+                      _hoverIndex = null;
+                    });
+                    widget.onReorder(List.from(_items));
+                  },
+                  builder: (context, candidateData, rejectedData) {
+                    return AnimatedContainer(
+                      duration: const Duration(milliseconds: 150),
+                      decoration: isHovered
+                          ? BoxDecoration(
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(
+                                color: widget.cs.primary,
+                                width: 2,
+                              ),
+                            )
+                          : null,
+                      child: LongPressDraggable<int>(
+                        data: i,
+                        delay: const Duration(milliseconds: 350),
+                        onDragStarted: () =>
+                            setState(() => _draggingIndex = i),
+                        onDragEnd: (_) => setState(() {
+                          _draggingIndex = null;
+                          _hoverIndex = null;
+                        }),
+                        feedback: SizedBox(
+                          width: 140,
+                          height: 140 / 0.82,
+                          child: Material(
+                            elevation: 8,
+                            borderRadius: BorderRadius.circular(12),
+                            child: Opacity(
+                              opacity: 0.85,
+                              child: _BookmarkCard(
+                                bookmark: b,
+                                hasBackground: widget.hasBg,
+                                onTap: () {},
+                                onRemove: () {},
+                              ),
+                            ),
+                          ),
+                        ),
+                        childWhenDragging: Opacity(
+                          opacity: 0.3,
+                          child: _BookmarkCard(
+                            bookmark: b,
+                            hasBackground: widget.hasBg,
+                            onTap: () {},
+                            onRemove: () {},
+                          ),
+                        ),
+                        child: _BookmarkCard(
+                          bookmark: b,
+                          hasBackground: widget.hasBg,
+                          onTap: () => widget.onNavigate(b),
+                          onRemove: () => widget.onRemove(b),
+                        ),
+                      ),
+                    );
+                  },
+                );
+              },
+              childCount: _items.length,
+            ),
+          ),
+        ),
+      ],
+    );
   }
 }
 
@@ -480,7 +620,6 @@ class _BookmarkCard extends ConsumerWidget {
                 overflow: TextOverflow.ellipsis,
                 style: tt.labelSmall?.copyWith(
                   fontWeight: FontWeight.w600,
-                  color: hasBackground ? Colors.white : null,
                 ),
               ),
             ),

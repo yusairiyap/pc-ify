@@ -35,6 +35,8 @@ class BookmarkService {
     await _save(list);
   }
 
+  Future<void> reorder(List<BookmarkedFolder> newOrder) => _save(newOrder);
+
   bool isBookmarked(String path) => getBookmarks().any((b) => b.path == path);
 
   Future<void> _save(List<BookmarkedFolder> list) =>

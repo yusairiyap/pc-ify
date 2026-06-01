@@ -83,6 +83,9 @@ class _ImageGalleryScreenState extends ConsumerState<ImageGalleryScreen>
   // Active video player — set by gallery video pages
   final _currentPlayerNotifier = ValueNotifier<Player?>(null);
 
+  // Shared mute state across all video pages
+  final _muteNotifier = ValueNotifier<bool>(false);
+
   // Signals which gallery index is currently visible (video pages listen to this)
   late final ValueNotifier<int> _activeIndexNotifier;
 
@@ -130,6 +133,7 @@ class _ImageGalleryScreenState extends ConsumerState<ImageGalleryScreen>
     _zoomedNotifier.dispose();
     _currentPlayerNotifier.dispose();
     _activeIndexNotifier.dispose();
+    _muteNotifier.dispose();
     _zoomAnimCtrl.dispose();
     for (final ctrl in _tfControllers.values) {
       ctrl.dispose();
@@ -485,6 +489,23 @@ class _ImageGalleryScreenState extends ConsumerState<ImageGalleryScreen>
                         onPressed: () => _toggleRepeat(ref, player),
                       );
                     }),
+                    // Mute toggle
+                    ValueListenableBuilder<bool>(
+                      valueListenable: _muteNotifier,
+                      builder: (_, isMuted, __) => IconButton(
+                        tooltip: isMuted ? 'Unmute' : 'Mute',
+                        icon: Icon(
+                          isMuted ? Icons.volume_off : Icons.volume_up,
+                          color: Colors.white,
+                          size: 20,
+                        ),
+                        onPressed: () {
+                          final next = !_muteNotifier.value;
+                          _muteNotifier.value = next;
+                          player.setVolume(next ? 0 : 100);
+                        },
+                      ),
+                    ),
                   ],
                 );
               },
@@ -625,6 +646,8 @@ class _ImageGalleryScreenState extends ConsumerState<ImageGalleryScreen>
                         index: i,
                         activeIndexNotifier: _activeIndexNotifier,
                         playerNotifier: _currentPlayerNotifier,
+                        zoomedNotifier: _zoomedNotifier,
+                        muteNotifier: _muteNotifier,
                       );
                     }
                     return GestureDetector(
@@ -735,11 +758,15 @@ class _GalleryVideoPage extends ConsumerStatefulWidget {
     required this.index,
     required this.activeIndexNotifier,
     required this.playerNotifier,
+    required this.zoomedNotifier,
+    required this.muteNotifier,
   });
   final String streamUri;
   final int index;
   final ValueNotifier<int> activeIndexNotifier;
   final ValueNotifier<Player?> playerNotifier;
+  final ValueNotifier<bool> zoomedNotifier;
+  final ValueNotifier<bool> muteNotifier;
 
   @override
   ConsumerState<_GalleryVideoPage> createState() => _GalleryVideoPageState();
@@ -748,6 +775,7 @@ class _GalleryVideoPage extends ConsumerStatefulWidget {
 class _GalleryVideoPageState extends ConsumerState<_GalleryVideoPage> {
   late final Player _player;
   late final VideoController _controller;
+  late final TransformationController _transformCtrl;
   bool _ready = false;
 
   // Double-tap seek feedback
@@ -764,8 +792,22 @@ class _GalleryVideoPageState extends ConsumerState<_GalleryVideoPage> {
     super.initState();
     _player = Player();
     _controller = VideoController(_player);
+    _transformCtrl = TransformationController();
+    _transformCtrl.addListener(_onTransformChanged);
     widget.activeIndexNotifier.addListener(_onActiveChanged);
+    widget.muteNotifier.addListener(_onMuteChanged);
     _initStream();
+  }
+
+  void _onTransformChanged() {
+    final isZoomed = _transformCtrl.value.getMaxScaleOnAxis() > 1.01;
+    if (isZoomed != widget.zoomedNotifier.value) {
+      widget.zoomedNotifier.value = isZoomed;
+    }
+  }
+
+  void _onMuteChanged() {
+    _player.setVolume(widget.muteNotifier.value ? 0 : 100);
   }
 
   Future<void> _initStream() async {
@@ -775,6 +817,7 @@ class _GalleryVideoPageState extends ConsumerState<_GalleryVideoPage> {
     _ready = true;
     if (_isActive) {
       widget.playerNotifier.value = _player;
+      _player.setVolume(widget.muteNotifier.value ? 0 : 100);
       await _player.play();
     }
   }
@@ -783,6 +826,9 @@ class _GalleryVideoPageState extends ConsumerState<_GalleryVideoPage> {
     if (!_ready) return;
     if (_isActive) {
       widget.playerNotifier.value = _player;
+      _player.setVolume(widget.muteNotifier.value ? 0 : 100);
+      // Reset zoom when returning to this page
+      _transformCtrl.value = Matrix4.identity();
       _player.play();
     } else {
       if (widget.playerNotifier.value == _player) {
@@ -814,7 +860,10 @@ class _GalleryVideoPageState extends ConsumerState<_GalleryVideoPage> {
   @override
   void dispose() {
     _seekFeedbackTimer?.cancel();
+    _transformCtrl.removeListener(_onTransformChanged);
+    _transformCtrl.dispose();
     widget.activeIndexNotifier.removeListener(_onActiveChanged);
+    widget.muteNotifier.removeListener(_onMuteChanged);
     if (widget.playerNotifier.value == _player) {
       widget.playerNotifier.value = null;
     }
@@ -828,7 +877,12 @@ class _GalleryVideoPageState extends ConsumerState<_GalleryVideoPage> {
     final fit = ref.watch(videoFitProvider);
     return Stack(
       children: [
-        Video(controller: _controller, controls: NoVideoControls, fit: fit),
+        InteractiveViewer(
+          transformationController: _transformCtrl,
+          minScale: 1.0,
+          maxScale: 5.0,
+          child: Video(controller: _controller, controls: NoVideoControls, fit: fit),
+        ),
         // Double-tap left/right to seek
         GestureDetector(
           behavior: HitTestBehavior.translucent,

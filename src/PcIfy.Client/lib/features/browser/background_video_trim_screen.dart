@@ -165,11 +165,11 @@ class _BackgroundVideoTrimScreenState
             fit: BoxFit.cover,
             controls: NoVideoControls,
           ),
-          // Timeline overlay pinned to the bottom
+          // Timeline overlay raised above system gesture zone
           Positioned(
             left: 0,
             right: 0,
-            bottom: 0,
+            bottom: mq.viewPadding.bottom,
             child: _TimelineBar(
               startFrac: _startFrac,
               endFrac: _endFrac,
@@ -177,7 +177,7 @@ class _BackgroundVideoTrimScreenState
               startLabel: _formatMs(startMs),
               endLabel: _formatMs(endMs),
               ready: _ready,
-              bottomPadding: mq.padding.bottom,
+              horizontalPadding: 20,
               onStartChanged: (v) {
                 setState(() => _startFrac = v.clamp(0.0, _endFrac - 0.01));
                 _seeking = true;
@@ -193,7 +193,7 @@ class _BackgroundVideoTrimScreenState
             ),
           ),
           Positioned(
-            bottom: mq.padding.bottom + 124,
+            bottom: mq.viewPadding.bottom + 96,
             left: 0,
             right: 0,
             child: const Center(
@@ -222,9 +222,9 @@ class _TimelineBar extends StatelessWidget {
     required this.startLabel,
     required this.endLabel,
     required this.ready,
-    required this.bottomPadding,
     required this.onStartChanged,
     required this.onEndChanged,
+    this.horizontalPadding = 0,
   });
 
   final double startFrac;
@@ -233,7 +233,7 @@ class _TimelineBar extends StatelessWidget {
   final String startLabel;
   final String endLabel;
   final bool ready;
-  final double bottomPadding;
+  final double horizontalPadding;
   final ValueChanged<double> onStartChanged;
   final ValueChanged<double> onEndChanged;
 
@@ -245,13 +245,12 @@ class _TimelineBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final accent = Theme.of(context).colorScheme.primary;
-    final totalHeight = _totalHeight + bottomPadding;
 
     return Container(
-      height: totalHeight,
+      height: _totalHeight,
       color: Colors.black87,
       child: Padding(
-        padding: EdgeInsets.only(bottom: bottomPadding),
+        padding: EdgeInsets.symmetric(horizontal: horizontalPadding),
         child: Stack(
           children: [
             // Film-strip background
