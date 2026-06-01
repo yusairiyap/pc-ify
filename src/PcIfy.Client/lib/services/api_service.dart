@@ -1,6 +1,7 @@
 import 'package:dio/dio.dart';
 
 import '../core/constants/api_routes.dart';
+import '../core/models/control_status.dart';
 import '../core/models/folder_listing.dart';
 import '../core/models/login_response.dart';
 import '../core/models/server_info.dart';
@@ -123,5 +124,74 @@ class ApiService {
   }) async {
     final uri = await buildDownloadUriWithToken(serverPath);
     await _dio.download(uri, savePath, onReceiveProgress: onReceiveProgress);
+  }
+
+  Future<ControlStatus?> getControlStatus() async {
+    try {
+      final resp = await _dio.get('$_base${ApiRoutes.controlStatus}');
+      return ControlStatus.fromJson(resp.data as Map<String, dynamic>);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<bool> setVolume(int level) async {
+    try {
+      await _dio.post('$_base${ApiRoutes.controlVolume}', data: {'level': level});
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  Future<bool> setMute(bool muted) async {
+    try {
+      await _dio.post('$_base${ApiRoutes.controlMute}', data: {'muted': muted});
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  Future<bool> lockScreen() async {
+    try {
+      await _dio.post('$_base${ApiRoutes.controlLock}');
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  Future<bool> wakeScreen() async {
+    try {
+      await _dio.post('$_base${ApiRoutes.controlWake}');
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  Future<({List<NotificationItem> items, bool available})?> getNotifications() async {
+    try {
+      final resp = await _dio.get('$_base${ApiRoutes.controlNotifications}');
+      final data = resp.data as Map<String, dynamic>;
+      final available = (data['available'] as bool?) ?? false;
+      final rawItems = data['items'] as List<dynamic>? ?? [];
+      final items = rawItems
+          .map((e) => NotificationItem.fromJson(e as Map<String, dynamic>))
+          .toList();
+      return (items: items, available: available);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<bool> clearNotifications() async {
+    try {
+      await _dio.delete('$_base${ApiRoutes.controlNotifications}');
+      return true;
+    } catch (_) {
+      return false;
+    }
   }
 }

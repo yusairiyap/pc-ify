@@ -92,6 +92,7 @@ class BackupRestoreService {
     'always_external_player',
     'video_fit_mode',
     'video_auto_repeat',
+    'dashboard_layout_v1',
   ];
 
   String _hashPath(String path) =>
