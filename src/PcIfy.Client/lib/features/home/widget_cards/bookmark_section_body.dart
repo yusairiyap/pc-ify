@@ -71,7 +71,7 @@ class _BookmarkSectionBodyState extends ConsumerState<BookmarkSectionBody> {
 
     final crossAxisCount = _crossAxisCount(context);
     final rowCount = (items.length / crossAxisCount).ceil();
-    final itemHeight = 160.0 / 0.82;
+    const itemHeight = 160.0 / 0.82;
     final gridHeight = rowCount * (itemHeight + 8);
 
     return SizedBox(

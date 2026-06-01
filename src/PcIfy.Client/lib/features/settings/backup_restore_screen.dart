@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../features/home/home_screen.dart' show bookmarksProvider;
+import '../../providers/dashboard_providers.dart' show bookmarksProvider;
 import '../../providers/services_providers.dart';
 import '../../providers/theme_providers.dart';
 import '../../services/backup_restore_service.dart';

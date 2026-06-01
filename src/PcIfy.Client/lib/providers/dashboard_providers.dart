@@ -86,24 +86,24 @@ class ControlStatusNotifier extends AutoDisposeAsyncNotifier<ControlStatus> {
 
 // ── Notifications (on-demand) ─────────────────────────────────────────────────
 
-typedef _NotifResult = ({List<NotificationItem> items, bool available});
+typedef NotificationsResult = ({List<NotificationItem> items, bool available});
 
 final notificationsProvider =
-    AsyncNotifierProvider.autoDispose<NotificationsNotifier, _NotifResult>(
+    AsyncNotifierProvider.autoDispose<NotificationsNotifier, NotificationsResult>(
         NotificationsNotifier.new);
 
-class NotificationsNotifier extends AutoDisposeAsyncNotifier<_NotifResult> {
+class NotificationsNotifier extends AutoDisposeAsyncNotifier<NotificationsResult> {
   @override
-  Future<_NotifResult> build() async {
+  Future<NotificationsResult> build() async {
     return await ref.read(apiServiceProvider).getNotifications() ??
-        (items: [], available: false);
+        (items: <NotificationItem>[], available: false);
   }
 
   Future<void> refresh() async {
     state = const AsyncLoading();
     state = AsyncData(
       await ref.read(apiServiceProvider).getNotifications() ??
-          (items: [], available: false),
+          (items: <NotificationItem>[], available: false),
     );
   }
 

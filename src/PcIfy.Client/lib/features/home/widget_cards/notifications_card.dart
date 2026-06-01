@@ -137,7 +137,7 @@ class _NotifTile extends StatelessWidget {
                   Text(n.title,
                       style: TextStyle(
                         fontSize: 13, fontWeight: FontWeight.w500,
-                        color: hasBg ? Colors.white87 : cs.onSurface,
+                        color: hasBg ? Colors.white : cs.onSurface,
                       ),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis),

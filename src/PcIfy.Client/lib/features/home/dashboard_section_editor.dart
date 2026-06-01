@@ -86,9 +86,8 @@ class DashboardSectionEditor extends StatelessWidget {
                   shrinkWrap: true,
                   physics: const NeverScrollableScrollPhysics(),
                   itemCount: section.items.length,
-                  onReorder: (oldIndex, newIndex) {
+                  onReorderItem: (oldIndex, newIndex) {
                     final newItems = List<DashboardItem>.from(section.items);
-                    if (newIndex > oldIndex) newIndex--;
                     final item = newItems.removeAt(oldIndex);
                     newItems.insert(newIndex, item);
                     onReorderWidgets(newItems);

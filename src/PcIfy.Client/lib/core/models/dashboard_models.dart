@@ -1,5 +1,3 @@
-import 'dart:convert';
-
 enum WidgetType { battery, volume, cpu, ram, screenLock, notifications }
 
 class DashboardItem {

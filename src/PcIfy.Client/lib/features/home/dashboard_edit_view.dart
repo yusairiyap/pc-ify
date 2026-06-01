@@ -22,9 +22,8 @@ class DashboardEditView extends ConsumerWidget {
           child: ReorderableListView.builder(
             padding: const EdgeInsets.fromLTRB(0, 8, 0, 0),
             itemCount: sections.length,
-            onReorder: (oldIndex, newIndex) {
+            onReorderItem: (oldIndex, newIndex) {
               final newSections = List<DashboardSection>.from(sections);
-              if (newIndex > oldIndex) newIndex--;
               final item = newSections.removeAt(oldIndex);
               newSections.insert(newIndex, item);
               ref
