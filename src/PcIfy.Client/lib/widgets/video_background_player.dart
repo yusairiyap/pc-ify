@@ -39,40 +39,34 @@ class _VideoBackgroundPlayerState extends State<VideoBackgroundPlayer>
     _player.setVolume(0);
     _player.setPlaylistMode(PlaylistMode.loop);
 
+    final startMs = widget.prefs.videoLoopStartMs ?? 0;
+    final endMs = widget.prefs.videoLoopEndMs;
+
+    // Enforce trim boundaries on every position tick.
+    //
+    // • pos < startMs  — jump to startMs (covers initial play from 0 and any
+    //                    case where PlaylistMode.loop resets to 0 after endMs).
+    // • pos >= endMs   — seek back to startMs (custom loop end).
+    //
+    // The FadeTransition starts at opacity 0, so any brief rendering at
+    // position 0 before the first seek (<33 ms) is invisible to the user.
+    _player.stream.position.listen((pos) {
+      if (!mounted) return;
+      final ms = pos.inMilliseconds;
+      if (startMs > 0 && ms < startMs && ms >= 0) {
+        _player.seek(Duration(milliseconds: startMs));
+        return;
+      }
+      if (endMs != null && ms >= endMs) {
+        _player.seek(Duration(milliseconds: startMs));
+      }
+    });
+
     _player.stream.playing.listen((playing) {
       if (playing && mounted) _fadeController.forward();
     });
 
-    final startMs = widget.prefs.videoLoopStartMs;
-    final endMs = widget.prefs.videoLoopEndMs;
-
-    // Loop enforcement: seek back to trim start when trim end is reached
-    if (endMs != null) {
-      _player.stream.position.listen((pos) {
-        if (!mounted) return;
-        final start = startMs ?? 0;
-        if (pos.inMilliseconds >= endMs) {
-          _player.seek(Duration(milliseconds: start));
-        }
-      });
-    }
-
-    if (startMs != null && startMs > 0) {
-      // Open without auto-play so the video never renders position 0.
-      // Once the duration stream fires (media header parsed), seek to the
-      // trim start and only then begin playback.
-      var seeked = false;
-      _player.stream.duration.listen((d) {
-        if (seeked || d.inMilliseconds == 0 || !mounted) return;
-        seeked = true;
-        _player.seek(Duration(milliseconds: startMs)).then((_) {
-          if (mounted) _player.play();
-        });
-      });
-      _player.open(Media(widget.videoUri), play: false);
-    } else {
-      _player.open(Media(widget.videoUri));
-    }
+    _player.open(Media(widget.videoUri));
   }
 
   @override

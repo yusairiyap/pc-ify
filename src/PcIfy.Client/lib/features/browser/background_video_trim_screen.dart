@@ -55,9 +55,24 @@ class _BackgroundVideoTrimScreenState
 
     _player.setVolume(0);
 
+    // Called by whichever signal fires first to seek to the previous trim
+    // start and begin playback. Using a flag to prevent double-execution.
+    bool playStarted = false;
+    void startPlayback() {
+      if (playStarted || !mounted) return;
+      playStarted = true;
+      final seekMs = widget.initialStartMs ?? 0;
+      if (seekMs > 0 && _duration.inMilliseconds > 0) {
+        _player.seek(Duration(milliseconds: seekMs)).then((_) {
+          if (mounted) _player.play();
+        });
+      } else {
+        _player.play();
+      }
+    }
+
     _player.stream.duration.listen((d) {
       if (!mounted) return;
-      final wasReady = _ready;
       setState(() {
         _duration = d;
         if (d.inMilliseconds > 0) {
@@ -70,17 +85,17 @@ class _BackgroundVideoTrimScreenState
           _ready = true;
         }
       });
-      // On the first valid duration: seek to the previous trim start (if any),
-      // then begin playback. This prevents showing position 0 before the seek.
-      if (!wasReady && _ready) {
-        final seekMs = widget.initialStartMs ?? 0;
-        if (seekMs > 0) {
-          _player.seek(Duration(milliseconds: seekMs)).then((_) {
-            if (mounted) _player.play();
-          });
-        } else {
-          _player.play();
-        }
+      if (_ready) startPlayback();
+    });
+
+    // Backup signal: buffering completes (false→true→false) even when
+    // stream.duration fires late or not at all with play: false.
+    bool seenBuffering = false;
+    _player.stream.buffering.listen((b) {
+      if (b) {
+        seenBuffering = true;
+      } else if (seenBuffering) {
+        startPlayback();
       }
     });
 
@@ -90,8 +105,8 @@ class _BackgroundVideoTrimScreenState
       _enforceLoop(p);
     });
 
-    // Open without auto-play; the duration listener seeks to the trim start
-    // and calls play() once the media header is parsed.
+    // Open without auto-play so the video doesn't render at position 0.
+    // startPlayback() is triggered by stream.duration or stream.buffering.
     _player.open(Media(widget.videoUri), play: false);
     _player.setPlaylistMode(PlaylistMode.loop);
   }
