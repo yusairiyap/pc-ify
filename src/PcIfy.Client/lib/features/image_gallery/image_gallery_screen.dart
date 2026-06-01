@@ -83,6 +83,9 @@ class _ImageGalleryScreenState extends ConsumerState<ImageGalleryScreen>
   // Active video player — set by gallery video pages
   final _currentPlayerNotifier = ValueNotifier<Player?>(null);
 
+  // Shared mute state across all video pages
+  final _muteNotifier = ValueNotifier<bool>(false);
+
   // Signals which gallery index is currently visible (video pages listen to this)
   late final ValueNotifier<int> _activeIndexNotifier;
 
@@ -130,6 +133,7 @@ class _ImageGalleryScreenState extends ConsumerState<ImageGalleryScreen>
     _zoomedNotifier.dispose();
     _currentPlayerNotifier.dispose();
     _activeIndexNotifier.dispose();
+    _muteNotifier.dispose();
     _zoomAnimCtrl.dispose();
     for (final ctrl in _tfControllers.values) {
       ctrl.dispose();
@@ -485,6 +489,23 @@ class _ImageGalleryScreenState extends ConsumerState<ImageGalleryScreen>
                         onPressed: () => _toggleRepeat(ref, player),
                       );
                     }),
+                    // Mute toggle
+                    ValueListenableBuilder<bool>(
+                      valueListenable: _muteNotifier,
+                      builder: (_, isMuted, __) => IconButton(
+                        tooltip: isMuted ? 'Unmute' : 'Mute',
+                        icon: Icon(
+                          isMuted ? Icons.volume_off : Icons.volume_up,
+                          color: Colors.white,
+                          size: 20,
+                        ),
+                        onPressed: () {
+                          final next = !_muteNotifier.value;
+                          _muteNotifier.value = next;
+                          player.setVolume(next ? 0 : 100);
+                        },
+                      ),
+                    ),
                   ],
                 );
               },
@@ -625,6 +646,8 @@ class _ImageGalleryScreenState extends ConsumerState<ImageGalleryScreen>
                         index: i,
                         activeIndexNotifier: _activeIndexNotifier,
                         playerNotifier: _currentPlayerNotifier,
+                        zoomedNotifier: _zoomedNotifier,
+                        muteNotifier: _muteNotifier,
                       );
                     }
                     return GestureDetector(
@@ -735,11 +758,15 @@ class _GalleryVideoPage extends ConsumerStatefulWidget {
     required this.index,
     required this.activeIndexNotifier,
     required this.playerNotifier,
+    required this.zoomedNotifier,
+    required this.muteNotifier,
   });
   final String streamUri;
   final int index;
   final ValueNotifier<int> activeIndexNotifier;
   final ValueNotifier<Player?> playerNotifier;
+  final ValueNotifier<bool> zoomedNotifier;
+  final ValueNotifier<bool> muteNotifier;
 
   @override
   ConsumerState<_GalleryVideoPage> createState() => _GalleryVideoPageState();
@@ -749,6 +776,13 @@ class _GalleryVideoPageState extends ConsumerState<_GalleryVideoPage> {
   late final Player _player;
   late final VideoController _controller;
   bool _ready = false;
+
+  // Pinch-zoom / pan state (managed via Listener to bypass gesture arena)
+  double _scale = 1.0;
+  Offset _offset = Offset.zero;
+  final Map<int, Offset> _activePointers = {};
+  double? _pinchStartDist;
+  double? _pinchStartScale;
 
   // Double-tap seek feedback
   Offset? _doubleTapPos;
@@ -765,7 +799,12 @@ class _GalleryVideoPageState extends ConsumerState<_GalleryVideoPage> {
     _player = Player();
     _controller = VideoController(_player);
     widget.activeIndexNotifier.addListener(_onActiveChanged);
+    widget.muteNotifier.addListener(_onMuteChanged);
     _initStream();
+  }
+
+  void _onMuteChanged() {
+    _player.setVolume(widget.muteNotifier.value ? 0 : 100);
   }
 
   Future<void> _initStream() async {
@@ -775,6 +814,7 @@ class _GalleryVideoPageState extends ConsumerState<_GalleryVideoPage> {
     _ready = true;
     if (_isActive) {
       widget.playerNotifier.value = _player;
+      _player.setVolume(widget.muteNotifier.value ? 0 : 100);
       await _player.play();
     }
   }
@@ -783,16 +823,81 @@ class _GalleryVideoPageState extends ConsumerState<_GalleryVideoPage> {
     if (!_ready) return;
     if (_isActive) {
       widget.playerNotifier.value = _player;
+      _player.setVolume(widget.muteNotifier.value ? 0 : 100);
+      // Reset zoom/pan when page becomes active
+      _resetZoom();
       _player.play();
     } else {
       if (widget.playerNotifier.value == _player) {
         widget.playerNotifier.value = null;
       }
+      _resetZoom();
       _player.pause();
     }
   }
 
+  void _resetZoom() {
+    if (_scale != 1.0 || _offset != Offset.zero) {
+      setState(() {
+        _scale = 1.0;
+        _offset = Offset.zero;
+      });
+    }
+    _activePointers.clear();
+    _pinchStartDist = null;
+    _pinchStartScale = null;
+    if (_isActive) widget.zoomedNotifier.value = false;
+  }
+
+  void _handlePointerDown(PointerDownEvent e) {
+    _activePointers[e.pointer] = e.localPosition;
+    if (_activePointers.length == 2) {
+      final pts = _activePointers.values.toList();
+      _pinchStartDist = (pts[0] - pts[1]).distance;
+      _pinchStartScale = _scale;
+    }
+  }
+
+  void _handlePointerMove(PointerMoveEvent e) {
+    final prev = _activePointers[e.pointer];
+    _activePointers[e.pointer] = e.localPosition;
+
+    if (_activePointers.length >= 2 &&
+        _pinchStartDist != null &&
+        _pinchStartDist! > 0) {
+      final pts = _activePointers.values.toList();
+      final dist = (pts[0] - pts[1]).distance;
+      final newScale =
+          (_pinchStartScale! * dist / _pinchStartDist!).clamp(1.0, 5.0);
+      setState(() => _scale = newScale);
+      if (_isActive) widget.zoomedNotifier.value = newScale > 1.01;
+    } else if (_activePointers.length == 1 &&
+        _scale > 1.01 &&
+        prev != null) {
+      // Single-finger pan when zoomed in
+      final delta = e.localPosition - prev;
+      setState(() => _offset = _offset + delta);
+    }
+  }
+
+  void _handlePointerEnd(int pointer) {
+    _activePointers.remove(pointer);
+    if (_activePointers.length < 2) {
+      _pinchStartDist = null;
+      _pinchStartScale = null;
+    }
+    if (_scale <= 1.01) {
+      setState(() {
+        _scale = 1.0;
+        _offset = Offset.zero;
+      });
+      if (_isActive) widget.zoomedNotifier.value = false;
+    }
+  }
+
   void _doubleTapSeek(bool left) {
+    // Ignore if a multi-finger gesture is in progress
+    if (_activePointers.length > 1) return;
     final dur = _player.state.duration;
     if (dur == Duration.zero) return;
     const delta = Duration(seconds: 10);
@@ -815,6 +920,7 @@ class _GalleryVideoPageState extends ConsumerState<_GalleryVideoPage> {
   void dispose() {
     _seekFeedbackTimer?.cancel();
     widget.activeIndexNotifier.removeListener(_onActiveChanged);
+    widget.muteNotifier.removeListener(_onMuteChanged);
     if (widget.playerNotifier.value == _player) {
       widget.playerNotifier.value = null;
     }
@@ -828,8 +934,27 @@ class _GalleryVideoPageState extends ConsumerState<_GalleryVideoPage> {
     final fit = ref.watch(videoFitProvider);
     return Stack(
       children: [
-        Video(controller: _controller, controls: NoVideoControls, fit: fit),
-        // Double-tap left/right to seek
+        // Apply pinch-zoom and pan via Transform (avoids InteractiveViewer/gesture
+        // arena conflicts with the platform Texture used by media_kit on Android)
+        Transform.translate(
+          offset: _offset,
+          child: Transform.scale(
+            scale: _scale,
+            child: Video(
+                controller: _controller, controls: NoVideoControls, fit: fit),
+          ),
+        ),
+        // Raw pointer tracking for pinch-zoom and pan — Listener fires
+        // unconditionally without entering the gesture arena
+        Listener(
+          behavior: HitTestBehavior.translucent,
+          onPointerDown: _handlePointerDown,
+          onPointerMove: _handlePointerMove,
+          onPointerUp: (e) => _handlePointerEnd(e.pointer),
+          onPointerCancel: (e) => _handlePointerEnd(e.pointer),
+          child: const SizedBox.expand(),
+        ),
+        // Double-tap left/right to seek ±10 s
         GestureDetector(
           behavior: HitTestBehavior.translucent,
           onDoubleTapDown: (d) => _doubleTapPos = d.localPosition,

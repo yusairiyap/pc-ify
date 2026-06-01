@@ -329,6 +329,8 @@ class _SplitPaneState extends ConsumerState<_SplitPane>
   int? _zoomAnimIndex;
   Offset? _doubleTapPos;
 
+  final _muteNotifier = ValueNotifier<bool>(false);
+
   static const _hideDelay = Duration(seconds: 3);
 
   @override
@@ -353,6 +355,7 @@ class _SplitPaneState extends ConsumerState<_SplitPane>
     _pageCtrl.dispose();
     _carouselCtrl.dispose();
     _zoomedNotifier.dispose();
+    _muteNotifier.dispose();
     _currentPlayerNotifier.dispose();
     _activeIndexNotifier.dispose();
     _zoomAnimCtrl.dispose();
@@ -588,6 +591,20 @@ class _SplitPaneState extends ConsumerState<_SplitPane>
                         builder: (_, c) => _buildSeekBar(player, c.maxWidth - 60),
                       ),
                     ),
+                    ValueListenableBuilder<bool>(
+                      valueListenable: _muteNotifier,
+                      builder: (_, isMuted, __) => IconButton(
+                        icon: Icon(
+                          isMuted
+                              ? Icons.volume_off_rounded
+                              : Icons.volume_up_rounded,
+                          color: Colors.white,
+                          size: 20,
+                        ),
+                        onPressed: () =>
+                            _muteNotifier.value = !_muteNotifier.value,
+                      ),
+                    ),
                   ],
                 );
               },
@@ -670,6 +687,8 @@ class _SplitPaneState extends ConsumerState<_SplitPane>
                     index: i,
                     activeIndexNotifier: _activeIndexNotifier,
                     playerNotifier: _currentPlayerNotifier,
+                    zoomedNotifier: _zoomedNotifier,
+                    muteNotifier: _muteNotifier,
                   );
                 }
                 return GestureDetector(
@@ -731,11 +750,15 @@ class _PaneVideoPage extends StatefulWidget {
     required this.index,
     required this.activeIndexNotifier,
     required this.playerNotifier,
+    required this.zoomedNotifier,
+    required this.muteNotifier,
   });
   final String streamUri;
   final int index;
   final ValueNotifier<int> activeIndexNotifier;
   final ValueNotifier<Player?> playerNotifier;
+  final ValueNotifier<bool> zoomedNotifier;
+  final ValueNotifier<bool> muteNotifier;
 
   @override
   State<_PaneVideoPage> createState() => _PaneVideoPageState();
@@ -745,6 +768,13 @@ class _PaneVideoPageState extends State<_PaneVideoPage> {
   late final Player _player;
   late final VideoController _controller;
   bool _ready = false;
+
+  // Pinch zoom / pan state
+  double _scale = 1.0;
+  Offset _offset = Offset.zero;
+  final _activePointers = <int, Offset>{};
+  double? _pinchStartDist;
+  double? _pinchStartScale;
 
   Offset? _doubleTapPos;
   bool _seekLeft = false;
@@ -759,6 +789,7 @@ class _PaneVideoPageState extends State<_PaneVideoPage> {
     _player = Player();
     _controller = VideoController(_player);
     widget.activeIndexNotifier.addListener(_onActiveChanged);
+    widget.muteNotifier.addListener(_onMuteChanged);
     _initStream();
   }
 
@@ -767,6 +798,7 @@ class _PaneVideoPageState extends State<_PaneVideoPage> {
     _ready = true;
     if (_isActive) {
       widget.playerNotifier.value = _player;
+      _player.setVolume(widget.muteNotifier.value ? 0 : 100);
       await _player.play();
     }
   }
@@ -775,13 +807,63 @@ class _PaneVideoPageState extends State<_PaneVideoPage> {
     if (!_ready) return;
     if (_isActive) {
       widget.playerNotifier.value = _player;
+      _player.setVolume(widget.muteNotifier.value ? 0 : 100);
       _player.play();
     } else {
       if (widget.playerNotifier.value == _player) {
         widget.playerNotifier.value = null;
       }
       _player.pause();
+      _resetZoom();
     }
+  }
+
+  void _onMuteChanged() {
+    _player.setVolume(widget.muteNotifier.value ? 0 : 100);
+  }
+
+  void _resetZoom() {
+    if (!mounted) return;
+    setState(() {
+      _scale = 1.0;
+      _offset = Offset.zero;
+    });
+    widget.zoomedNotifier.value = false;
+  }
+
+  void _handlePointerDown(PointerDownEvent e) {
+    _activePointers[e.pointer] = e.localPosition;
+  }
+
+  void _handlePointerMove(PointerMoveEvent e) {
+    _activePointers[e.pointer] = e.localPosition;
+    if (_activePointers.length == 2) {
+      final pts = _activePointers.values.toList();
+      final dist = (pts[0] - pts[1]).distance;
+      if (_pinchStartDist == null) {
+        _pinchStartDist = dist;
+        _pinchStartScale = _scale;
+      } else {
+        final newScale =
+            (_pinchStartScale! * dist / _pinchStartDist!).clamp(1.0, 5.0);
+        setState(() {
+          _scale = newScale;
+          if (newScale <= 1.0) _offset = Offset.zero;
+        });
+        widget.zoomedNotifier.value = newScale > 1.01;
+      }
+    } else if (_activePointers.length == 1 && _scale > 1.01) {
+      setState(() => _offset += e.delta);
+    }
+  }
+
+  void _handlePointerEnd(int pointer) {
+    _activePointers.remove(pointer);
+    if (_activePointers.length < 2) {
+      _pinchStartDist = null;
+      _pinchStartScale = null;
+    }
+    if (_scale <= 1.01) _resetZoom();
   }
 
   void _doubleTapSeek(bool left) {
@@ -812,6 +894,7 @@ class _PaneVideoPageState extends State<_PaneVideoPage> {
   void dispose() {
     _seekFeedbackTimer?.cancel();
     widget.activeIndexNotifier.removeListener(_onActiveChanged);
+    widget.muteNotifier.removeListener(_onMuteChanged);
     if (widget.playerNotifier.value == _player) {
       widget.playerNotifier.value = null;
     }
@@ -825,7 +908,21 @@ class _PaneVideoPageState extends State<_PaneVideoPage> {
       final w = constraints.maxWidth;
       return Stack(
         children: [
-          Video(controller: _controller, controls: NoVideoControls),
+          Transform.translate(
+            offset: _offset,
+            child: Transform.scale(
+              scale: _scale,
+              child: Video(controller: _controller, controls: NoVideoControls),
+            ),
+          ),
+          Listener(
+            behavior: HitTestBehavior.translucent,
+            onPointerDown: _handlePointerDown,
+            onPointerMove: _handlePointerMove,
+            onPointerUp: (e) => _handlePointerEnd(e.pointer),
+            onPointerCancel: (e) => _handlePointerEnd(e.pointer),
+            child: const SizedBox.expand(),
+          ),
           GestureDetector(
             behavior: HitTestBehavior.translucent,
             onDoubleTapDown: (d) => _doubleTapPos = d.localPosition,

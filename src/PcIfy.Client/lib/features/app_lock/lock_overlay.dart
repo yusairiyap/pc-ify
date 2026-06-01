@@ -40,23 +40,33 @@ class _LockOverlayState extends ConsumerState<LockOverlay> {
   Widget build(BuildContext context) {
     return PopScope(
       canPop: false,
-      child: Material(
-        color: Colors.black,
-        child: SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 32),
-            child: switch (widget.lockType) {
-              AppLockType.biometric => _BiometricBody(onRetry: _tryBiometric),
-              AppLockType.pin => const _PinBody(),
-              AppLockType.password => const _PasswordBody(),
-              AppLockType.none => const SizedBox.shrink(),
-            },
+      child: Theme(
+        data: ThemeData(
+          colorScheme: ColorScheme.fromSeed(
+            seedColor: Theme.of(context).colorScheme.primary,
+            brightness: Brightness.dark,
+          ),
+          useMaterial3: true,
+        ),
+        child: Material(
+          color: Colors.black,
+          child: SafeArea(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 32),
+              child: switch (widget.lockType) {
+                AppLockType.biometric => _BiometricBody(onRetry: _tryBiometric),
+                AppLockType.pin => const _PinBody(),
+                AppLockType.password => const _PasswordBody(),
+                AppLockType.none => const SizedBox.shrink(),
+              },
+            ),
           ),
         ),
       ),
     );
   }
 }
+
 
 // ---------------------------------------------------------------------------
 // Biometric body

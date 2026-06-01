@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 import '../../core/models/file_entry.dart';
 import '../../core/models/folder_listing.dart';
 import '../../core/utils/grid_density_helper.dart';
+import '../../core/utils/sort_helper.dart';
 import '../../providers/services_providers.dart';
 
 class _PickerState {
@@ -53,18 +54,21 @@ class _PickerNotifier
       listing = l;
     }
 
-    final filtered = listing.entries
+    final userSort = sortFromString(
+      ref.read(sharedPrefsProvider).getString(sortPrefKey),
+    );
+    final allFiltered = listing.entries
         .where((e) =>
             e.type == FileType.folder ||
             e.type == FileType.image ||
             e.type == FileType.video)
-        .toList()
-      ..sort((a, b) {
-        if (a.type == b.type) return a.name.compareTo(b.name);
-        if (a.type == FileType.folder) return -1;
-        if (b.type == FileType.folder) return 1;
-        return 0;
-      });
+        .toList();
+    // Apply user sort within each type group, always keeping folders first.
+    final sorted = applySortToEntries(allFiltered, userSort);
+    final filtered = [
+      ...sorted.where((e) => e.type == FileType.folder),
+      ...sorted.where((e) => e.type != FileType.folder),
+    ];
 
     final thumbs = <String, String>{};
     for (final e in filtered) {

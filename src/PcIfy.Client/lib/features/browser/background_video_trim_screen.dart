@@ -46,6 +46,7 @@ class _BackgroundVideoTrimScreenState
 
   bool _ready = false;
   bool _seeking = false;
+  bool _videoVisible = false;
 
   @override
   void initState() {
@@ -71,14 +72,43 @@ class _BackgroundVideoTrimScreenState
       });
     });
 
+    // Hide the video until playback reaches initialStartMs, then reveal it.
+    // Keep retrying the seek on every position tick while still below the
+    // target — a single seek is unreliable on slow network streams.
+    final initMs = widget.initialStartMs ?? 0;
+    bool passedInitialStart = initMs == 0; // skip wait if no start offset
+
     _player.stream.position.listen((p) {
-      if (!mounted || _seeking) return;
+      if (!mounted) return;
+
+      if (!passedInitialStart) {
+        if (p.inMilliseconds < initMs) {
+          // Still before target — keep seeking without blocking the flag
+          if (!_seeking) {
+            _seeking = true;
+            _player
+                .seek(Duration(milliseconds: initMs))
+                .then((_) => _seeking = false);
+          }
+          return; // don't update UI or enforce loop yet
+        }
+        // Arrived at or past the target — reveal video
+        passedInitialStart = true;
+        setState(() => _videoVisible = true);
+      }
+
+      if (_seeking) return;
       setState(() => _position = p);
       _enforceLoop(p);
     });
 
     _player.open(Media(widget.videoUri));
     _player.setPlaylistMode(PlaylistMode.loop);
+
+    // Reveal immediately if no start offset (nothing to seek past)
+    if (initMs == 0) {
+      _videoVisible = true;
+    }
   }
 
   void _enforceLoop(Duration position) {
@@ -160,16 +190,19 @@ class _BackgroundVideoTrimScreenState
       body: Stack(
         fit: StackFit.expand,
         children: [
-          Video(
-            controller: _controller,
-            fit: BoxFit.cover,
-            controls: NoVideoControls,
-          ),
-          // Timeline overlay pinned to the bottom
+          // Only added to the tree once the player is confirmed at the correct
+          // start position — prevents the native texture flashing frame 0.
+          if (_videoVisible)
+            Video(
+              controller: _controller,
+              fit: BoxFit.cover,
+              controls: NoVideoControls,
+            ),
+          // Timeline overlay raised above system gesture zone
           Positioned(
             left: 0,
             right: 0,
-            bottom: 0,
+            bottom: mq.viewPadding.bottom + 24,
             child: _TimelineBar(
               startFrac: _startFrac,
               endFrac: _endFrac,
@@ -177,7 +210,7 @@ class _BackgroundVideoTrimScreenState
               startLabel: _formatMs(startMs),
               endLabel: _formatMs(endMs),
               ready: _ready,
-              bottomPadding: mq.padding.bottom,
+              horizontalPadding: 20,
               onStartChanged: (v) {
                 setState(() => _startFrac = v.clamp(0.0, _endFrac - 0.01));
                 _seeking = true;
@@ -193,7 +226,7 @@ class _BackgroundVideoTrimScreenState
             ),
           ),
           Positioned(
-            bottom: mq.padding.bottom + 124,
+            bottom: mq.viewPadding.bottom + 120,
             left: 0,
             right: 0,
             child: const Center(
@@ -222,9 +255,9 @@ class _TimelineBar extends StatelessWidget {
     required this.startLabel,
     required this.endLabel,
     required this.ready,
-    required this.bottomPadding,
     required this.onStartChanged,
     required this.onEndChanged,
+    this.horizontalPadding = 0,
   });
 
   final double startFrac;
@@ -233,7 +266,7 @@ class _TimelineBar extends StatelessWidget {
   final String startLabel;
   final String endLabel;
   final bool ready;
-  final double bottomPadding;
+  final double horizontalPadding;
   final ValueChanged<double> onStartChanged;
   final ValueChanged<double> onEndChanged;
 
@@ -245,13 +278,12 @@ class _TimelineBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final accent = Theme.of(context).colorScheme.primary;
-    final totalHeight = _totalHeight + bottomPadding;
 
     return Container(
-      height: totalHeight,
+      height: _totalHeight,
       color: Colors.black87,
       child: Padding(
-        padding: EdgeInsets.only(bottom: bottomPadding),
+        padding: EdgeInsets.symmetric(horizontal: horizontalPadding),
         child: Stack(
           children: [
             // Film-strip background

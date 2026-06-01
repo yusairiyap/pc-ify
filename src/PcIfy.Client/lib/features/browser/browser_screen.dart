@@ -5,6 +5,8 @@ import 'package:go_router/go_router.dart';
 import 'package:open_filex/open_filex.dart';
 
 import '../../core/constants/media_types.dart';
+import '../../core/utils/file_size_formatter.dart';
+import '../../core/utils/sort_helper.dart';
 import 'background_crop_screen.dart';
 import 'background_video_trim_screen.dart';
 import '../split_view/split_view_screen.dart' show SplitViewEntry;
@@ -34,6 +36,7 @@ class _BrowserState {
     required this.prefs,
     required this.isBookmarked,
     required this.density,
+    required this.sort,
     required this.canNavigateBack,
     this.backgroundImageUri,
     this.backgroundVideoUri,
@@ -45,6 +48,7 @@ class _BrowserState {
   final FolderPrefs prefs;
   final bool isBookmarked;
   final GridDensity density;
+  final SortOption sort;
   final bool canNavigateBack;
   final String? backgroundImageUri;
   final String? backgroundVideoUri;
@@ -59,6 +63,7 @@ class _BrowserState {
     FolderPrefs? prefs,
     bool? isBookmarked,
     GridDensity? density,
+    SortOption? sort,
     bool? canNavigateBack,
     String? backgroundImageUri,
     String? backgroundVideoUri,
@@ -72,6 +77,7 @@ class _BrowserState {
         prefs: prefs ?? this.prefs,
         isBookmarked: isBookmarked ?? this.isBookmarked,
         density: density ?? this.density,
+        sort: sort ?? this.sort,
         canNavigateBack: canNavigateBack ?? this.canNavigateBack,
         backgroundImageUri: clearBackgroundUri
             ? null
@@ -142,6 +148,7 @@ class _BrowserNotifier extends AutoDisposeAsyncNotifier<_BrowserState> {
     final prefs = ref.read(sharedPrefsProvider);
     final density = GridDensityHelper.fromString(
         prefs.getString('grid_density') ?? 'normal');
+    final sort = sortFromString(prefs.getString(sortPrefKey));
 
     FolderListing listing;
 
@@ -181,7 +188,8 @@ class _BrowserNotifier extends AutoDisposeAsyncNotifier<_BrowserState> {
     final folderPrefs = await folderPrefsService.getPrefs(listing.path);
     final isBookmarked =
         ref.read(bookmarkServiceProvider).isBookmarked(listing.path);
-    final items = await _buildItems(listing.entries);
+    final sortedEntries = applySortToEntries(listing.entries, sort);
+    final items = await _buildItems(sortedEntries);
 
     String? bgImageUri;
     if (folderPrefs.backgroundImagePath != null) {
@@ -200,6 +208,7 @@ class _BrowserNotifier extends AutoDisposeAsyncNotifier<_BrowserState> {
       prefs: folderPrefs,
       isBookmarked: isBookmarked,
       density: density,
+      sort: sort,
       canNavigateBack: _history.length > 1,
       backgroundImageUri: bgImageUri,
       backgroundVideoUri: bgVideoUri,
@@ -247,6 +256,26 @@ class _BrowserNotifier extends AutoDisposeAsyncNotifier<_BrowserState> {
     state = AsyncData(s.copyWith(density: next));
   }
 
+  void setSortOption(SortOption sort) {
+    final s = state.valueOrNull;
+    if (s == null) return;
+    ref.read(sharedPrefsProvider).setString(sortPrefKey, sort.name);
+    if (s.listing == null) {
+      state = AsyncData(s.copyWith(sort: sort));
+      return;
+    }
+    final sorted = applySortToEntries(
+      s.items.map((i) => i.entry).toList(),
+      sort,
+    );
+    // Rebuild _BrowserItems preserving cached URIs
+    final uriMap = {for (final i in s.items) i.entry.path: i};
+    final newItems = sorted
+        .map((e) => uriMap[e.path] ?? _BrowserItem(entry: e))
+        .toList();
+    state = AsyncData(s.copyWith(items: newItems, sort: sort));
+  }
+
   Future<void> setBackgroundImage(
     String serverPath, {
     double? cropOffsetDx,
@@ -273,6 +302,7 @@ class _BrowserNotifier extends AutoDisposeAsyncNotifier<_BrowserState> {
       prefs: updated,
       isBookmarked: snap.isBookmarked,
       density: snap.density,
+      sort: snap.sort,
       canNavigateBack: snap.canNavigateBack,
       backgroundImageUri: uri,
       backgroundVideoUri: null,
@@ -305,6 +335,7 @@ class _BrowserNotifier extends AutoDisposeAsyncNotifier<_BrowserState> {
       prefs: updated,
       isBookmarked: snap.isBookmarked,
       density: snap.density,
+      sort: snap.sort,
       canNavigateBack: snap.canNavigateBack,
       backgroundImageUri: null,
       backgroundVideoUri: uri,
@@ -473,6 +504,13 @@ class _BrowserLoaded extends ConsumerWidget {
                 child: Text(
                     selectedItems.length > 1 ? 'Download all' : 'Download'),
               ),
+              if (single && (singleVideo || singleImage))
+                const PopupMenuItem(
+                    value: 'set_bg',
+                    child: Text('Set as folder background')),
+              if (single)
+                const PopupMenuItem(
+                    value: 'properties', child: Text('Properties')),
             ],
           ),
         ],
@@ -516,38 +554,44 @@ class _BrowserLoaded extends ConsumerWidget {
       );
     }
 
-    final grid = LayoutBuilder(builder: (context, constraints) {
-      final cols =
-          GridDensityHelper.getColumnCount(constraints.maxWidth, state.density);
-      return GridView.builder(
-        padding: const EdgeInsets.all(8),
-        // ignore: deprecated_member_use
-        cacheExtent: 600,
-        gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-          crossAxisCount: cols,
-          crossAxisSpacing: 6,
-          mainAxisSpacing: 6,
-          childAspectRatio: 0.85,
-        ),
-        itemCount: state.items.length,
-        itemBuilder: (context, i) {
-          final item = state.items[i];
-          final isSelectable = item.entry.type == FileType.image ||
-              item.entry.type == FileType.video;
-          final isSelected = state.selectedPaths.contains(item.entry.path);
-          return RepaintBoundary(
-            child: _FileGridItem(
-              item: item,
-              hasBackground: hasBg,
-              isSelecting: state.isSelecting && isSelectable,
-              isSelected: isSelected,
-              onTap: () => _onTap(context, ref, item),
-              onLongPress: () => _onLongPress(context, ref, item, listing),
+    final grid = AnimatedSwitcher(
+      duration: const Duration(milliseconds: 250),
+      child: LayoutBuilder(
+        key: ValueKey('${state.density.name}_${state.sort.name}'),
+        builder: (context, constraints) {
+          final cols = GridDensityHelper.getColumnCount(
+              constraints.maxWidth, state.density);
+          return GridView.builder(
+            padding: const EdgeInsets.all(8),
+            // ignore: deprecated_member_use
+            cacheExtent: 600,
+            gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: cols,
+              crossAxisSpacing: 6,
+              mainAxisSpacing: 6,
+              childAspectRatio: 0.85,
             ),
+            itemCount: state.items.length,
+            itemBuilder: (context, i) {
+              final item = state.items[i];
+              final isSelectable = item.entry.type == FileType.image ||
+                  item.entry.type == FileType.video;
+              final isSelected = state.selectedPaths.contains(item.entry.path);
+              return RepaintBoundary(
+                child: _FileGridItem(
+                  item: item,
+                  hasBackground: hasBg,
+                  isSelecting: state.isSelecting && isSelectable,
+                  isSelected: isSelected,
+                  onTap: () => _onTap(context, ref, item),
+                  onLongPress: () => _onLongPress(context, ref, item, listing),
+                ),
+              );
+            },
           );
         },
-      );
-    });
+      ),
+    );
 
     if (hasBg) {
       return Scaffold(
@@ -578,7 +622,9 @@ class _BrowserLoaded extends ConsumerWidget {
                 _DensityToolbar(
                     count: state.items.length,
                     density: state.density,
+                    sort: state.sort,
                     onCycle: notifier.cycleDensity,
+                    onSort: notifier.setSortOption,
                     hasBackground: true),
                 Expanded(child: grid),
               ],
@@ -595,7 +641,9 @@ class _BrowserLoaded extends ConsumerWidget {
           _DensityToolbar(
               count: state.items.length,
               density: state.density,
-              onCycle: notifier.cycleDensity),
+              sort: state.sort,
+              onCycle: notifier.cycleDensity,
+              onSort: notifier.setSortOption),
           Expanded(child: grid),
         ],
       ),
@@ -818,6 +866,20 @@ class _BrowserLoaded extends ConsumerWidget {
                     : 'Download failed: ${sel.entry.name}')));
           }
         }
+      case 'set_bg':
+        ref.read(_browserNotifierProvider.notifier).clearSelection();
+        if (context.mounted) {
+          await _setItemAsBackground(context, ref, item, listing);
+        }
+      case 'properties':
+        ref.read(_browserNotifierProvider.notifier).clearSelection();
+        if (context.mounted) {
+          showDialog(
+            context: context,
+            builder: (_) =>
+                _PropertiesDialog(entry: item.entry, ref: ref),
+          );
+        }
     }
   }
 
@@ -917,28 +979,35 @@ class _BrowserLoaded extends ConsumerWidget {
   Future<void> _onLongPress(BuildContext context, WidgetRef ref,
       _BrowserItem item, FolderListing listing) async {
     final e = item.entry;
-    // Long-press on image/video → enter multi-select mode
-    if (e.type == FileType.image || e.type == FileType.video) {
-      final s = ref.read(_browserNotifierProvider).valueOrNull;
-      if (s != null && !s.isSelecting) {
-        ref.read(_browserNotifierProvider.notifier).enterSelection(e.path);
-        return;
-      }
-    }
     final actions = <String, String>{};
+
     if (e.type == FileType.folder) {
       actions['open'] = 'Open';
       actions['bookmark'] = 'Bookmark folder';
+      actions['properties'] = 'Properties';
     } else if (e.type == FileType.video) {
+      final s = ref.read(_browserNotifierProvider).valueOrNull;
+      if (s != null && !s.isSelecting) {
+        actions['select'] = 'Select';
+        actions['set_bg'] = 'Set as folder background';
+      }
       actions['play'] = 'Play';
       actions['external'] = 'Open in external player';
       actions['download'] = 'Download';
+      actions['properties'] = 'Properties';
     } else if (e.type == FileType.image) {
+      final s = ref.read(_browserNotifierProvider).valueOrNull;
+      if (s != null && !s.isSelecting) {
+        actions['select'] = 'Select';
+        actions['set_bg'] = 'Set as folder background';
+      }
       actions['view'] = 'View';
       actions['download'] = 'Download';
+      actions['properties'] = 'Properties';
     } else {
       actions['open_file'] = 'Open';
       actions['download'] = 'Download';
+      actions['properties'] = 'Properties';
     }
 
     final action = await showModalBottomSheet<String>(
@@ -956,6 +1025,7 @@ class _BrowserLoaded extends ConsumerWidget {
             ),
             const Divider(height: 1),
             ...actions.entries.map((kv) => ListTile(
+                  leading: Icon(_actionIcon(kv.key)),
                   title: Text(kv.value),
                   onTap: () => Navigator.pop(context, kv.key),
                 )),
@@ -967,6 +1037,10 @@ class _BrowserLoaded extends ConsumerWidget {
     if (!context.mounted || action == null) return;
 
     switch (action) {
+      case 'select':
+        ref.read(_browserNotifierProvider.notifier).enterSelection(e.path);
+      case 'set_bg':
+        await _setItemAsBackground(context, ref, item, listing);
       case 'open':
         ref.read(_browserNotifierProvider.notifier).navigateTo(e.path);
       case 'bookmark':
@@ -1007,8 +1081,193 @@ class _BrowserLoaded extends ConsumerWidget {
             '/gallery?path=${Uri.encodeComponent(listing.path)}&index=${idx < 0 ? 0 : idx}');
       case 'open_file':
         await _downloadAndOpen(context, ref, e);
+      case 'properties':
+        if (context.mounted) {
+          showDialog(
+            context: context,
+            builder: (_) => _PropertiesDialog(entry: e, ref: ref),
+          );
+        }
     }
   }
+
+  IconData _actionIcon(String key) => switch (key) {
+    'select' => Icons.check_circle_outline,
+    'set_bg' => Icons.wallpaper,
+    'open' => Icons.folder_open,
+    'bookmark' => Icons.bookmark_add_outlined,
+    'play' => Icons.play_arrow_rounded,
+    'external' => Icons.open_in_new,
+    'download' => Icons.download_outlined,
+    'view' => Icons.image_outlined,
+    'open_file' => Icons.open_in_new,
+    'properties' => Icons.info_outline,
+    _ => Icons.more_horiz,
+  };
+
+  Future<void> _setItemAsBackground(BuildContext context, WidgetRef ref,
+      _BrowserItem item, FolderListing listing) async {
+    final e = item.entry;
+    final notifier = ref.read(_browserNotifierProvider.notifier);
+    if (_isVideoPath(e.path)) {
+      final videoUri = item.streamUri ??
+          await ref.read(apiServiceProvider).buildStreamUriWithToken(e.path);
+      if (!context.mounted) return;
+      final result = await context.push<BackgroundVideoTrimResult>(
+        '/background-video-trim',
+        extra: {'videoUri': videoUri, 'videoPath': e.path},
+      );
+      if (result != null) {
+        await notifier.setBackgroundVideo(
+          result.videoPath,
+          loopStartMs: result.loopStartMs,
+          loopEndMs: result.loopEndMs,
+        );
+      }
+    } else {
+      final imageUri = item.streamUri ??
+          await ref.read(apiServiceProvider).buildStreamUriWithToken(e.path);
+      if (!context.mounted) return;
+      final result = await context.push<BackgroundCropResult>(
+        '/background-crop?imagePath=${Uri.encodeComponent(e.path)}',
+        extra: imageUri,
+      );
+      if (result != null) {
+        await notifier.setBackgroundImage(
+          result.imagePath,
+          cropOffsetDx: result.cropOffsetDx,
+          cropOffsetDy: result.cropOffsetDy,
+          cropScale: result.cropScale,
+        );
+      }
+    }
+  }
+}
+
+// --- Properties dialog ---
+
+class _PropertiesDialog extends StatefulWidget {
+  const _PropertiesDialog({required this.entry, required this.ref});
+  final FileEntry entry;
+  final WidgetRef ref;
+
+  @override
+  State<_PropertiesDialog> createState() => _PropertiesDialogState();
+}
+
+class _PropertiesDialogState extends State<_PropertiesDialog> {
+  int? _folderItemCount;
+  bool _loadingCount = false;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.entry.type == FileType.folder) {
+      _loadFolderCount();
+    }
+  }
+
+  Future<void> _loadFolderCount() async {
+    setState(() => _loadingCount = true);
+    try {
+      final listing = await widget.ref
+          .read(apiServiceProvider)
+          .getFolderListing(widget.entry.path);
+      if (mounted) {
+        setState(() {
+          _folderItemCount = listing?.entries.length;
+          _loadingCount = false;
+        });
+      }
+    } catch (_) {
+      if (mounted) setState(() => _loadingCount = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final e = widget.entry;
+    final tt = Theme.of(context).textTheme;
+    final cs = Theme.of(context).colorScheme;
+    final modified = '${e.lastModified.year}-'
+        '${e.lastModified.month.toString().padLeft(2, '0')}-'
+        '${e.lastModified.day.toString().padLeft(2, '0')}  '
+        '${e.lastModified.hour.toString().padLeft(2, '0')}:'
+        '${e.lastModified.minute.toString().padLeft(2, '0')}';
+
+    final rows = <_PropRow>[
+      _PropRow('Name', e.name),
+      _PropRow('Type', e.type.name[0].toUpperCase() + e.type.name.substring(1)),
+      if (e.type != FileType.folder && e.sizeBytes > 0)
+        _PropRow('Size', FileSizeFormatter.format(e.sizeBytes)),
+      if (e.type == FileType.folder)
+        _PropRow(
+          'Items',
+          _loadingCount
+              ? 'Loading…'
+              : _folderItemCount != null
+                  ? '$_folderItemCount items'
+                  : '—',
+        ),
+      _PropRow('Modified', modified),
+    ];
+
+    return AlertDialog(
+      title: Row(children: [
+        Icon(_iconForType(e.type), color: cs.primary, size: 22),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Text('Properties',
+              style: tt.titleMedium, overflow: TextOverflow.ellipsis),
+        ),
+      ]),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: rows.map((r) => Padding(
+          padding: const EdgeInsets.symmetric(vertical: 4),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              SizedBox(
+                width: 72,
+                child: Text(r.label,
+                    style: tt.bodySmall
+                        ?.copyWith(color: cs.onSurfaceVariant)),
+              ),
+              Expanded(
+                child: Text(r.value,
+                    style: tt.bodySmall
+                        ?.copyWith(fontWeight: FontWeight.w600)),
+              ),
+            ],
+          ),
+        )).toList(),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Close'),
+        ),
+      ],
+    );
+  }
+
+  IconData _iconForType(FileType type) => switch (type) {
+    FileType.folder => Icons.folder,
+    FileType.video => Icons.videocam,
+    FileType.image => Icons.image,
+    FileType.audio => Icons.audio_file,
+    FileType.document => Icons.description,
+    FileType.archive => Icons.folder_zip,
+    _ => Icons.insert_drive_file,
+  };
+}
+
+class _PropRow {
+  const _PropRow(this.label, this.value);
+  final String label;
+  final String value;
 }
 
 // --- Sub-widgets ---
@@ -1017,16 +1276,49 @@ class _DensityToolbar extends StatelessWidget {
   const _DensityToolbar({
     required this.count,
     required this.density,
+    required this.sort,
     required this.onCycle,
+    required this.onSort,
     this.hasBackground = false,
   });
   final int count;
   final GridDensity density;
+  final SortOption sort;
   final VoidCallback onCycle;
+  final ValueChanged<SortOption> onSort;
   final bool hasBackground;
+
+  Future<void> _showSortSheet(BuildContext context) async {
+    final chosen = await showModalBottomSheet<SortOption>(
+      context: context,
+      builder: (_) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+              child: Text('Sort by',
+                  style: Theme.of(context).textTheme.titleSmall),
+            ),
+            const Divider(height: 1),
+            ...SortOption.values.map((opt) => ListTile(
+                  title: Text(sortLabel(opt)),
+                  trailing: sort == opt
+                      ? Icon(Icons.check,
+                          color: Theme.of(context).colorScheme.primary)
+                      : null,
+                  onTap: () => Navigator.pop(context, opt),
+                )),
+          ],
+        ),
+      ),
+    );
+    if (chosen != null) onSort(chosen);
+  }
 
   @override
   Widget build(BuildContext context) {
+    final fgColor = hasBackground ? Colors.white : null;
     final style = hasBackground
         ? Theme.of(context).textTheme.bodySmall?.copyWith(color: Colors.white70)
         : Theme.of(context).textTheme.bodySmall;
@@ -1038,9 +1330,17 @@ class _DensityToolbar extends StatelessWidget {
           Text('$count items', style: style),
           const Spacer(),
           TextButton.icon(
+            onPressed: () => _showSortSheet(context),
+            style: hasBackground
+                ? TextButton.styleFrom(foregroundColor: fgColor)
+                : null,
+            icon: const Icon(Icons.sort, size: 18),
+            label: Text(sortLabel(sort)),
+          ),
+          TextButton.icon(
             onPressed: onCycle,
             style: hasBackground
-                ? TextButton.styleFrom(foregroundColor: Colors.white)
+                ? TextButton.styleFrom(foregroundColor: fgColor)
                 : null,
             icon: const Icon(Icons.grid_view, size: 18),
             label: Text(GridDensityHelper.label(density)),
