@@ -67,15 +67,23 @@ class FileService {
 
   FileService(this.settings);
 
-  List<RootEntry> getRoots() => settings.sourceDirectories
-      .map((d) => RootEntry(path: d, displayName: p.basename(d)))
-      .toList();
+  List<String> _effectiveRoots(List<String>? allowedRoots) =>
+      allowedRoots ?? settings.sourceDirectories;
 
-  bool isPathAllowed(String path) =>
-      PathSanitizer.isPathAllowed(path, settings.sourceDirectories);
+  List<RootEntry> getRoots({List<String>? allowedRoots}) =>
+      _effectiveRoots(allowedRoots)
+          .map((d) => RootEntry(path: d, displayName: p.basename(d)))
+          .toList();
 
-  Future<FolderListing?> getFolderListing(String dirPath) async {
-    final sanitized = PathSanitizer.sanitize(dirPath, settings.sourceDirectories);
+  bool isPathAllowed(String path, {List<String>? allowedRoots}) =>
+      PathSanitizer.isPathAllowed(path, _effectiveRoots(allowedRoots));
+
+  Future<FolderListing?> getFolderListing(
+    String dirPath, {
+    List<String>? allowedRoots,
+  }) async {
+    final roots = _effectiveRoots(allowedRoots);
+    final sanitized = PathSanitizer.sanitize(dirPath, roots);
     if (sanitized == null) return null;
 
     final dir = Directory(sanitized);
@@ -116,8 +124,7 @@ class FileService {
 
     String? parentPath;
     final parentDir = dir.parent;
-    if (PathSanitizer.isPathAllowed(
-        parentDir.path, settings.sourceDirectories)) {
+    if (PathSanitizer.isPathAllowed(parentDir.path, roots)) {
       parentPath = parentDir.path;
     }
 
@@ -135,8 +142,10 @@ class FileService {
     String filePath, {
     int? start,
     int? end,
+    List<String>? allowedRoots,
   }) {
-    final sanitized = PathSanitizer.sanitize(filePath, settings.sourceDirectories);
+    final sanitized =
+        PathSanitizer.sanitize(filePath, _effectiveRoots(allowedRoots));
     if (sanitized == null) return null;
 
     final file = File(sanitized);
@@ -145,9 +154,9 @@ class FileService {
     return file.openRead(start, end != null ? end + 1 : null);
   }
 
-  Future<int?> getFileSize(String filePath) async {
+  Future<int?> getFileSize(String filePath, {List<String>? allowedRoots}) async {
     final sanitized =
-        PathSanitizer.sanitize(filePath, settings.sourceDirectories);
+        PathSanitizer.sanitize(filePath, _effectiveRoots(allowedRoots));
     if (sanitized == null) return null;
     final file = File(sanitized);
     if (!await file.exists()) return null;

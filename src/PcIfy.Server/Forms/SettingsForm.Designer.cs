@@ -21,8 +21,13 @@ partial class SettingsForm
     private System.Windows.Forms.ListBox lstUsers;
     private System.Windows.Forms.Button btnAddUser;
     private System.Windows.Forms.Button btnRemoveUser;
+    private System.Windows.Forms.GroupBox grpUserDirs;
+    private System.Windows.Forms.CheckedListBox clbUserDirs;
+    private System.Windows.Forms.Label lblUserDirsHint;
     private System.Windows.Forms.Button btnSave;
     private System.Windows.Forms.Button btnCancel;
+    private System.Windows.Forms.Button btnExport;
+    private System.Windows.Forms.Button btnImport;
 
     protected override void Dispose(bool disposing)
     {
@@ -51,12 +56,18 @@ partial class SettingsForm
         this.lstUsers = new System.Windows.Forms.ListBox();
         this.btnAddUser = new System.Windows.Forms.Button();
         this.btnRemoveUser = new System.Windows.Forms.Button();
+        this.grpUserDirs = new System.Windows.Forms.GroupBox();
+        this.clbUserDirs = new System.Windows.Forms.CheckedListBox();
+        this.lblUserDirsHint = new System.Windows.Forms.Label();
         this.btnSave = new System.Windows.Forms.Button();
         this.btnCancel = new System.Windows.Forms.Button();
+        this.btnExport = new System.Windows.Forms.Button();
+        this.btnImport = new System.Windows.Forms.Button();
         this.tabControl.SuspendLayout();
         this.tabGeneral.SuspendLayout();
         this.tabDirectories.SuspendLayout();
         this.tabUsers.SuspendLayout();
+        this.grpUserDirs.SuspendLayout();
         ((System.ComponentModel.ISupportInitialize)(this.nudPort)).BeginInit();
         this.SuspendLayout();
         //
@@ -195,6 +206,7 @@ partial class SettingsForm
         this.lstUsers.Name = "lstUsers";
         this.lstUsers.Size = new System.Drawing.Size(200, 244);
         this.lstUsers.TabIndex = 0;
+        this.lstUsers.SelectedIndexChanged += new System.EventHandler(this.lstUsers_SelectedIndexChanged);
         //
         // btnAddUser
         //
@@ -218,11 +230,42 @@ partial class SettingsForm
         this.btnRemoveUser.UseVisualStyleBackColor = true;
         this.btnRemoveUser.Click += new System.EventHandler(this.btnRemoveUser_Click);
         //
+        // lblUserDirsHint
+        //
+        this.lblUserDirsHint.AutoSize = true;
+        this.lblUserDirsHint.ForeColor = System.Drawing.SystemColors.GrayText;
+        this.lblUserDirsHint.Location = new System.Drawing.Point(6, 162);
+        this.lblUserDirsHint.Name = "lblUserDirsHint";
+        this.lblUserDirsHint.Size = new System.Drawing.Size(135, 15);
+        this.lblUserDirsHint.TabIndex = 1;
+        this.lblUserDirsHint.Text = "Empty = unrestricted access";
+        //
+        // clbUserDirs
+        //
+        this.clbUserDirs.CheckOnClick = true;
+        this.clbUserDirs.FormattingEnabled = true;
+        this.clbUserDirs.Location = new System.Drawing.Point(6, 22);
+        this.clbUserDirs.Name = "clbUserDirs";
+        this.clbUserDirs.Size = new System.Drawing.Size(203, 136);
+        this.clbUserDirs.TabIndex = 0;
+        //
+        // grpUserDirs
+        //
+        this.grpUserDirs.Controls.Add(this.clbUserDirs);
+        this.grpUserDirs.Controls.Add(this.lblUserDirsHint);
+        this.grpUserDirs.Location = new System.Drawing.Point(215, 78);
+        this.grpUserDirs.Name = "grpUserDirs";
+        this.grpUserDirs.Size = new System.Drawing.Size(215, 185);
+        this.grpUserDirs.TabIndex = 3;
+        this.grpUserDirs.TabStop = false;
+        this.grpUserDirs.Text = "Directory Access";
+        //
         // tabUsers
         //
         this.tabUsers.Controls.Add(this.lstUsers);
         this.tabUsers.Controls.Add(this.btnAddUser);
         this.tabUsers.Controls.Add(this.btnRemoveUser);
+        this.tabUsers.Controls.Add(this.grpUserDirs);
         this.tabUsers.Location = new System.Drawing.Point(4, 24);
         this.tabUsers.Name = "tabUsers";
         this.tabUsers.Padding = new System.Windows.Forms.Padding(3);
@@ -243,6 +286,28 @@ partial class SettingsForm
         this.tabControl.SelectedIndex = 0;
         this.tabControl.Size = new System.Drawing.Size(448, 320);
         this.tabControl.TabIndex = 0;
+        //
+        // btnExport
+        //
+        this.btnExport.FlatStyle = System.Windows.Forms.FlatStyle.System;
+        this.btnExport.Location = new System.Drawing.Point(8, 340);
+        this.btnExport.Name = "btnExport";
+        this.btnExport.Size = new System.Drawing.Size(100, 30);
+        this.btnExport.TabIndex = 3;
+        this.btnExport.Text = "Export…";
+        this.btnExport.UseVisualStyleBackColor = true;
+        this.btnExport.Click += new System.EventHandler(this.btnExport_Click);
+        //
+        // btnImport
+        //
+        this.btnImport.FlatStyle = System.Windows.Forms.FlatStyle.System;
+        this.btnImport.Location = new System.Drawing.Point(114, 340);
+        this.btnImport.Name = "btnImport";
+        this.btnImport.Size = new System.Drawing.Size(100, 30);
+        this.btnImport.TabIndex = 4;
+        this.btnImport.Text = "Import…";
+        this.btnImport.UseVisualStyleBackColor = true;
+        this.btnImport.Click += new System.EventHandler(this.btnImport_Click);
         //
         // btnSave
         //
@@ -276,6 +341,8 @@ partial class SettingsForm
         this.Controls.Add(this.tabControl);
         this.Controls.Add(this.btnSave);
         this.Controls.Add(this.btnCancel);
+        this.Controls.Add(this.btnExport);
+        this.Controls.Add(this.btnImport);
         this.FormBorderStyle = System.Windows.Forms.FormBorderStyle.FixedDialog;
         this.MaximizeBox = false;
         this.MinimizeBox = false;
@@ -287,6 +354,8 @@ partial class SettingsForm
         this.tabGeneral.PerformLayout();
         this.tabDirectories.ResumeLayout(false);
         this.tabUsers.ResumeLayout(false);
+        this.grpUserDirs.ResumeLayout(false);
+        this.grpUserDirs.PerformLayout();
         ((System.ComponentModel.ISupportInitialize)(this.nudPort)).EndInit();
         this.ResumeLayout(false);
     }

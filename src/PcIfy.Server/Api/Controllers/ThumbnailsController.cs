@@ -25,7 +25,8 @@ public class ThumbnailsController : ControllerBase
         if (!System.IO.Path.IsPathRooted(fullPath))
             fullPath = System.IO.Path.DirectorySeparatorChar + fullPath;
 
-        if (!_files.IsPathAllowed(fullPath)) return StatusCode(403, "Access denied.");
+        var username = User.Identity?.Name ?? string.Empty;
+        if (!_files.IsPathAllowed(fullPath, username)) return StatusCode(403, "Access denied.");
         if (!System.IO.File.Exists(fullPath)) return NotFound();
 
         var thumbSize = size.ToLowerInvariant() switch
