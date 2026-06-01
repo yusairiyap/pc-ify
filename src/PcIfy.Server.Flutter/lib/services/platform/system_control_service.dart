@@ -1,5 +1,3 @@
-import 'dart:io';
-
 // ── DTOs ─────────────────────────────────────────────────────────────────────
 
 class BatteryStatus {
@@ -116,7 +114,7 @@ class _NoOpSystemControlService implements SystemControlService {
   @override Future<void> setMute(bool muted) async {}
   @override Future<void> lockScreen() async {}
   @override Future<void> wakeScreen() async {}
-  @override Future<NotificationsResult> getNotifications() async => (items: [], available: false);
+  @override Future<NotificationsResult> getNotifications() async => (items: <NotificationItem>[], available: false);
   @override Future<void> clearNotifications() async {}
 }
 

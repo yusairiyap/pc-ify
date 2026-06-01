@@ -66,7 +66,7 @@ class SystemControlDesktopImpl implements SystemControlService {
 
   @override
   Future<NotificationsResult> getNotifications() async =>
-      (items: [], available: false);
+      (items: <NotificationItem>[], available: false);
 
   @override
   Future<void> clearNotifications() async {}

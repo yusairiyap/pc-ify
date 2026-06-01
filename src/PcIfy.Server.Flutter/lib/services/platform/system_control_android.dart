@@ -68,9 +68,9 @@ class SystemControlAndroidImpl implements SystemControlService {
   Future<NotificationsResult> getNotifications() async {
     try {
       final result = await _channel.invokeMethod<Map>('getNotifications');
-      if (result == null) return (items: [], available: false);
+      if (result == null) return (items: <NotificationItem>[], available: false);
       final available = (result['available'] as bool?) ?? false;
-      if (!available) return (items: [], available: false);
+      if (!available) return (items: <NotificationItem>[], available: false);
       final rawItems = result['items'] as List? ?? [];
       final items = rawItems.map((e) {
         final m = e as Map;
@@ -84,7 +84,7 @@ class SystemControlAndroidImpl implements SystemControlService {
       }).toList();
       return (items: items, available: true);
     } catch (_) {
-      return (items: [], available: false);
+      return (items: <NotificationItem>[], available: false);
     }
   }
 
