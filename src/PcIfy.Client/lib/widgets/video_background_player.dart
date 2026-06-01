@@ -38,7 +38,6 @@ class _VideoBackgroundPlayerState extends State<VideoBackgroundPlayer>
     _controller = VideoController(_player);
     _player.setVolume(0);
     _player.setPlaylistMode(PlaylistMode.loop);
-    _player.open(Media(widget.videoUri));
 
     _player.stream.playing.listen((playing) {
       if (playing && mounted) _fadeController.forward();
@@ -46,24 +45,33 @@ class _VideoBackgroundPlayerState extends State<VideoBackgroundPlayer>
 
     final startMs = widget.prefs.videoLoopStartMs;
     final endMs = widget.prefs.videoLoopEndMs;
-    if (startMs != null || endMs != null) {
-      // Seek to the trim start once the duration is known
-      if (startMs != null && startMs > 0) {
-        var didSeekToStart = false;
-        _player.stream.duration.listen((d) {
-          if (!mounted || didSeekToStart || d.inMilliseconds == 0) return;
-          didSeekToStart = true;
-          _player.seek(Duration(milliseconds: startMs));
-        });
-      }
+
+    // Loop enforcement: seek back to trim start when trim end is reached
+    if (endMs != null) {
       _player.stream.position.listen((pos) {
         if (!mounted) return;
-        final end = endMs;
         final start = startMs ?? 0;
-        if (end != null && pos.inMilliseconds >= end) {
+        if (pos.inMilliseconds >= endMs) {
           _player.seek(Duration(milliseconds: start));
         }
       });
+    }
+
+    if (startMs != null && startMs > 0) {
+      // Open without auto-play so the video never renders position 0.
+      // Once the duration stream fires (media header parsed), seek to the
+      // trim start and only then begin playback.
+      var seeked = false;
+      _player.stream.duration.listen((d) {
+        if (seeked || d.inMilliseconds == 0 || !mounted) return;
+        seeked = true;
+        _player.seek(Duration(milliseconds: startMs)).then((_) {
+          if (mounted) _player.play();
+        });
+      });
+      _player.open(Media(widget.videoUri), play: false);
+    } else {
+      _player.open(Media(widget.videoUri));
     }
   }
 

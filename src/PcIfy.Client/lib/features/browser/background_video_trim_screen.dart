@@ -57,6 +57,7 @@ class _BackgroundVideoTrimScreenState
 
     _player.stream.duration.listen((d) {
       if (!mounted) return;
+      final wasReady = _ready;
       setState(() {
         _duration = d;
         if (d.inMilliseconds > 0) {
@@ -69,6 +70,18 @@ class _BackgroundVideoTrimScreenState
           _ready = true;
         }
       });
+      // On the first valid duration: seek to the previous trim start (if any),
+      // then begin playback. This prevents showing position 0 before the seek.
+      if (!wasReady && _ready) {
+        final seekMs = widget.initialStartMs ?? 0;
+        if (seekMs > 0) {
+          _player.seek(Duration(milliseconds: seekMs)).then((_) {
+            if (mounted) _player.play();
+          });
+        } else {
+          _player.play();
+        }
+      }
     });
 
     _player.stream.position.listen((p) {
@@ -77,7 +90,9 @@ class _BackgroundVideoTrimScreenState
       _enforceLoop(p);
     });
 
-    _player.open(Media(widget.videoUri));
+    // Open without auto-play; the duration listener seeks to the trim start
+    // and calls play() once the media header is parsed.
+    _player.open(Media(widget.videoUri), play: false);
     _player.setPlaylistMode(PlaylistMode.loop);
   }
 
