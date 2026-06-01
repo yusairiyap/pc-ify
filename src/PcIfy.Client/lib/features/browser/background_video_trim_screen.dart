@@ -202,7 +202,7 @@ class _BackgroundVideoTrimScreenState
           Positioned(
             left: 0,
             right: 0,
-            bottom: mq.viewPadding.bottom,
+            bottom: mq.viewPadding.bottom + 24,
             child: _TimelineBar(
               startFrac: _startFrac,
               endFrac: _endFrac,
@@ -226,7 +226,7 @@ class _BackgroundVideoTrimScreenState
             ),
           ),
           Positioned(
-            bottom: mq.viewPadding.bottom + 96,
+            bottom: mq.viewPadding.bottom + 120,
             left: 0,
             right: 0,
             child: const Center(
