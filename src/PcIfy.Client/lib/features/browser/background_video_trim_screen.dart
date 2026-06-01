@@ -55,22 +55,6 @@ class _BackgroundVideoTrimScreenState
 
     _player.setVolume(0);
 
-    // Called by whichever signal fires first to seek to the previous trim
-    // start and begin playback. Using a flag to prevent double-execution.
-    bool playStarted = false;
-    void startPlayback() {
-      if (playStarted || !mounted) return;
-      playStarted = true;
-      final seekMs = widget.initialStartMs ?? 0;
-      if (seekMs > 0 && _duration.inMilliseconds > 0) {
-        _player.seek(Duration(milliseconds: seekMs)).then((_) {
-          if (mounted) _player.play();
-        });
-      } else {
-        _player.play();
-      }
-    }
-
     _player.stream.duration.listen((d) {
       if (!mounted) return;
       setState(() {
@@ -85,29 +69,30 @@ class _BackgroundVideoTrimScreenState
           _ready = true;
         }
       });
-      if (_ready) startPlayback();
     });
 
-    // Backup signal: buffering completes (false→true→false) even when
-    // stream.duration fires late or not at all with play: false.
-    bool seenBuffering = false;
-    _player.stream.buffering.listen((b) {
-      if (b) {
-        seenBuffering = true;
-      } else if (seenBuffering) {
-        startPlayback();
-      }
-    });
-
+    // On the very first position event, seek to the previous trim start so
+    // the user sees where they left off. Using a flag so it only fires once.
+    bool didInitialSeek = false;
     _player.stream.position.listen((p) {
       if (!mounted || _seeking) return;
       setState(() => _position = p);
+
+      if (!didInitialSeek) {
+        didInitialSeek = true;
+        final seekMs = widget.initialStartMs ?? 0;
+        if (seekMs > 0) {
+          _seeking = true;
+          _player.seek(Duration(milliseconds: seekMs))
+              .then((_) => _seeking = false);
+          return;
+        }
+      }
+
       _enforceLoop(p);
     });
 
-    // Open without auto-play so the video doesn't render at position 0.
-    // startPlayback() is triggered by stream.duration or stream.buffering.
-    _player.open(Media(widget.videoUri), play: false);
+    _player.open(Media(widget.videoUri));
     _player.setPlaylistMode(PlaylistMode.loop);
   }
 

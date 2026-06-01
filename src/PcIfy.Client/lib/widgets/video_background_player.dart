@@ -42,28 +42,30 @@ class _VideoBackgroundPlayerState extends State<VideoBackgroundPlayer>
     final startMs = widget.prefs.videoLoopStartMs ?? 0;
     final endMs = widget.prefs.videoLoopEndMs;
 
-    // Enforce trim boundaries on every position tick.
-    //
-    // • pos < startMs  — jump to startMs (covers initial play from 0 and any
-    //                    case where PlaylistMode.loop resets to 0 after endMs).
-    // • pos >= endMs   — seek back to startMs (custom loop end).
-    //
-    // The FadeTransition starts at opacity 0, so any brief rendering at
-    // position 0 before the first seek (<33 ms) is invisible to the user.
+    // Enforce trim boundaries and delay the fade-in until the video is
+    // actually at the correct position (prevents showing position 0).
+    bool fadedIn = false;
     _player.stream.position.listen((pos) {
       if (!mounted) return;
       final ms = pos.inMilliseconds;
-      if (startMs > 0 && ms < startMs && ms >= 0) {
+
+      // Jump to trim start: covers initial play-from-0 and PlaylistMode.loop
+      // resetting to 0 after a natural loop-end.
+      if (startMs > 0 && ms < startMs) {
         _player.seek(Duration(milliseconds: startMs));
-        return;
+        return; // don't fade in yet
       }
+      // Jump back to trim start at the custom loop end.
       if (endMs != null && ms >= endMs) {
         _player.seek(Duration(milliseconds: startMs));
+        return; // don't fade in yet
       }
-    });
 
-    _player.stream.playing.listen((playing) {
-      if (playing && mounted) _fadeController.forward();
+      // Position is in the valid range — start the fade on the first valid tick.
+      if (!fadedIn) {
+        fadedIn = true;
+        _fadeController.forward();
+      }
     });
 
     _player.open(Media(widget.videoUri));
