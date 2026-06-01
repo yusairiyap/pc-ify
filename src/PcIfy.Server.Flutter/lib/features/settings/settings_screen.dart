@@ -24,6 +24,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   late AppSettings _draft;
   late final TextEditingController _portCtrl;
   late final TextEditingController _nameCtrl;
+  bool _saving = false;
 
   @override
   void initState() {
@@ -50,10 +51,20 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       appBar: AppBar(
         title: const Text('Settings'),
         actions: [
-          FilledButton(
-            onPressed: _save,
-            child: const Text('Save'),
-          ),
+          if (_saving)
+            const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 16),
+              child: SizedBox(
+                width: 20,
+                height: 20,
+                child: CircularProgressIndicator(strokeWidth: 2.5),
+              ),
+            )
+          else
+            FilledButton(
+              onPressed: _save,
+              child: const Text('Save'),
+            ),
           const SizedBox(width: 8),
         ],
       ),
@@ -171,25 +182,30 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   }
 
   Future<void> _save() async {
-    final svc = ref.read(httpServerServiceProvider);
+    setState(() => _saving = true);
+    try {
+      final svc = ref.read(httpServerServiceProvider);
 
-    // Stop first so the old server releases the port before settings change.
-    await svc.stop();
-    if (Platform.isAndroid) {
-      await ref.read(foregroundServiceProvider).stop();
-    }
-
-    await ref.read(settingsProvider.notifier).update(_draft);
-
-    // Restart if there is enough config to run.
-    if (_draft.sourceDirectories.isNotEmpty && _draft.users.isNotEmpty) {
-      await ref.read(httpServerServiceProvider).start(_draft.port);
+      // Stop first so the old server releases the port before settings change.
+      await svc.stop();
       if (Platform.isAndroid) {
-        await ref.read(foregroundServiceProvider).start(_draft.port);
+        await ref.read(foregroundServiceProvider).stop();
       }
-    }
 
-    if (mounted) Navigator.of(context).pop();
+      await ref.read(settingsProvider.notifier).update(_draft);
+
+      // Restart if there is enough config to run.
+      if (_draft.sourceDirectories.isNotEmpty && _draft.users.isNotEmpty) {
+        await ref.read(httpServerServiceProvider).start(_draft.port);
+        if (Platform.isAndroid) {
+          await ref.read(foregroundServiceProvider).start(_draft.port);
+        }
+      }
+
+      if (mounted) Navigator.of(context).pop();
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
   }
 
   void _applyColorMode(String mode) {
