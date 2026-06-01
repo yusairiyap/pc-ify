@@ -74,7 +74,9 @@ class _VideoBackgroundPlayerState extends State<VideoBackgroundPlayer>
   @override
   void didUpdateWidget(VideoBackgroundPlayer old) {
     super.didUpdateWidget(old);
-    if (old.videoUri != widget.videoUri) {
+    if (old.videoUri != widget.videoUri ||
+        old.prefs.videoLoopStartMs != widget.prefs.videoLoopStartMs ||
+        old.prefs.videoLoopEndMs != widget.prefs.videoLoopEndMs) {
       _fadeController.reset();
       _player.dispose();
       _initPlayer();

@@ -46,6 +46,7 @@ class _BackgroundVideoTrimScreenState
 
   bool _ready = false;
   bool _seeking = false;
+  bool _videoVisible = false;
 
   @override
   void initState() {
@@ -71,29 +72,43 @@ class _BackgroundVideoTrimScreenState
       });
     });
 
-    // On the very first position event, seek to the previous trim start so
-    // the user sees where they left off. Using a flag so it only fires once.
-    bool didInitialSeek = false;
-    _player.stream.position.listen((p) {
-      if (!mounted || _seeking) return;
-      setState(() => _position = p);
+    // Hide the video until playback reaches initialStartMs, then reveal it.
+    // Keep retrying the seek on every position tick while still below the
+    // target — a single seek is unreliable on slow network streams.
+    final initMs = widget.initialStartMs ?? 0;
+    bool passedInitialStart = initMs == 0; // skip wait if no start offset
 
-      if (!didInitialSeek) {
-        didInitialSeek = true;
-        final seekMs = widget.initialStartMs ?? 0;
-        if (seekMs > 0) {
-          _seeking = true;
-          _player.seek(Duration(milliseconds: seekMs))
-              .then((_) => _seeking = false);
-          return;
+    _player.stream.position.listen((p) {
+      if (!mounted) return;
+
+      if (!passedInitialStart) {
+        if (p.inMilliseconds < initMs) {
+          // Still before target — keep seeking without blocking the flag
+          if (!_seeking) {
+            _seeking = true;
+            _player
+                .seek(Duration(milliseconds: initMs))
+                .then((_) => _seeking = false);
+          }
+          return; // don't update UI or enforce loop yet
         }
+        // Arrived at or past the target — reveal video
+        passedInitialStart = true;
+        setState(() => _videoVisible = true);
       }
 
+      if (_seeking) return;
+      setState(() => _position = p);
       _enforceLoop(p);
     });
 
     _player.open(Media(widget.videoUri));
     _player.setPlaylistMode(PlaylistMode.loop);
+
+    // Reveal immediately if no start offset (nothing to seek past)
+    if (initMs == 0) {
+      _videoVisible = true;
+    }
   }
 
   void _enforceLoop(Duration position) {
@@ -180,6 +195,9 @@ class _BackgroundVideoTrimScreenState
             fit: BoxFit.cover,
             controls: NoVideoControls,
           ),
+          // Black overlay until playback reaches the initial start position
+          if (!_videoVisible)
+            const ColoredBox(color: Colors.black),
           // Timeline overlay raised above system gesture zone
           Positioned(
             left: 0,
