@@ -1,8 +1,6 @@
 package com.pcify.pcify_server
 
 import android.app.NotificationManager
-import android.app.admin.DevicePolicyManager
-import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
@@ -128,7 +126,7 @@ class MainActivity : FlutterActivity() {
             "volume" to mapOf("level" to volPct, "muted" to muted, "available" to true),
             "cpu" to mapOf("usage" to cachedCpuUsage, "available" to true),
             "ram" to mapOf("usedMb" to usedMb, "totalMb" to totalMb, "available" to true),
-            "screen" to mapOf("locked" to false, "available" to false)
+            "screen" to mapOf("locked" to false, "available" to isAccessibilityServiceEnabled())
         )
     }
 
@@ -150,16 +148,18 @@ class MainActivity : FlutterActivity() {
         }
     }
 
+    private fun isAccessibilityServiceEnabled(): Boolean {
+        val service = "$packageName/${PcIfyAccessibilityService::class.java.name}"
+        val enabled = Settings.Secure.getString(
+            contentResolver, Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES
+        ) ?: return false
+        return enabled.split(':').any { it.equals(service, ignoreCase = true) }
+    }
+
     // Returns null on success, or an error code string
     private fun lockScreen(): String? {
-        val dpm = getSystemService(Context.DEVICE_POLICY_SERVICE) as DevicePolicyManager
-        val admin = ComponentName(this, PcIfyDeviceAdminReceiver::class.java)
-        return if (dpm.isAdminActive(admin)) {
-            dpm.lockNow()
-            null
-        } else {
-            "needs_device_admin"
-        }
+        if (!isAccessibilityServiceEnabled()) return "needs_accessibility_service"
+        return if (PcIfyAccessibilityService.lockScreen()) null else "lock_failed"
     }
 
     private fun wakeScreen() {

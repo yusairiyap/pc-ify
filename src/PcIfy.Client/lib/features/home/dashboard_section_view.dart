@@ -21,16 +21,6 @@ class DashboardSectionView extends ConsumerWidget {
     final tt = Theme.of(context).textTheme;
     final cs = Theme.of(context).colorScheme;
 
-    void onReorder(List<DashboardItem> newItems) {
-      final layout = ref.read(dashboardLayoutProvider);
-      final newSections = layout.sections
-          .map((s) => s.id == section.id ? s.copyWith(items: newItems) : s)
-          .toList();
-      ref
-          .read(dashboardLayoutProvider.notifier)
-          .update(layout.copyWith(sections: newSections));
-    }
-
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -48,29 +38,36 @@ class DashboardSectionView extends ConsumerWidget {
         if (section.isBookmarks)
           BookmarkSectionBody(hasBg: hasBg)
         else
-          _WidgetGrid(
-              items: section.items, hasBg: hasBg, onReorder: onReorder),
+          _WidgetGrid(section: section, hasBg: hasBg),
       ],
     );
   }
 }
 
-// ── Draggable widget grid ─────────────────────────────────────────────────────
+// ── Drag payload ──────────────────────────────────────────────────────────────
 
-class _WidgetGrid extends StatefulWidget {
-  const _WidgetGrid(
-      {required this.items,
-      required this.hasBg,
-      required this.onReorder});
-  final List<DashboardItem> items;
-  final bool hasBg;
-  final ValueChanged<List<DashboardItem>> onReorder;
-
-  @override
-  State<_WidgetGrid> createState() => _WidgetGridState();
+class _DragData {
+  const _DragData(
+      {required this.sectionId,
+      required this.item,
+      required this.fromIndex});
+  final String sectionId;
+  final DashboardItem item;
+  final int fromIndex;
 }
 
-class _WidgetGridState extends State<_WidgetGrid> {
+// ── Draggable widget grid ─────────────────────────────────────────────────────
+
+class _WidgetGrid extends ConsumerStatefulWidget {
+  const _WidgetGrid({required this.section, required this.hasBg});
+  final DashboardSection section;
+  final bool hasBg;
+
+  @override
+  ConsumerState<_WidgetGrid> createState() => _WidgetGridState();
+}
+
+class _WidgetGridState extends ConsumerState<_WidgetGrid> {
   late List<DashboardItem> _items;
   int? _draggingIndex;
   int? _hoverIndex;
@@ -78,16 +75,18 @@ class _WidgetGridState extends State<_WidgetGrid> {
   @override
   void initState() {
     super.initState();
-    _items = List.from(widget.items);
+    _items = List.from(widget.section.items);
   }
 
   @override
   void didUpdateWidget(_WidgetGrid old) {
     super.didUpdateWidget(old);
-    if (_draggingIndex == null) _items = List.from(widget.items);
+    if (_draggingIndex == null) _items = List.from(widget.section.items);
   }
 
-  void _moveItem(int from, int to) {
+  // ── Same-section reorder ──────────────────────────────────────────────────
+
+  void _moveSameSection(int from, int to) {
     if (from == to) return;
     setState(() {
       final item = _items.removeAt(from);
@@ -95,7 +94,74 @@ class _WidgetGridState extends State<_WidgetGrid> {
       _draggingIndex = to;
       _hoverIndex = to;
     });
+    _commitReorder();
   }
+
+  void _commitReorder() {
+    final layout = ref.read(dashboardLayoutProvider);
+    final newSections = layout.sections.map((s) {
+      if (s.id != widget.section.id) return s;
+      return s.copyWith(items: List.from(_items));
+    }).toList();
+    ref
+        .read(dashboardLayoutProvider.notifier)
+        .update(layout.copyWith(sections: newSections));
+  }
+
+  // ── Cross-section drop ────────────────────────────────────────────────────
+
+  void _moveCrossSection(_DragData data, int targetIdx) {
+    final layout = ref.read(dashboardLayoutProvider);
+
+    final srcSec = layout.sections
+        .where((s) => s.id == data.sectionId)
+        .firstOrNull;
+    if (srcSec == null) return;
+    final realSrcIdx =
+        srcSec.items.indexWhere((i) => i.id == data.item.id);
+    if (realSrcIdx == -1) return;
+
+    final newSrcItems = List<DashboardItem>.from(srcSec.items)
+      ..removeAt(realSrcIdx);
+
+    final newDstItems = List<DashboardItem>.from(_items);
+    newDstItems.insert(targetIdx.clamp(0, newDstItems.length), data.item);
+
+    final newSections = layout.sections.map((s) {
+      if (s.id == data.sectionId) return s.copyWith(items: newSrcItems);
+      if (s.id == widget.section.id) return s.copyWith(items: newDstItems);
+      return s;
+    }).toList();
+
+    ref
+        .read(dashboardLayoutProvider.notifier)
+        .update(layout.copyWith(sections: newSections));
+
+    setState(() {
+      _items = newDstItems;
+      _draggingIndex = null;
+      _hoverIndex = null;
+    });
+  }
+
+  // ── Resize ────────────────────────────────────────────────────────────────
+
+  void _resizeItem(DashboardItem item, WidgetSize size) {
+    final layout = ref.read(dashboardLayoutProvider);
+    final newSections = layout.sections.map((s) {
+      if (s.id != widget.section.id) return s;
+      return s.copyWith(
+        items: s.items
+            .map((i) => i.id == item.id ? i.copyWith(size: size) : i)
+            .toList(),
+      );
+    }).toList();
+    ref
+        .read(dashboardLayoutProvider.notifier)
+        .update(layout.copyWith(sections: newSections));
+  }
+
+  // ── Build ─────────────────────────────────────────────────────────────────
 
   @override
   Widget build(BuildContext context) {
@@ -151,20 +217,23 @@ class _WidgetGridState extends State<_WidgetGrid> {
     final isHovered = _hoverIndex == idx && _draggingIndex != idx;
     final cs = Theme.of(context).colorScheme;
 
-    return DragTarget<int>(
+    return DragTarget<_DragData>(
       key: ValueKey(item.id),
       onWillAcceptWithDetails: (d) {
         setState(() => _hoverIndex = idx);
-        return d.data != idx;
+        return d.data.item.id != item.id;
       },
       onLeave: (_) => setState(() => _hoverIndex = null),
       onAcceptWithDetails: (d) {
-        _moveItem(d.data, idx);
+        if (d.data.sectionId == widget.section.id) {
+          _moveSameSection(d.data.fromIndex, idx);
+        } else {
+          _moveCrossSection(d.data, idx);
+        }
         setState(() {
           _draggingIndex = null;
           _hoverIndex = null;
         });
-        widget.onReorder(List.from(_items));
       },
       builder: (ctx, _, __) => AnimatedContainer(
         duration: const Duration(milliseconds: 150),
@@ -174,8 +243,9 @@ class _WidgetGridState extends State<_WidgetGrid> {
                 border: Border.all(color: cs.primary, width: 2),
               )
             : null,
-        child: LongPressDraggable<int>(
-          data: idx,
+        child: LongPressDraggable<_DragData>(
+          data: _DragData(
+              sectionId: widget.section.id, item: item, fromIndex: idx),
           delay: const Duration(milliseconds: 400),
           onDragStarted: () => setState(() => _draggingIndex = idx),
           onDragEnd: (_) => setState(() {
@@ -195,11 +265,27 @@ class _WidgetGridState extends State<_WidgetGrid> {
           ),
           childWhenDragging:
               Opacity(opacity: 0.3, child: _buildCard(item)),
-          child: _buildCard(item),
+          child: _withResizeHandle(item),
         ),
       ),
     );
   }
+
+  Widget _withResizeHandle(DashboardItem item) => Stack(
+        children: [
+          _buildCard(item),
+          Positioned(
+            right: 0,
+            top: 0,
+            bottom: 0,
+            width: 20,
+            child: _ResizeHandle(
+              item: item,
+              onResize: (size) => _resizeItem(item, size),
+            ),
+          ),
+        ],
+      );
 
   Widget _buildCard(DashboardItem item) => switch (item.type) {
         WidgetType.battery => BatteryCard(hasBg: widget.hasBg),
@@ -209,4 +295,49 @@ class _WidgetGridState extends State<_WidgetGrid> {
         WidgetType.screenLock => ScreenLockCard(hasBg: widget.hasBg),
         WidgetType.notifications => NotificationsCard(hasBg: widget.hasBg),
       };
+}
+
+// ── Resize handle ─────────────────────────────────────────────────────────────
+
+class _ResizeHandle extends StatelessWidget {
+  const _ResizeHandle({required this.item, required this.onResize});
+  final DashboardItem item;
+  final void Function(WidgetSize) onResize;
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onHorizontalDragEnd: (details) {
+        final vx = details.velocity.pixelsPerSecond.dx;
+        if (vx > 100 && item.effectiveSize == WidgetSize.halfWidth) {
+          onResize(WidgetSize.fullWidth);
+        } else if (vx < -100 && item.effectiveSize == WidgetSize.fullWidth) {
+          onResize(WidgetSize.halfWidth);
+        }
+      },
+      child: Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _dot(cs),
+            const SizedBox(height: 3),
+            _dot(cs),
+            const SizedBox(height: 3),
+            _dot(cs),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _dot(ColorScheme cs) => Container(
+        width: 3,
+        height: 3,
+        decoration: BoxDecoration(
+          color: cs.onSurfaceVariant.withValues(alpha: 0.4),
+          shape: BoxShape.circle,
+        ),
+      );
 }

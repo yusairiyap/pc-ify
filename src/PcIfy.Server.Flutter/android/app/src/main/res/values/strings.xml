@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="accessibility_service_description">Allows pc-ify server to lock the screen remotely via the client app</string>
+</resources>

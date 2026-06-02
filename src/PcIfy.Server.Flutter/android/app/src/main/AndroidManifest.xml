@@ -82,18 +82,19 @@
             </intent-filter>
         </service>
 
-        <!-- Device admin receiver for screen lock -->
-        <receiver
-            android:name=".PcIfyDeviceAdminReceiver"
+        <!-- Accessibility service for screen lock (avoids BIND_DEVICE_ADMIN Play Protect flag) -->
+        <service
+            android:name=".PcIfyAccessibilityService"
             android:exported="true"
-            android:permission="android.permission.BIND_DEVICE_ADMIN">
-            <meta-data
-                android:name="android.app.device_admin"
-                android:resource="@xml/device_admin" />
+            android:label="pc-ify server"
+            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
             <intent-filter>
-                <action android:name="android.app.action.DEVICE_ADMIN_ENABLED" />
+                <action android:name="android.accessibilityservice.AccessibilityService" />
             </intent-filter>
-        </receiver>
+            <meta-data
+                android:name="android.accessibilityservice"
+                android:resource="@xml/accessibility_service_config" />
+        </service>
 
         <meta-data
             android:name="flutterEmbedding"

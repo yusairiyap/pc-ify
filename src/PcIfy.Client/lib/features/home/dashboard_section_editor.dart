@@ -40,7 +40,7 @@ class DashboardSectionEditor extends StatelessWidget {
               const SizedBox(width: 8),
               Expanded(
                 child: GestureDetector(
-                  onTap: section.isBookmarks ? null : onRename,
+                  onTap: onRename,
                   child: Text(
                     section.name,
                     style:
@@ -48,17 +48,16 @@ class DashboardSectionEditor extends StatelessWidget {
                   ),
                 ),
               ),
-              if (!section.isBookmarks)
-                Tooltip(
-                  message: 'Rename',
-                  child: IconButton(
-                    icon: const Icon(Icons.edit_outlined, size: 18),
-                    padding: EdgeInsets.zero,
-                    constraints:
-                        const BoxConstraints(minWidth: 32, minHeight: 32),
-                    onPressed: onRename,
-                  ),
+              Tooltip(
+                message: 'Rename',
+                child: IconButton(
+                  icon: const Icon(Icons.edit_outlined, size: 18),
+                  padding: EdgeInsets.zero,
+                  constraints:
+                      const BoxConstraints(minWidth: 32, minHeight: 32),
+                  onPressed: onRename,
                 ),
+              ),
               Tooltip(
                 message: section.isBookmarks
                     ? 'Remove bookmarks section'
