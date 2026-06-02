@@ -1,3 +1,6 @@
+# Claude Code agent worktrees
+.claude/worktrees/
+
 # Visual Studio IDE
 .vs/
 *.user

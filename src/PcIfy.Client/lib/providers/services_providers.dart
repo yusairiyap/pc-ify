@@ -8,6 +8,7 @@ import '../services/auth_token_service.dart';
 import '../services/backup_restore_service.dart';
 import '../services/bookmark_service.dart';
 import '../services/connection_service.dart';
+import '../services/dashboard_layout_service.dart';
 import '../services/download_service.dart';
 import '../services/external_player_service.dart';
 import '../services/folder_prefs_service.dart';
@@ -80,4 +81,8 @@ final videoFitProvider = StateProvider<BoxFit>((ref) {
 // Persisted auto-repeat toggle. Default: false.
 final videoRepeatProvider = StateProvider<bool>((ref) {
   return ref.watch(sharedPrefsProvider).getBool('video_auto_repeat') ?? false;
+});
+
+final dashboardLayoutServiceProvider = Provider<DashboardLayoutService>((ref) {
+  return DashboardLayoutService(ref.watch(sharedPrefsProvider));
 });

@@ -15,4 +15,10 @@ public static class ApiRoutes
     public const string Thumbnails = "/api/thumbnails";
 
     public const string TokenQueryParam = "token";
+
+    public const string SystemControlStatus        = "/api/system/control/status";
+    public const string SystemControlVolume        = "/api/system/control/volume";
+    public const string SystemControlMute          = "/api/system/control/mute";
+    public const string SystemControlLock          = "/api/system/control/lock";
+    public const string SystemControlWake          = "/api/system/control/wake";
 }

@@ -16,6 +16,11 @@ import 'services/platform/foreground_service_android.dart'
 import 'services/platform/foreground_service.dart';
 import 'services/platform/mobile_video_thumbnail.dart'
     as mobile_thumb;
+import 'services/platform/system_control_service.dart';
+import 'services/platform/system_control_android.dart'
+    as sys_ctrl_android;
+import 'services/platform/system_control_desktop.dart'
+    as sys_ctrl_desktop;
 import 'services/platform/tray_service_desktop.dart';
 import 'services/settings_service.dart';
 import 'services/thumbnail_service.dart';
@@ -42,6 +47,7 @@ Future<void> main() async {
     await FFmpegSetupService.configure();
 
     await localNotifier.setup(appName: 'pc-ify server');
+    SystemControlServiceHelper.register(sys_ctrl_desktop.SystemControlDesktopImpl());
   }
 
   // Android: flutter_foreground_task v8 requires initCommunicationPort() to
@@ -72,6 +78,7 @@ Future<void> main() async {
 void _registerAndroidServices() {
   ForegroundServiceHelper.register(fg_android.ForegroundServiceImpl());
   PlatformThumbnailHelper.register(mobile_thumb.getMobileVideoThumbnail);
+  SystemControlServiceHelper.register(sys_ctrl_android.SystemControlAndroidImpl());
 }
 
 /// Thin wrapper that wires window_manager minimize-to-tray on desktop.

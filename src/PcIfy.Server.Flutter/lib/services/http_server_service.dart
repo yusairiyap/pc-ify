@@ -13,6 +13,7 @@ import '../core/models/connection_log_entry.dart';
 import 'auth_service.dart';
 import 'connection_log_service.dart';
 import 'file_service.dart';
+import 'platform/system_control_service.dart';
 import 'thumbnail_service.dart';
 
 class ServerState {
@@ -109,6 +110,19 @@ class HttpServerService {
         '${ApiRoutes.thumbnails}/<filePath|[^]*>',
         _streamGuard(authSvc,
             (req, fp) => _handleThumbnail(req, fp, fileSvc, thumbSvc, authSvc)));
+
+    // System control endpoints
+    final ctrl = SystemControlServiceHelper.instance;
+    r.get(ApiRoutes.systemControlStatus,
+        _withAuth(authSvc, (_) => _handleControlStatus(ctrl)));
+    r.post(ApiRoutes.systemControlVolume,
+        _withAuth(authSvc, (req) => _handleSetVolume(req, ctrl)));
+    r.post(ApiRoutes.systemControlMute,
+        _withAuth(authSvc, (req) => _handleSetMute(req, ctrl)));
+    r.post(ApiRoutes.systemControlLock,
+        _withAuth(authSvc, (_) => _handleLock(ctrl)));
+    r.post(ApiRoutes.systemControlWake,
+        _withAuth(authSvc, (_) => _handleWake(ctrl)));
 
     r.all('/<ignored|.*>', (_) => Response.notFound('Not found'));
     return r;
@@ -292,6 +306,57 @@ class HttpServerService {
     if (bytes == null) return Response.notFound('Cannot generate thumbnail');
 
     return Response.ok(bytes, headers: {'content-type': 'image/jpeg'});
+  }
+
+  // ── System control handlers ───────────────────────────────────────────────
+
+  Future<Response> _handleControlStatus(SystemControlService ctrl) async {
+    try {
+      final status = await ctrl.getStatus();
+      return _json(status.toJson());
+    } catch (_) {
+      return Response.internalServerError();
+    }
+  }
+
+  Future<Response> _handleSetVolume(Request req, SystemControlService ctrl) async {
+    try {
+      final body = jsonDecode(await req.readAsString()) as Map<String, dynamic>;
+      final level = (body['level'] as num?)?.toInt() ?? 50;
+      await ctrl.setVolume(level.clamp(0, 100));
+      return _json({'ok': true});
+    } catch (_) {
+      return Response.internalServerError();
+    }
+  }
+
+  Future<Response> _handleSetMute(Request req, SystemControlService ctrl) async {
+    try {
+      final body = jsonDecode(await req.readAsString()) as Map<String, dynamic>;
+      final muted = (body['muted'] as bool?) ?? false;
+      await ctrl.setMute(muted);
+      return _json({'ok': true});
+    } catch (_) {
+      return Response.internalServerError();
+    }
+  }
+
+  Future<Response> _handleLock(SystemControlService ctrl) async {
+    try {
+      await ctrl.lockScreen();
+      return _json({'ok': true});
+    } catch (_) {
+      return Response.internalServerError();
+    }
+  }
+
+  Future<Response> _handleWake(SystemControlService ctrl) async {
+    try {
+      await ctrl.wakeScreen();
+      return _json({'ok': true});
+    } catch (_) {
+      return Response.internalServerError();
+    }
   }
 
   // ── Middleware factories ───────────────────────────────────────────────────

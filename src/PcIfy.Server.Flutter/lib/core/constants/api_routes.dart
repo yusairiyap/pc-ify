@@ -9,6 +9,12 @@ abstract final class ApiRoutes {
   static const thumbnails = '/api/thumbnails';
   static const tokenQueryParam = 'token';
 
+  static const systemControlStatus        = '/api/system/control/status';
+  static const systemControlVolume        = '/api/system/control/volume';
+  static const systemControlMute          = '/api/system/control/mute';
+  static const systemControlLock          = '/api/system/control/lock';
+  static const systemControlWake          = '/api/system/control/wake';
+
   static const streamingPrefixes = [
     filesStream,
     filesDownload,

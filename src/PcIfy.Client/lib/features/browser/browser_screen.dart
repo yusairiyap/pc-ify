@@ -18,7 +18,7 @@ import '../../core/utils/grid_density_helper.dart';
 import '../../providers/services_providers.dart';
 import '../../widgets/folder_background_image.dart';
 import '../../widgets/video_background_player.dart';
-import '../home/home_screen.dart';
+import '../../providers/dashboard_providers.dart';
 
 // --- Data classes ---
 
