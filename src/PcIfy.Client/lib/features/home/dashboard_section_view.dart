@@ -185,7 +185,7 @@ class _WidgetGridState extends ConsumerState<_WidgetGrid> {
           pending.clear();
         }
         rows.add(Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
           child: _draggableCard(i, item),
         ));
       }
@@ -198,7 +198,7 @@ class _WidgetGridState extends ConsumerState<_WidgetGrid> {
 
   Widget _halfRow((int, DashboardItem) a, (int, DashboardItem)? b) =>
       Padding(
-        padding: const EdgeInsets.fromLTRB(8, 4, 8, 4),
+        padding: const EdgeInsets.fromLTRB(16, 4, 16, 4),
         child: IntrinsicHeight(
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -219,8 +219,8 @@ class _WidgetGridState extends ConsumerState<_WidgetGrid> {
     final cs = Theme.of(context).colorScheme;
     final screenWidth = MediaQuery.sizeOf(context).width;
     final feedbackWidth = item.effectiveSize == WidgetSize.halfWidth
-        ? (screenWidth - 24) / 2
-        : screenWidth - 16;
+        ? (screenWidth - 40) / 2
+        : screenWidth - 32;
 
     return DragTarget<_DragData>(
       key: ValueKey(item.id),
