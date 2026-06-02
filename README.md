@@ -63,8 +63,6 @@ A local-network home entertainment app. Run the server on Windows, Android, or m
 
 > **Android:** Grant **Allow access to all files** (Settings → Special app access) so the server can read arbitrary directories you configure.
 >
-> **Android screen lock:** To allow the client to lock the Android device screen remotely, enable **"pc-ify server"** in **Settings → Accessibility** on the server device. The Screen Lock widget on the client will show an instructional message until this is done.
->
 > **Windows / macOS video thumbnails:** FFmpeg is downloaded automatically on first use (~30 MB). You will be prompted once — tap **Download** to enable video thumbnail support.
 
 ### Legacy Windows Server (C# / WinForms)
@@ -163,7 +161,7 @@ Platform coverage:
 | Volume / Mute | ✓ | ✓ | ✓ |
 | CPU usage | ✓ | ✓ | ✓ |
 | RAM usage | ✓ | ✓ | ✓ |
-| Screen lock | ✓ (Accessibility required) | ✓ | ✓ |
+| Screen lock | — | ✓ | ✓ |
 | Screen wake | ✓ | ✓ | ✓ |
 
 See [CLAUDE.md](CLAUDE.md) for detailed developer documentation.

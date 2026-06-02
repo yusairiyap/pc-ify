@@ -115,12 +115,12 @@ The client polls `/api/system/control/status` every 5 seconds. The server expose
 
 | Platform | Implementation | Notes |
 |---|---|---|
-| Android | `MainActivity.kt` + `PcIfyAccessibilityService.kt` | CPU via `/proc/stat` diff, fallback to `/sys/cpufreq`; lock via `AccessibilityService.GLOBAL_ACTION_LOCK_SCREEN` (API 28+; needs Accessibility permission) |
+| Android | `MainActivity.kt` | CPU via `/proc/stat` diff, fallback to `/sys/cpufreq`; screen lock not available (Play Protect flags `BIND_ACCESSIBILITY_SERVICE` + `INTERNET` + `MANAGE_EXTERNAL_STORAGE` as RAT) |
 | Windows (Flutter) | `windows/runner/system_control_channel.cpp` | CPU via PDH; volume via `IAudioEndpointVolume` COM; lock via `LockWorkStation()`; wake via `mouse_event()` |
 | macOS (Flutter) | `macos/Runner/AppDelegate.swift` | Battery via IOKit; volume via `osascript`; CPU/RAM via `top`/`vm_stat`; lock via `⌃⌘Q` keypress |
 | Windows (C#) | `Services/WindowsSystemControlService.cs` | Same capabilities as Flutter Windows channel |
 
-**Android screen lock prerequisite:** The user must enable "pc-ify server" in **Settings → Accessibility** on the Android device. The `screen.available` field will be `false` until this is done, and the client card shows an instructional message.
+**Android screen lock:** Not supported. Declaring `BIND_ACCESSIBILITY_SERVICE` alongside `INTERNET` + `MANAGE_EXTERNAL_STORAGE` triggers Google Play Protect's RAT heuristic and hard-blocks installation. `screen.available` is always `false` on Android; the client card shows "not available on this platform".
 
 **Android Package ID:** The app is published as `app.pcify.server` (`applicationId` in `build.gradle.kts`). The Kotlin `namespace` remains `com.pcify.pcify_server` so `.ClassName` references in `AndroidManifest.xml` resolve correctly.
 

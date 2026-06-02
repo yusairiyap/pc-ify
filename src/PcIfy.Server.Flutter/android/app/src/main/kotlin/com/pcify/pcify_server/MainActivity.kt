@@ -1,6 +1,5 @@
 package com.pcify.pcify_server
 
-import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
@@ -66,11 +65,7 @@ class MainActivity : FlutterActivity() {
                         setMute(muted)
                         result.success(null)
                     }
-                    "lockScreen" -> {
-                        val locked = PcIfyAccessibilityService.lockScreen()
-                        if (locked) result.success(null)
-                        else result.error("needs_accessibility", "Accessibility service not enabled", null)
-                    }
+                    "lockScreen" -> result.error("unavailable", "Screen lock not supported on Android", null)
                     "wakeScreen" -> {
                         wakeScreen()
                         result.success(null)
@@ -110,25 +105,13 @@ class MainActivity : FlutterActivity() {
         val totalMb = (memInfo.totalMem / (1024 * 1024)).toInt()
         val usedMb = ((memInfo.totalMem - memInfo.availMem) / (1024 * 1024)).toInt()
 
-        val screenLockAvailable = Build.VERSION.SDK_INT >= Build.VERSION_CODES.P &&
-                isAccessibilityServiceEnabled()
-
         return mapOf(
             "battery" to mapOf("level" to batteryPct, "charging" to charging, "available" to true),
             "volume" to mapOf("level" to volPct, "muted" to muted, "available" to true),
             "cpu" to mapOf("usage" to cachedCpuUsage, "available" to true),
             "ram" to mapOf("usedMb" to usedMb, "totalMb" to totalMb, "available" to true),
-            "screen" to mapOf("locked" to false, "available" to screenLockAvailable)
+            "screen" to mapOf("locked" to false, "available" to false)
         )
-    }
-
-    private fun isAccessibilityServiceEnabled(): Boolean {
-        val cn = ComponentName(this, PcIfyAccessibilityService::class.java)
-        val flat = Settings.Secure.getString(
-            contentResolver,
-            Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES
-        ) ?: return false
-        return flat.split(":").any { it.equals(cn.flattenToString(), ignoreCase = true) }
     }
 
     private fun setVolume(percent: Int) {
