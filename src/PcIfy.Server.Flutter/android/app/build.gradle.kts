@@ -14,7 +14,7 @@ android {
     }
 
     defaultConfig {
-        applicationId = "com.pcify.pcify_server"
+        applicationId = "app.pcify.server"
         minSdk = flutter.minSdkVersion
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode

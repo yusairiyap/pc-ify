@@ -14,4 +14,5 @@ abstract final class ApiRoutes {
   static const controlMute          = '/api/system/control/mute';
   static const controlLock          = '/api/system/control/lock';
   static const controlWake          = '/api/system/control/wake';
+  static const controlNotifications = '/api/system/control/notifications';
 }

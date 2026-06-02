@@ -84,6 +84,35 @@ class ControlStatusNotifier extends AutoDisposeAsyncNotifier<ControlStatus> {
   }
 }
 
+// ── Notifications (on-demand) ─────────────────────────────────────────────────
+
+typedef NotificationsResult = ({List<NotificationItem> items, bool available});
+
+final notificationsProvider =
+    AsyncNotifierProvider.autoDispose<NotificationsNotifier, NotificationsResult>(
+        NotificationsNotifier.new);
+
+class NotificationsNotifier extends AutoDisposeAsyncNotifier<NotificationsResult> {
+  @override
+  Future<NotificationsResult> build() async {
+    return await ref.read(apiServiceProvider).getNotifications() ??
+        (items: <NotificationItem>[], available: false);
+  }
+
+  Future<void> refresh() async {
+    state = const AsyncLoading();
+    state = AsyncData(
+      await ref.read(apiServiceProvider).getNotifications() ??
+          (items: <NotificationItem>[], available: false),
+    );
+  }
+
+  Future<void> clearAll() async {
+    await ref.read(apiServiceProvider).clearNotifications();
+    await refresh();
+  }
+}
+
 // ── Edit mode ─────────────────────────────────────────────────────────────────
 
 final dashboardEditModeProvider = StateProvider<bool>((ref) => false);
