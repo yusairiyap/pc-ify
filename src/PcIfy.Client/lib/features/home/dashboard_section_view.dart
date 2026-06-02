@@ -5,7 +5,6 @@ import '../../providers/dashboard_providers.dart';
 import 'widget_cards/battery_card.dart';
 import 'widget_cards/bookmark_section_body.dart';
 import 'widget_cards/cpu_card.dart';
-import 'widget_cards/notifications_card.dart';
 import 'widget_cards/ram_card.dart';
 import 'widget_cards/screen_lock_card.dart';
 import 'widget_cards/volume_card.dart';
@@ -293,7 +292,6 @@ class _WidgetGridState extends ConsumerState<_WidgetGrid> {
         WidgetType.ram => RamCard(hasBg: widget.hasBg),
         WidgetType.volume => VolumeCard(hasBg: widget.hasBg),
         WidgetType.screenLock => ScreenLockCard(hasBg: widget.hasBg),
-        WidgetType.notifications => NotificationsCard(hasBg: widget.hasBg),
       };
 }
 

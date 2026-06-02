@@ -1,4 +1,4 @@
-enum WidgetType { battery, volume, cpu, ram, screenLock, notifications }
+enum WidgetType { battery, volume, cpu, ram, screenLock }
 
 enum WidgetSize { halfWidth, fullWidth }
 
@@ -96,13 +96,6 @@ class DashboardLayout {
             DashboardItem(id: 'cpu', type: WidgetType.cpu),
             DashboardItem(id: 'ram', type: WidgetType.ram),
             DashboardItem(id: 'screenLock', type: WidgetType.screenLock),
-          ],
-        ),
-        DashboardSection(
-          id: 'notifications',
-          name: 'Server Notifications',
-          items: [
-            DashboardItem(id: 'notifications', type: WidgetType.notifications),
           ],
         ),
         DashboardSection(

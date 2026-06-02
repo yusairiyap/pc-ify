@@ -171,27 +171,4 @@ class ApiService {
     }
   }
 
-  Future<({List<NotificationItem> items, bool available})?> getNotifications() async {
-    try {
-      final resp = await _dio.get('$_base${ApiRoutes.controlNotifications}');
-      final data = resp.data as Map<String, dynamic>;
-      final available = (data['available'] as bool?) ?? false;
-      final rawItems = data['items'] as List<dynamic>? ?? [];
-      final items = rawItems
-          .map((e) => NotificationItem.fromJson(e as Map<String, dynamic>))
-          .toList();
-      return (items: items, available: available);
-    } catch (_) {
-      return null;
-    }
-  }
-
-  Future<bool> clearNotifications() async {
-    try {
-      await _dio.delete('$_base${ApiRoutes.controlNotifications}');
-      return true;
-    } catch (_) {
-      return false;
-    }
-  }
 }

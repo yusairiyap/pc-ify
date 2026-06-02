@@ -59,28 +59,6 @@ class ScreenStatus {
   );
 }
 
-class NotificationItem {
-  const NotificationItem({
-    required this.id,
-    required this.title,
-    required this.text,
-    required this.appName,
-    required this.timestamp,
-  });
-  final String id;
-  final String title;
-  final String text;
-  final String appName;
-  final int timestamp;
-  factory NotificationItem.fromJson(Map<String, dynamic> j) => NotificationItem(
-    id: (j['id'] as String?) ?? '',
-    title: (j['title'] as String?) ?? '',
-    text: (j['text'] as String?) ?? '',
-    appName: (j['appName'] as String?) ?? '',
-    timestamp: (j['timestamp'] as num?)?.toInt() ?? 0,
-  );
-}
-
 class ControlStatus {
   const ControlStatus({
     required this.battery,

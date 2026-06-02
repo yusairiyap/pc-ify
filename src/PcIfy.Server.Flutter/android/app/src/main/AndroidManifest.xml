@@ -72,16 +72,6 @@
             </intent-filter>
         </receiver>
 
-        <!-- Notification listener service for dashboard widget -->
-        <service
-            android:name=".NotificationCollectorService"
-            android:exported="true"
-            android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE">
-            <intent-filter>
-                <action android:name="android.service.notification.NotificationListenerService" />
-            </intent-filter>
-        </service>
-
         <!-- Accessibility service for screen lock (avoids BIND_DEVICE_ADMIN Play Protect flag) -->
         <service
             android:name=".PcIfyAccessibilityService"
