@@ -126,7 +126,7 @@ class MainActivity : FlutterActivity() {
             "volume" to mapOf("level" to volPct, "muted" to muted, "available" to true),
             "cpu" to mapOf("usage" to cachedCpuUsage, "available" to true),
             "ram" to mapOf("usedMb" to usedMb, "totalMb" to totalMb, "available" to true),
-            "screen" to mapOf("locked" to false, "available" to isAccessibilityServiceEnabled())
+            "screen" to mapOf("locked" to false, "available" to false)
         )
     }
 
@@ -148,19 +148,8 @@ class MainActivity : FlutterActivity() {
         }
     }
 
-    private fun isAccessibilityServiceEnabled(): Boolean {
-        val service = "$packageName/${PcIfyAccessibilityService::class.java.name}"
-        val enabled = Settings.Secure.getString(
-            contentResolver, Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES
-        ) ?: return false
-        return enabled.split(':').any { it.equals(service, ignoreCase = true) }
-    }
-
     // Returns null on success, or an error code string
-    private fun lockScreen(): String? {
-        if (!isAccessibilityServiceEnabled()) return "needs_accessibility_service"
-        return if (PcIfyAccessibilityService.lockScreen()) null else "lock_failed"
-    }
+    private fun lockScreen(): String? = "unavailable"
 
     private fun wakeScreen() {
         val pm = getSystemService(Context.POWER_SERVICE) as PowerManager
