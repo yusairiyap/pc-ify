@@ -63,33 +63,4 @@ class SystemControlAndroidImpl implements SystemControlService {
   Future<void> wakeScreen() async {
     try { await _channel.invokeMethod('wakeScreen'); } catch (_) {}
   }
-
-  @override
-  Future<NotificationsResult> getNotifications() async {
-    try {
-      final result = await _channel.invokeMethod<Map>('getNotifications');
-      if (result == null) return (items: <NotificationItem>[], available: false);
-      final available = (result['available'] as bool?) ?? false;
-      if (!available) return (items: <NotificationItem>[], available: false);
-      final rawItems = result['items'] as List? ?? [];
-      final items = rawItems.map((e) {
-        final m = e as Map;
-        return NotificationItem(
-          id: (m['id'] as String?) ?? '',
-          title: (m['title'] as String?) ?? '',
-          text: (m['text'] as String?) ?? '',
-          appName: (m['appName'] as String?) ?? '',
-          timestamp: (m['timestamp'] as int?) ?? 0,
-        );
-      }).toList();
-      return (items: items, available: true);
-    } catch (_) {
-      return (items: <NotificationItem>[], available: false);
-    }
-  }
-
-  @override
-  Future<void> clearNotifications() async {
-    try { await _channel.invokeMethod('clearNotifications'); } catch (_) {}
-  }
 }

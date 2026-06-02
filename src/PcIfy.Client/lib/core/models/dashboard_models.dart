@@ -1,4 +1,4 @@
-enum WidgetType { battery, volume, cpu, ram, screenLock, notifications }
+enum WidgetType { battery, volume, cpu, ram, screenLock }
 
 enum WidgetSize { halfWidth, fullWidth }
 
@@ -6,7 +6,7 @@ class DashboardItem {
   const DashboardItem({required this.id, required this.type, this.size});
   final String id;
   final WidgetType type;
-  final WidgetSize? size; // null = use type default
+  final WidgetSize? size;
 
   WidgetSize get effectiveSize =>
       size ?? _defaultSizeFor(type);
@@ -19,14 +19,14 @@ class DashboardItem {
   DashboardItem copyWith({WidgetSize? size}) =>
       DashboardItem(id: id, type: type, size: size ?? this.size);
 
-  factory DashboardItem.fromJson(Map<String, dynamic> json) {
+  static DashboardItem? tryFromJson(Map<String, dynamic> json) {
+    final typeName = json['type'] as String? ?? '';
+    final type = WidgetType.values.where((e) => e.name == typeName).firstOrNull;
+    if (type == null) return null;
     final sizeStr = json['size'] as String?;
     return DashboardItem(
       id: json['id'] as String,
-      type: WidgetType.values.firstWhere(
-        (e) => e.name == (json['type'] as String),
-        orElse: () => WidgetType.battery,
-      ),
+      type: type,
       size: sizeStr == null
           ? null
           : WidgetSize.values.firstWhere(
@@ -35,6 +35,9 @@ class DashboardItem {
             ),
     );
   }
+
+  factory DashboardItem.fromJson(Map<String, dynamic> json) =>
+      tryFromJson(json) ?? DashboardItem(id: json['id'] as String? ?? '', type: WidgetType.battery);
 
   Map<String, dynamic> toJson() => {
         'id': id,
@@ -61,7 +64,8 @@ class DashboardSection {
         name: json['name'] as String,
         isBookmarks: (json['isBookmarks'] as bool?) ?? false,
         items: (json['items'] as List<dynamic>? ?? [])
-            .map((e) => DashboardItem.fromJson(e as Map<String, dynamic>))
+            .map((e) => DashboardItem.tryFromJson(e as Map<String, dynamic>))
+            .whereType<DashboardItem>()
             .toList(),
       );
 
@@ -96,13 +100,6 @@ class DashboardLayout {
             DashboardItem(id: 'cpu', type: WidgetType.cpu),
             DashboardItem(id: 'ram', type: WidgetType.ram),
             DashboardItem(id: 'screenLock', type: WidgetType.screenLock),
-          ],
-        ),
-        DashboardSection(
-          id: 'notifications',
-          name: 'Server Notifications',
-          items: [
-            DashboardItem(id: 'notifications', type: WidgetType.notifications),
           ],
         ),
         DashboardSection(

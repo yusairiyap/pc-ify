@@ -123,10 +123,6 @@ class HttpServerService {
         _withAuth(authSvc, (_) => _handleLock(ctrl)));
     r.post(ApiRoutes.systemControlWake,
         _withAuth(authSvc, (_) => _handleWake(ctrl)));
-    r.get(ApiRoutes.systemControlNotifications,
-        _withAuth(authSvc, (_) => _handleGetNotifications(ctrl)));
-    r.delete(ApiRoutes.systemControlNotifications,
-        _withAuth(authSvc, (_) => _handleClearNotifications(ctrl)));
 
     r.all('/<ignored|.*>', (_) => Response.notFound('Not found'));
     return r;
@@ -357,27 +353,6 @@ class HttpServerService {
   Future<Response> _handleWake(SystemControlService ctrl) async {
     try {
       await ctrl.wakeScreen();
-      return _json({'ok': true});
-    } catch (_) {
-      return Response.internalServerError();
-    }
-  }
-
-  Future<Response> _handleGetNotifications(SystemControlService ctrl) async {
-    try {
-      final result = await ctrl.getNotifications();
-      return _json({
-        'items': result.items.map((n) => n.toJson()).toList(),
-        'available': result.available,
-      });
-    } catch (_) {
-      return Response.internalServerError();
-    }
-  }
-
-  Future<Response> _handleClearNotifications(SystemControlService ctrl) async {
-    try {
-      await ctrl.clearNotifications();
       return _json({'ok': true});
     } catch (_) {
       return Response.internalServerError();

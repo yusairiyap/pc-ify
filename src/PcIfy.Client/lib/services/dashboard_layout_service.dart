@@ -13,7 +13,13 @@ class DashboardLayoutService {
     final json = _prefs.getString(_key);
     if (json == null) return DashboardLayout.defaultLayout();
     try {
-      return DashboardLayout.fromJson(jsonDecode(json) as Map<String, dynamic>);
+      final layout = DashboardLayout.fromJson(jsonDecode(json) as Map<String, dynamic>);
+      // Drop sections that have no items after filtering removed widget types
+      final sections = layout.sections
+          .where((s) => s.isBookmarks || s.items.isNotEmpty)
+          .toList();
+      if (sections.isEmpty) return DashboardLayout.defaultLayout();
+      return DashboardLayout(sections: sections);
     } catch (_) {
       return DashboardLayout.defaultLayout();
     }

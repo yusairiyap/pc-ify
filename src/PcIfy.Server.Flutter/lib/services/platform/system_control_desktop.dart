@@ -63,11 +63,4 @@ class SystemControlDesktopImpl implements SystemControlService {
   Future<void> wakeScreen() async {
     try { await _channel.invokeMethod('wakeScreen'); } catch (_) {}
   }
-
-  @override
-  Future<NotificationsResult> getNotifications() async =>
-      (items: <NotificationItem>[], available: false);
-
-  @override
-  Future<void> clearNotifications() async {}
 }

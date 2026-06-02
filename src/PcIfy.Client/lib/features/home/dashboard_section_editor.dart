@@ -170,7 +170,6 @@ class DashboardSectionEditor extends StatelessWidget {
         WidgetType.cpu => Icons.memory_outlined,
         WidgetType.ram => Icons.storage_outlined,
         WidgetType.screenLock => Icons.lock_outline,
-        WidgetType.notifications => Icons.notifications_outlined,
       };
 
   String _widgetName(WidgetType type) => switch (type) {
@@ -179,6 +178,5 @@ class DashboardSectionEditor extends StatelessWidget {
         WidgetType.cpu => 'CPU Usage',
         WidgetType.ram => 'RAM Usage',
         WidgetType.screenLock => 'Screen Lock',
-        WidgetType.notifications => 'Notifications',
       };
 }

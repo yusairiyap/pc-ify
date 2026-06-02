@@ -1,42 +1,38 @@
 package com.pcify.pcify_server
 
-import android.app.NotificationManager
+import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.media.AudioManager
-import android.net.Uri
 import android.os.BatteryManager
 import android.os.Build
-import android.os.Environment
 import android.os.PowerManager
 import android.provider.Settings
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
 import kotlinx.coroutines.*
+import android.net.Uri
 
 class MainActivity : FlutterActivity() {
     private val permissionsChannel = "com.pcify.pcify_server/permissions"
     private val sysControlChannel = "com.pcify.pcify_server/system_control"
 
     // CPU measurement state
-    private var lastCpuIdle: Long = 0
-    private var lastCpuTotal: Long = 0
     private var cachedCpuUsage: Double = 0.0
     private val cpuScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
 
-        // Existing permissions channel
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, permissionsChannel)
             .setMethodCallHandler { call, result ->
                 when (call.method) {
                     "hasManageStoragePermission" -> {
                         result.success(
                             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R)
-                                Environment.isExternalStorageManager()
+                                android.os.Environment.isExternalStorageManager()
                             else true
                         )
                     }
@@ -54,10 +50,8 @@ class MainActivity : FlutterActivity() {
                 }
             }
 
-        // Start background CPU sampling
         startCpuSampling()
 
-        // System control channel
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, sysControlChannel)
             .setMethodCallHandler { call, result ->
                 when (call.method) {
@@ -73,17 +67,12 @@ class MainActivity : FlutterActivity() {
                         result.success(null)
                     }
                     "lockScreen" -> {
-                        val lockResult = lockScreen()
-                        if (lockResult == null) result.success(null)
-                        else result.error(lockResult, "Device admin not active", null)
+                        val locked = PcIfyAccessibilityService.lockScreen()
+                        if (locked) result.success(null)
+                        else result.error("needs_accessibility", "Accessibility service not enabled", null)
                     }
                     "wakeScreen" -> {
                         wakeScreen()
-                        result.success(null)
-                    }
-                    "getNotifications" -> result.success(getNotifications())
-                    "clearNotifications" -> {
-                        clearNotifications()
                         result.success(null)
                     }
                     else -> result.notImplemented()
@@ -121,13 +110,25 @@ class MainActivity : FlutterActivity() {
         val totalMb = (memInfo.totalMem / (1024 * 1024)).toInt()
         val usedMb = ((memInfo.totalMem - memInfo.availMem) / (1024 * 1024)).toInt()
 
+        val screenLockAvailable = Build.VERSION.SDK_INT >= Build.VERSION_CODES.P &&
+                isAccessibilityServiceEnabled()
+
         return mapOf(
             "battery" to mapOf("level" to batteryPct, "charging" to charging, "available" to true),
             "volume" to mapOf("level" to volPct, "muted" to muted, "available" to true),
             "cpu" to mapOf("usage" to cachedCpuUsage, "available" to true),
             "ram" to mapOf("usedMb" to usedMb, "totalMb" to totalMb, "available" to true),
-            "screen" to mapOf("locked" to false, "available" to false)
+            "screen" to mapOf("locked" to false, "available" to screenLockAvailable)
         )
+    }
+
+    private fun isAccessibilityServiceEnabled(): Boolean {
+        val cn = ComponentName(this, PcIfyAccessibilityService::class.java)
+        val flat = Settings.Secure.getString(
+            contentResolver,
+            Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES
+        ) ?: return false
+        return flat.split(":").any { it.equals(cn.flattenToString(), ignoreCase = true) }
     }
 
     private fun setVolume(percent: Int) {
@@ -148,45 +149,15 @@ class MainActivity : FlutterActivity() {
         }
     }
 
-    // Returns null on success, or an error code string
-    private fun lockScreen(): String? = "unavailable"
-
     private fun wakeScreen() {
         val pm = getSystemService(Context.POWER_SERVICE) as PowerManager
+        @Suppress("DEPRECATION")
         val wl = pm.newWakeLock(
             PowerManager.FULL_WAKE_LOCK or PowerManager.ACQUIRE_CAUSES_WAKEUP or PowerManager.ON_AFTER_RELEASE,
             "pcify:wakelock"
         )
         wl.acquire(500)
         wl.release()
-    }
-
-    private fun getNotifications(): Map<String, Any> {
-        val store = NotificationCollectorService.NotificationStore
-        if (!store.isConnected) return mapOf("available" to false, "items" to emptyList<Any>())
-        val items = store.notifications.map { n ->
-            mapOf(
-                "id" to n.key,
-                "title" to (n.notification.extras?.getString(android.app.Notification.EXTRA_TITLE) ?: ""),
-                "text" to (n.notification.extras?.getString(android.app.Notification.EXTRA_TEXT) ?: ""),
-                "appName" to getAppName(n.packageName),
-                "timestamp" to n.notification.`when`
-            )
-        }
-        return mapOf("available" to true, "items" to items)
-    }
-
-    private fun clearNotifications() {
-        val nm = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
-        nm.cancelAll()
-        NotificationCollectorService.NotificationStore.clearAll()
-    }
-
-    private fun getAppName(packageName: String): String {
-        return try {
-            val info = packageManager.getApplicationInfo(packageName, 0)
-            packageManager.getApplicationLabel(info).toString()
-        } catch (_: Exception) { packageName }
     }
 
     private fun startCpuSampling() {
@@ -199,7 +170,6 @@ class MainActivity : FlutterActivity() {
     }
 
     private suspend fun measureCpuUsage(): Double {
-        // Try /proc/stat (may be restricted on Android 9+)
         try {
             val line1 = java.io.File("/proc/stat").bufferedReader().use { it.readLine() }
             val parts1 = line1.trim().split("\\s+".toRegex()).drop(1).mapNotNull { it.toLongOrNull() }
@@ -213,13 +183,11 @@ class MainActivity : FlutterActivity() {
                 val idle2 = parts2.getOrElse(3) { 0L }
                 val dt = total2 - total1
                 val di = idle2 - idle1
-                // Validate: dt must be positive and idle delta in range
                 if (dt > 0 && di in 0..dt) {
                     return (dt - di).toDouble() / dt * 100.0
                 }
             }
         } catch (_: Exception) {}
-        // Fallback: use CPU frequency as a proxy for load
         return readCpuFromFrequency()
     }
 

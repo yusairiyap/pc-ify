@@ -132,10 +132,6 @@ public sealed class WindowsSystemControlService : ISystemControlService, IDispos
         try { mouse_event(MOUSEEVENTF_MOVE, 0, 0, 0, UIntPtr.Zero); } catch { /* ignore */ }
     }
 
-    // Notifications: not available without MSIX packaging
-    public IReadOnlyList<NotificationItemDto> GetNotifications() => Array.Empty<NotificationItemDto>();
-    public void ClearNotifications() { }
-
     public void Dispose()
     {
         _cpuTimer.Dispose();

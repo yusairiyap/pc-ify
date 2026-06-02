@@ -44,18 +44,4 @@ public class SystemControlController : ControllerBase
         _control.WakeScreen();
         return Ok();
     }
-
-    [HttpGet(ApiRoutes.SystemControlNotifications)]
-    public IActionResult GetNotifications() => Ok(new
-    {
-        items = _control.GetNotifications(),
-        available = false
-    });
-
-    [HttpDelete(ApiRoutes.SystemControlNotifications)]
-    public IActionResult ClearNotifications()
-    {
-        _control.ClearNotifications();
-        return Ok();
-    }
 }

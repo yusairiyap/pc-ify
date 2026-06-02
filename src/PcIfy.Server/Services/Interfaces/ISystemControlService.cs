@@ -9,6 +9,4 @@ public interface ISystemControlService
     void SetMute(bool muted);
     void LockScreen();
     void WakeScreen();
-    IReadOnlyList<NotificationItemDto> GetNotifications();
-    void ClearNotifications();
 }

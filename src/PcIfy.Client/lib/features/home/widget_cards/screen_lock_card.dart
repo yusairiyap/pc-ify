@@ -71,7 +71,7 @@ class ScreenLockCard extends ConsumerWidget {
               Padding(
                 padding: const EdgeInsets.only(top: 8),
                 child: Text(
-                  'Screen lock is not available on this server platform',
+                  'Enable pc-ify in Accessibility Settings on the server device to use screen lock',
                   style: TextStyle(
                     fontSize: 11,
                     color: hasBg ? Colors.white38 : cs.outline,

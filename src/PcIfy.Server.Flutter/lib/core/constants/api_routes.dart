@@ -14,7 +14,6 @@ abstract final class ApiRoutes {
   static const systemControlMute          = '/api/system/control/mute';
   static const systemControlLock          = '/api/system/control/lock';
   static const systemControlWake          = '/api/system/control/wake';
-  static const systemControlNotifications = '/api/system/control/notifications';
 
   static const streamingPrefixes = [
     filesStream,

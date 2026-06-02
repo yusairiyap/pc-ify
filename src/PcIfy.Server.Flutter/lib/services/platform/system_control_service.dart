@@ -43,24 +43,6 @@ class ScreenStatus {
   factory ScreenStatus.unavailable() => const ScreenStatus(locked: false, available: false);
 }
 
-class NotificationItem {
-  const NotificationItem({
-    required this.id,
-    required this.title,
-    required this.text,
-    required this.appName,
-    required this.timestamp,
-  });
-  final String id;
-  final String title;
-  final String text;
-  final String appName;
-  final int timestamp;
-  Map<String, dynamic> toJson() => {
-    'id': id, 'title': title, 'text': text, 'appName': appName, 'timestamp': timestamp,
-  };
-}
-
 class ControlStatus {
   const ControlStatus({
     required this.battery,
@@ -92,8 +74,6 @@ class ControlStatus {
   };
 }
 
-typedef NotificationsResult = ({List<NotificationItem> items, bool available});
-
 // ── Abstract service ──────────────────────────────────────────────────────────
 
 abstract class SystemControlService {
@@ -102,8 +82,6 @@ abstract class SystemControlService {
   Future<void> setMute(bool muted);
   Future<void> lockScreen();
   Future<void> wakeScreen();
-  Future<NotificationsResult> getNotifications();
-  Future<void> clearNotifications();
 }
 
 // ── No-op fallback ────────────────────────────────────────────────────────────
@@ -114,8 +92,6 @@ class _NoOpSystemControlService implements SystemControlService {
   @override Future<void> setMute(bool muted) async {}
   @override Future<void> lockScreen() async {}
   @override Future<void> wakeScreen() async {}
-  @override Future<NotificationsResult> getNotifications() async => (items: <NotificationItem>[], available: false);
-  @override Future<void> clearNotifications() async {}
 }
 
 // ── Helper singleton ──────────────────────────────────────────────────────────

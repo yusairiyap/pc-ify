@@ -5,10 +5,11 @@ import '../../providers/dashboard_providers.dart';
 import 'widget_cards/battery_card.dart';
 import 'widget_cards/bookmark_section_body.dart';
 import 'widget_cards/cpu_card.dart';
-import 'widget_cards/notifications_card.dart';
 import 'widget_cards/ram_card.dart';
 import 'widget_cards/screen_lock_card.dart';
 import 'widget_cards/volume_card.dart';
+
+const _kResizeThreshold = 40.0;
 
 class DashboardSectionView extends ConsumerWidget {
   const DashboardSectionView(
@@ -216,6 +217,10 @@ class _WidgetGridState extends ConsumerState<_WidgetGrid> {
   Widget _draggableCard(int idx, DashboardItem item) {
     final isHovered = _hoverIndex == idx && _draggingIndex != idx;
     final cs = Theme.of(context).colorScheme;
+    final screenWidth = MediaQuery.sizeOf(context).width;
+    final feedbackWidth = item.effectiveSize == WidgetSize.halfWidth
+        ? (screenWidth - 24) / 2
+        : screenWidth - 16;
 
     return DragTarget<_DragData>(
       key: ValueKey(item.id),
@@ -256,11 +261,7 @@ class _WidgetGridState extends ConsumerState<_WidgetGrid> {
             color: Colors.transparent,
             child: Opacity(
               opacity: 0.85,
-              child: SizedBox(
-                width: 160,
-                height: 90,
-                child: _buildCard(item),
-              ),
+              child: SizedBox(width: feedbackWidth, child: _buildCard(item)),
             ),
           ),
           childWhenDragging:
@@ -293,51 +294,124 @@ class _WidgetGridState extends ConsumerState<_WidgetGrid> {
         WidgetType.ram => RamCard(hasBg: widget.hasBg),
         WidgetType.volume => VolumeCard(hasBg: widget.hasBg),
         WidgetType.screenLock => ScreenLockCard(hasBg: widget.hasBg),
-        WidgetType.notifications => NotificationsCard(hasBg: widget.hasBg),
       };
 }
 
 // ── Resize handle ─────────────────────────────────────────────────────────────
 
-class _ResizeHandle extends StatelessWidget {
+class _ResizeHandle extends StatefulWidget {
   const _ResizeHandle({required this.item, required this.onResize});
   final DashboardItem item;
   final void Function(WidgetSize) onResize;
 
   @override
+  State<_ResizeHandle> createState() => _ResizeHandleState();
+}
+
+class _ResizeHandleState extends State<_ResizeHandle>
+    with SingleTickerProviderStateMixin {
+  double _dragDx = 0;
+  bool _active = false;
+
+  late final AnimationController _ctrl;
+  late final Animation<double> _scale;
+
+  @override
+  void initState() {
+    super.initState();
+    _ctrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 250),
+    );
+    _scale = Tween<double>(begin: 1.0, end: 1.5).animate(
+      CurvedAnimation(parent: _ctrl, curve: Curves.easeInOut),
+    );
+  }
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  void _onDragStart(DragStartDetails _) {
+    setState(() {
+      _active = true;
+      _dragDx = 0;
+    });
+    _ctrl.repeat(reverse: true);
+  }
+
+  void _onDragUpdate(DragUpdateDetails d) {
+    setState(() => _dragDx += d.delta.dx);
+  }
+
+  void _onDragEnd(DragEndDetails d) {
+    _ctrl.stop();
+    _ctrl.reset();
+    final totalDx = _dragDx;
+    final vel = d.velocity.pixelsPerSecond.dx;
+    setState(() {
+      _active = false;
+      _dragDx = 0;
+    });
+    final expandTrigger = totalDx > _kResizeThreshold || vel > 300;
+    final shrinkTrigger = totalDx < -_kResizeThreshold || vel < -300;
+    if (expandTrigger && widget.item.effectiveSize == WidgetSize.halfWidth) {
+      widget.onResize(WidgetSize.fullWidth);
+    } else if (shrinkTrigger && widget.item.effectiveSize == WidgetSize.fullWidth) {
+      widget.onResize(WidgetSize.halfWidth);
+    }
+  }
+
+  void _onDragCancel() {
+    _ctrl.stop();
+    _ctrl.reset();
+    setState(() {
+      _active = false;
+      _dragDx = 0;
+    });
+  }
+
+  @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
+    final dotColor = _active
+        ? cs.primary.withValues(alpha: 0.9)
+        : cs.onSurfaceVariant.withValues(alpha: 0.4);
+
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
-      onHorizontalDragEnd: (details) {
-        final vx = details.velocity.pixelsPerSecond.dx;
-        if (vx > 100 && item.effectiveSize == WidgetSize.halfWidth) {
-          onResize(WidgetSize.fullWidth);
-        } else if (vx < -100 && item.effectiveSize == WidgetSize.fullWidth) {
-          onResize(WidgetSize.halfWidth);
-        }
-      },
-      child: Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            _dot(cs),
-            const SizedBox(height: 3),
-            _dot(cs),
-            const SizedBox(height: 3),
-            _dot(cs),
-          ],
+      onHorizontalDragStart: _onDragStart,
+      onHorizontalDragUpdate: _onDragUpdate,
+      onHorizontalDragEnd: _onDragEnd,
+      onHorizontalDragCancel: _onDragCancel,
+      child: AnimatedBuilder(
+        animation: _scale,
+        builder: (_, child) => Transform.scale(
+          scale: _active ? _scale.value : 1.0,
+          child: child,
+        ),
+        child: Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _dot(dotColor),
+              const SizedBox(height: 3),
+              _dot(dotColor),
+              const SizedBox(height: 3),
+              _dot(dotColor),
+            ],
+          ),
         ),
       ),
     );
   }
 
-  Widget _dot(ColorScheme cs) => Container(
-        width: 3,
-        height: 3,
-        decoration: BoxDecoration(
-          color: cs.onSurfaceVariant.withValues(alpha: 0.4),
-          shape: BoxShape.circle,
-        ),
+  Widget _dot(Color color) => AnimatedContainer(
+        duration: const Duration(milliseconds: 150),
+        width: _active ? 4 : 3,
+        height: _active ? 4 : 3,
+        decoration: BoxDecoration(color: color, shape: BoxShape.circle),
       );
 }
