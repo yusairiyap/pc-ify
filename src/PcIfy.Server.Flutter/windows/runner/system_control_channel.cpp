@@ -175,14 +175,6 @@ void RegisterSystemControlChannel(flutter::FlutterEngine* engine) {
             } else if (method == "wakeScreen") {
                 mouse_event(MOUSEEVENTF_MOVE, 0, 0, 0, 0);
                 result->Success();
-            } else if (method == "getNotifications") {
-                flutter::EncodableMap r = {
-                    {flutter::EncodableValue("available"), flutter::EncodableValue(false)},
-                    {flutter::EncodableValue("items"), flutter::EncodableValue(flutter::EncodableList{})},
-                };
-                result->Success(flutter::EncodableValue(r));
-            } else if (method == "clearNotifications") {
-                result->Success();
             } else {
                 result->NotImplemented();
             }
