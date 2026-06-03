@@ -101,7 +101,19 @@ Kestrel runs on a background thread; WinForms runs on the STA UI thread. Always 
 
 ### Android Foreground Service
 
-On Android, the shelf server runs on the main isolate. `flutter_foreground_task` keeps the process alive in the background by maintaining a foreground `Service` with a persistent notification. `ForegroundServiceImpl` in `lib/services/platform/foreground_service_android.dart` manages start/stop. Started alongside `HttpServerService.start()` and stopped with `HttpServerService.stop()`.
+On Android, the shelf server runs on the main isolate. `flutter_foreground_task` keeps the process alive in the background by maintaining a foreground `Service` (type `dataSync`) with a persistent notification. `ForegroundServiceImpl` in `lib/services/platform/foreground_service_android.dart` manages start/stop. Started alongside `HttpServerService.start()` and stopped with `HttpServerService.stop()`.
+
+`ForegroundServiceImpl.init()` is called once at startup from `main.dart` so the notification channel (`pcify_server_v2`, DEFAULT importance) exists up-front; `autoRunOnBoot: true` pairs with the declared `ForegroundTaskBootReceiver` to restart after reboot. The interface also exposes notification-permission and battery-optimization checks/requests (backed by the plugin's `isIgnoringBatteryOptimizations` / `requestIgnoreBatteryOptimization` and `checkNotificationPermission` / `requestNotificationPermission`).
+
+**Background survival on modern Android:** The dominant reason the server "dies on minimize" is OEM battery optimization (Samsung/Xiaomi/OPPO/Vivo), not the foreground service itself. The fixes: `REQUEST_IGNORE_BATTERY_OPTIMIZATIONS` permission + in-app exemption request, and guidance to OEM autostart/lock-in-recents (no standard API — `MainActivity.openAppSettings` deep-links to the app's settings page). Note Android 15's `dataSync` 6-hour/24h background cap is a platform constraint that resets when the app is foregrounded.
+
+### First-Run Onboarding (Android)
+
+`AppSettings.onboardingCompleted` (default `false`) gates the home in `app.dart`: on Android, `WelcomeScreen` (`lib/features/onboarding/welcome_screen.dart`) shows a permission wizard (notifications → battery optimization → all-files access → keep-alive tips) until completed; non-Android always goes straight to `MainScreen`. The wizard is re-runnable from Settings → **Background & Battery** (`WelcomeScreen(isRerun: true)`), which also shows live permission status and fix buttons.
+
+### Android Release Signing (CI)
+
+`android/app/build.gradle.kts` (both server and client) loads an optional `android/key.properties`; when present it signs release builds with a stable keystore, otherwise it falls back to debug signing so local builds work. The `build-apk.yml` workflow writes `key.properties` + `keystore.jks` from GitHub secrets (`ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS`, `ANDROID_KEY_PASSWORD`). A stable signature means installing an update no longer forces an uninstall (which would reset granted permissions). `key.properties`/`*.jks`/`*.keystore` are gitignored.
 
 ### Desktop Tray (Windows / macOS)
 
@@ -215,7 +227,8 @@ All protected (requires `Authorization: Bearer`):
 | `lib/services/platform/system_control_android.dart` | Android MethodChannel implementation |
 | `lib/services/platform/system_control_desktop.dart` | Windows/macOS MethodChannel implementation |
 | `lib/services/platform/tray_service_desktop.dart` | Windows/macOS tray icon |
-| `lib/services/platform/foreground_service_android.dart` | Android background keep-alive |
+| `lib/services/platform/foreground_service_android.dart` | Android background keep-alive + notification/battery permission helpers |
+| `lib/features/onboarding/welcome_screen.dart` | First-run permission wizard (also re-runnable from Settings) |
 | `android/app/src/main/AndroidManifest.xml` | Permissions + service declarations |
 | `android/app/src/main/kotlin/.../MainActivity.kt` | MethodChannel handlers for permissions + system control |
 | `android/app/src/main/kotlin/.../PcIfyAccessibilityService.kt` | Remote screen lock via Accessibility API |

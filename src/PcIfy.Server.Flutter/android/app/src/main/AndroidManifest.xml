@@ -21,6 +21,14 @@
     <!-- Wake lock to keep CPU active while serving -->
     <uses-permission android:name="android.permission.WAKE_LOCK"/>
 
+    <!-- Lets the app ask the user to exempt it from battery optimisation (Doze).
+         Without this exemption, aggressive OEMs (Samsung/Xiaomi/OPPO/Vivo) kill
+         the background process even with a live foreground service.
+         NOTE: for Play Store submission this permission needs Console
+         justification; the in-app fallback opens the battery-optimisation
+         settings list, which is always allowed. -->
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS"/>
+
     <!-- Storage: Android 13+ granular media permissions -->
     <uses-permission android:name="android.permission.READ_MEDIA_IMAGES"/>
     <uses-permission android:name="android.permission.READ_MEDIA_VIDEO"/>

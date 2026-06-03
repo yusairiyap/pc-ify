@@ -45,6 +45,17 @@ class MainActivity : FlutterActivity() {
                         }
                         result.success(null)
                     }
+                    "openAppSettings" -> {
+                        // Deep-link to this app's system settings page so the user can
+                        // reach OEM "Autostart" / "Battery" / "Notifications" screens.
+                        // There is no standard API for the per-OEM autostart toggles.
+                        val intent = Intent(
+                            Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                            Uri.parse("package:$packageName")
+                        ).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                        startActivity(intent)
+                        result.success(null)
+                    }
                     else -> result.notImplemented()
                 }
             }

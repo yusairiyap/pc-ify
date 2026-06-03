@@ -13,4 +13,11 @@ abstract final class StoragePermissionService {
     if (!Platform.isAndroid) return;
     await _channel.invokeMethod<void>('requestManageStoragePermission');
   }
+
+  /// Opens this app's system settings page, where the user can reach OEM
+  /// "Autostart" / "Battery" / "Notifications" screens that have no standard API.
+  static Future<void> openAppSettings() async {
+    if (!Platform.isAndroid) return;
+    await _channel.invokeMethod<void>('openAppSettings');
+  }
 }

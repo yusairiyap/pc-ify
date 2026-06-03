@@ -76,7 +76,11 @@ Future<void> main() async {
 }
 
 void _registerAndroidServices() {
-  ForegroundServiceHelper.register(fg_android.ForegroundServiceImpl());
+  final foreground = fg_android.ForegroundServiceImpl();
+  ForegroundServiceHelper.register(foreground);
+  // Create the notification channel up-front so it exists before the service is
+  // first started (and survives even if the user later toggles the server off).
+  foreground.init();
   PlatformThumbnailHelper.register(mobile_thumb.getMobileVideoThumbnail);
   SystemControlServiceHelper.register(sys_ctrl_android.SystemControlAndroidImpl());
 }

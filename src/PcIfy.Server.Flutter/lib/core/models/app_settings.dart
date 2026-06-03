@@ -11,6 +11,7 @@ class AppSettings {
   final List<UserCredential> users;
   final List<String> sourceDirectories;
   final String colorMode;
+  final bool onboardingCompleted;
 
   const AppSettings({
     this.port = 8080,
@@ -21,6 +22,7 @@ class AppSettings {
     this.users = const [],
     this.sourceDirectories = const [],
     this.colorMode = 'System',
+    this.onboardingCompleted = false,
   });
 
   factory AppSettings.defaults() => AppSettings(
@@ -41,6 +43,7 @@ class AppSettings {
             .map((e) => e as String)
             .toList(),
         colorMode: (json['colorMode'] as String?) ?? 'System',
+        onboardingCompleted: (json['onboardingCompleted'] as bool?) ?? false,
       );
 
   Map<String, dynamic> toJson() => {
@@ -52,6 +55,7 @@ class AppSettings {
         'users': users.map((u) => u.toJson()).toList(),
         'sourceDirectories': sourceDirectories,
         'colorMode': colorMode,
+        'onboardingCompleted': onboardingCompleted,
       };
 
   AppSettings copyWith({
@@ -63,6 +67,7 @@ class AppSettings {
     List<UserCredential>? users,
     List<String>? sourceDirectories,
     String? colorMode,
+    bool? onboardingCompleted,
   }) =>
       AppSettings(
         port: port ?? this.port,
@@ -73,6 +78,7 @@ class AppSettings {
         users: users ?? this.users,
         sourceDirectories: sourceDirectories ?? this.sourceDirectories,
         colorMode: colorMode ?? this.colorMode,
+        onboardingCompleted: onboardingCompleted ?? this.onboardingCompleted,
       );
 
   static String _defaultServerName() {

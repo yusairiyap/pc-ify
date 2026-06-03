@@ -48,5 +48,10 @@ app.*.map.json
 # Generated local config (machine-specific)
 **/android/local.properties
 
+# Release signing — never commit. Provided by CI from secrets.
+**/android/key.properties
+**/*.keystore
+**/*.jks
+
 # Flutter ephemeral build outputs
 **/Flutter/ephemeral/
