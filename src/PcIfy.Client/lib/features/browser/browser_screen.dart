@@ -1067,9 +1067,6 @@ class _BrowserLoadedState extends ConsumerState<_BrowserLoaded> {
 
     switch (action) {
       case 'play':
-        notifier.clearSelection();
-        context.push(
-            '/player?path=${Uri.encodeComponent(item.entry.path)}&name=${Uri.encodeComponent(item.entry.name)}');
       case 'view':
         final media = listing.entries
             .where((x) => x.type == FileType.image || x.type == FileType.video)
@@ -1356,8 +1353,18 @@ class _BrowserLoadedState extends ConsumerState<_BrowserLoaded> {
               .showSnackBar(SnackBar(content: Text('Bookmarked ${e.name}')));
         }
       case 'play':
-        context.push(
-            '/player?path=${Uri.encodeComponent(e.path)}&name=${Uri.encodeComponent(e.name)}');
+        final playListing =
+            ref.read(_browserNotifierProvider).valueOrNull?.listing;
+        if (context.mounted) {
+          final playMedia = playListing?.entries
+                  .where((x) =>
+                      x.type == FileType.image || x.type == FileType.video)
+                  .toList() ??
+              [];
+          final playIdx = playMedia.indexWhere((x) => x.path == e.path);
+          context.push(
+              '/gallery?path=${Uri.encodeComponent(playListing?.path ?? '')}&index=${playIdx < 0 ? 0 : playIdx}');
+        }
       case 'external':
         final uri = item.streamUri ?? '';
         final mime = MediaTypes.getMimeType(MediaTypes.extensionOf(e.name));
