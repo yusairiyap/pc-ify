@@ -50,10 +50,19 @@ final routerProvider = Provider<GoRouter>((ref) {
       return null;
     },
     routes: [
-      GoRoute(path: '/welcome', builder: (_, __) => const WelcomeScreen()),
-      GoRoute(path: '/setup', builder: (_, __) => const SetupScreen()),
+      GoRoute(
+        path: '/welcome',
+        pageBuilder: (_, state) => _fadeZoomPage(state, const WelcomeScreen()),
+      ),
+      GoRoute(
+        path: '/setup',
+        pageBuilder: (_, state) => _slideRightPage(state, const SetupScreen()),
+      ),
       StatefulShellRoute(
-        builder: (context, state, shell) => MainShell(shell: shell),
+        pageBuilder: (context, state, shell) => _fadeZoomPage(
+          state,
+          MainShell(shell: shell),
+        ),
         navigatorContainerBuilder: (context, shell, children) =>
             AnimatedTabContainer(
               currentIndex: shell.currentIndex,
@@ -173,6 +182,7 @@ final routerProvider = Provider<GoRouter>((ref) {
   );
 });
 
+/// Slide up from the bottom — used for full-screen modal routes (player, gallery, etc.)
 CustomTransitionPage<void> _slideUpPage(GoRouterState state, Widget child) {
   return CustomTransitionPage<void>(
     key: state.pageKey,
@@ -184,6 +194,45 @@ CustomTransitionPage<void> _slideUpPage(GoRouterState state, Widget child) {
               .chain(CurveTween(curve: Curves.easeOutCubic)),
         ),
         child: child,
+      );
+    },
+  );
+}
+
+/// Slide in from the right — used when moving forward in the setup flow.
+CustomTransitionPage<void> _slideRightPage(GoRouterState state, Widget child) {
+  return CustomTransitionPage<void>(
+    key: state.pageKey,
+    child: child,
+    transitionsBuilder: (context, animation, secondaryAnimation, child) {
+      return SlideTransition(
+        position: animation.drive(
+          Tween(begin: const Offset(1.0, 0.0), end: Offset.zero)
+              .chain(CurveTween(curve: Curves.easeOutCubic)),
+        ),
+        child: FadeTransition(opacity: animation, child: child),
+      );
+    },
+  );
+}
+
+/// Fade + scale forward — used for screen replacements (welcome → home).
+CustomTransitionPage<T> _fadeZoomPage<T>(GoRouterState state, Widget child) {
+  return CustomTransitionPage<T>(
+    key: state.pageKey,
+    child: child,
+    transitionsBuilder: (context, animation, secondaryAnimation, child) {
+      return FadeTransition(
+        opacity: CurvedAnimation(
+          parent: animation,
+          curve: Curves.easeOutCubic,
+        ),
+        child: ScaleTransition(
+          scale: Tween<double>(begin: 0.94, end: 1.0).animate(
+            CurvedAnimation(parent: animation, curve: Curves.easeOutCubic),
+          ),
+          child: child,
+        ),
       );
     },
   );

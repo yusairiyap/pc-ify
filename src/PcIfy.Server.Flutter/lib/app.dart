@@ -32,7 +32,22 @@ class PcIfyServerApp extends ConsumerWidget {
           colorScheme: schemeDark,
           brightness: Brightness.dark),
       themeMode: theme.mode,
-      home: needsOnboarding ? const WelcomeScreen() : const MainScreen(),
+      home: AnimatedSwitcher(
+        duration: const Duration(milliseconds: 600),
+        switchInCurve: Curves.easeOutCubic,
+        switchOutCurve: Curves.easeInCubic,
+        transitionBuilder: (child, animation) => FadeTransition(
+          opacity: animation,
+          child: ScaleTransition(
+            scale: Tween<double>(begin: 0.94, end: 1.0).animate(animation),
+            child: child,
+          ),
+        ),
+        child: KeyedSubtree(
+          key: ValueKey(needsOnboarding),
+          child: needsOnboarding ? const WelcomeScreen() : const MainScreen(),
+        ),
+      ),
     );
   }
 }
