@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:local_auth/local_auth.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../core/utils/grid_density_helper.dart';
 import '../../features/app_lock/app_lock_providers.dart';
 import '../../providers/services_providers.dart';
@@ -257,6 +258,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             const SizedBox(height: 24),
             _AndroidDisclaimerCard(),
           ],
+          const SizedBox(height: 24),
+          const _SectionLabel('About'),
+          _AboutCard(),
         ],
       ),
     );
@@ -582,6 +586,56 @@ class _SectionLabel extends StatelessWidget {
               .textTheme
               .labelMedium
               ?.copyWith(color: Theme.of(context).colorScheme.primary)),
+    );
+  }
+}
+
+class _AboutCard extends StatelessWidget {
+  Future<void> _openGitHub() async {
+    final uri = Uri.parse('https://github.com/yusairiyap/pc-ify');
+    if (await canLaunchUrl(uri)) {
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(Icons.info_outline, size: 20, color: cs.onSurfaceVariant),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text('pc-ify',
+                          style: TextStyle(fontWeight: FontWeight.w600)),
+                      const SizedBox(height: 2),
+                      Text('Developed by Yusairi Yap',
+                          style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                color: cs.onSurfaceVariant,
+                              )),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            OutlinedButton.icon(
+              onPressed: _openGitHub,
+              icon: const Icon(Icons.open_in_new, size: 16),
+              label: const Text('github.com/yusairiyap/pc-ify'),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

@@ -5,10 +5,13 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../core/models/app_settings.dart';
 import '../../providers/server_providers.dart';
 import '../../providers/settings_providers.dart';
 import '../../providers/theme_providers.dart';
+import '../../services/platform/storage_permission_service.dart';
+import '../onboarding/welcome_screen.dart';
 import 'directories_tile.dart';
 import 'users_tile.dart';
 
@@ -170,11 +173,15 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             onImported: (imported) => setState(() => _draft = imported),
           ),
 
-          // ── Android disclaimer ────────────────────────────────────────
+          // ── Background & Battery (Android) ────────────────────────────
           if (Platform.isAndroid) ...[
             const SizedBox(height: 24),
-            const _AndroidServerDisclaimerCard(),
+            const _BackgroundBatteryCard(),
           ],
+
+          // ── About ─────────────────────────────────────────────────────
+          const SizedBox(height: 24),
+          const _AboutCard(),
         ],
       ),
     );
@@ -363,38 +370,224 @@ class _ImportExportCardState extends State<_ImportExportCard> {
   }
 }
 
-// ── Android server disclaimer ─────────────────────────────────────────────────
+// ── Background & Battery (Android) ────────────────────────────────────────────
 
-class _AndroidServerDisclaimerCard extends StatelessWidget {
-  const _AndroidServerDisclaimerCard();
+/// Actionable controls for keeping the server alive in the background. Shows
+/// live permission status and lets the user fix each one, instead of the old
+/// passive "this might get killed" disclaimer.
+class _BackgroundBatteryCard extends ConsumerStatefulWidget {
+  const _BackgroundBatteryCard();
+
+  @override
+  ConsumerState<_BackgroundBatteryCard> createState() =>
+      _BackgroundBatteryCardState();
+}
+
+class _BackgroundBatteryCardState extends ConsumerState<_BackgroundBatteryCard>
+    with WidgetsBindingObserver {
+  bool _notificationsGranted = false;
+  bool _batteryIgnored = false;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _refresh();
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) _refresh();
+  }
+
+  Future<void> _refresh() async {
+    final fg = ref.read(foregroundServiceProvider);
+    final notifications = await fg.isNotificationPermissionGranted();
+    final battery = await fg.isBatteryOptimizationIgnored();
+    if (!mounted) return;
+    setState(() {
+      _notificationsGranted = notifications;
+      _batteryIgnored = battery;
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     return Card(
-      color: cs.surfaceContainerHighest,
       child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Row(
+        padding: const EdgeInsets.all(12),
+        child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Icon(Icons.info_outline, color: cs.onSurfaceVariant, size: 20),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Text(
-                'Android notice\n\n'
-                'On some devices — particularly those with aggressive battery '
-                'optimisation (e.g. Samsung, Xiaomi, OPPO) — the server '
-                'process may be killed by the system while running in the '
-                'background, even when the foreground service notification is '
-                'active. If clients lose connection unexpectedly, keep this '
-                'app in the foreground or disable battery optimisation for it '
-                'in your device settings.',
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: cs.onSurfaceVariant,
-                      height: 1.5,
-                    ),
-              ),
+            Text('Background & Battery',
+                style: Theme.of(context).textTheme.titleSmall),
+            const SizedBox(height: 4),
+            Text(
+              'Keep the server reachable while the app is minimised or the '
+              'screen is off. Aggressive battery optimisation (Samsung, Xiaomi, '
+              'OPPO, Vivo) is the usual reason clients lose connection.',
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: cs.onSurfaceVariant,
+                  ),
+            ),
+            const SizedBox(height: 12),
+            _StatusRow(
+              label: 'Notifications',
+              done: _notificationsGranted,
+              actionLabel: 'Allow',
+              onAction: () async {
+                await ref
+                    .read(foregroundServiceProvider)
+                    .requestNotificationPermission();
+                await _refresh();
+              },
+            ),
+            _StatusRow(
+              label: 'Ignore battery optimisation',
+              done: _batteryIgnored,
+              actionLabel: 'Allow',
+              onAction: () async {
+                await ref
+                    .read(foregroundServiceProvider)
+                    .requestBatteryOptimizationExemption();
+                await _refresh();
+              },
+            ),
+            const Divider(height: 24),
+            Text(
+              'Some manufacturers add their own "Autostart" / app-killing '
+              'controls with no standard API. Lock pc-ify server in Recent apps, '
+              'and open app settings to enable Autostart if available.',
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: cs.onSurfaceVariant,
+                  ),
+            ),
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                OutlinedButton.icon(
+                  onPressed: () => StoragePermissionService.openAppSettings(),
+                  icon: const Icon(Icons.open_in_new, size: 16),
+                  label: const Text('Open app settings'),
+                ),
+                OutlinedButton.icon(
+                  onPressed: () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => const WelcomeScreen(isRerun: true),
+                      ),
+                    );
+                  },
+                  icon: const Icon(Icons.replay, size: 16),
+                  label: const Text('Re-run setup'),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _StatusRow extends StatelessWidget {
+  final String label;
+  final bool done;
+  final String actionLabel;
+  final Future<void> Function() onAction;
+
+  const _StatusRow({
+    required this.label,
+    required this.done,
+    required this.actionLabel,
+    required this.onAction,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        children: [
+          Icon(
+            done ? Icons.check_circle : Icons.error_outline,
+            color: done ? cs.primary : cs.error,
+            size: 20,
+          ),
+          const SizedBox(width: 10),
+          Expanded(child: Text(label)),
+          if (done)
+            Text('Granted',
+                style: TextStyle(color: cs.onSurfaceVariant, fontSize: 12))
+          else
+            FilledButton.tonal(
+              onPressed: onAction,
+              child: Text(actionLabel),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+// ── About Card ────────────────────────────────────────────────────────────────
+
+class _AboutCard extends StatelessWidget {
+  const _AboutCard();
+
+  Future<void> _openGitHub() async {
+    final uri = Uri.parse('https://github.com/yusairiyap/pc-ify');
+    if (await canLaunchUrl(uri)) {
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('About', style: Theme.of(context).textTheme.titleSmall),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Icon(Icons.info_outline, size: 20, color: cs.onSurfaceVariant),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text('pc-ify server',
+                          style: TextStyle(fontWeight: FontWeight.w600)),
+                      const SizedBox(height: 2),
+                      Text('Developed by Yusairi Yap',
+                          style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                color: cs.onSurfaceVariant,
+                              )),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            OutlinedButton.icon(
+              onPressed: _openGitHub,
+              icon: const Icon(Icons.open_in_new, size: 16),
+              label: const Text('github.com/yusairiyap/pc-ify'),
             ),
           ],
         ),

@@ -222,6 +222,7 @@ class _SetupScreenState extends ConsumerState<SetupScreen> {
                                         flex: 3,
                                         child: TextField(
                                           controller: _hostCtrl,
+                                          autofocus: true,
                                           decoration: const InputDecoration(
                                             labelText: 'Host',
                                             border: OutlineInputBorder(),

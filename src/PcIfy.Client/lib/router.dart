@@ -8,6 +8,7 @@ import 'features/browser/background_crop_screen.dart';
 import 'features/browser/background_video_trim_screen.dart';
 import 'features/browser/browser_screen.dart';
 import 'features/browser/image_picker_screen.dart';
+import 'features/onboarding/welcome_screen.dart';
 import 'features/split_view/split_view_screen.dart';
 import 'features/home/home_screen.dart';
 import 'features/image_gallery/image_gallery_screen.dart';
@@ -31,19 +32,37 @@ final routerProvider = Provider<GoRouter>((ref) {
         return '/setup';
       }
 
-      if (state.matchedLocation == '/setup') {
-        final conn = ref.read(connectionServiceProvider);
-        final auth = ref.read(authTokenServiceProvider);
-        if (conn.isConfigured && await auth.isTokenValid()) {
-          return '/home';
-        }
+      final conn = ref.read(connectionServiceProvider);
+      final auth = ref.read(authTokenServiceProvider);
+      final isAuthenticated = conn.isConfigured && await auth.isTokenValid();
+
+      // Redirect authenticated users away from /setup to /home.
+      if (state.matchedLocation == '/setup' && isAuthenticated) return '/home';
+
+      // Show the onboarding wizard on first launch for unauthenticated users.
+      if (state.matchedLocation != '/welcome' && !isAuthenticated) {
+        final prefs = ref.read(sharedPrefsProvider);
+        final onboardingDone =
+            prefs.getBool('client_onboarding_completed') ?? false;
+        if (!onboardingDone) return '/welcome';
       }
+
       return null;
     },
     routes: [
-      GoRoute(path: '/setup', builder: (_, __) => const SetupScreen()),
+      GoRoute(
+        path: '/welcome',
+        pageBuilder: (_, state) => _fadeZoomPage(state, const WelcomeScreen()),
+      ),
+      GoRoute(
+        path: '/setup',
+        pageBuilder: (_, state) => _slideRightPage(state, const SetupScreen()),
+      ),
       StatefulShellRoute(
-        builder: (context, state, shell) => MainShell(shell: shell),
+        pageBuilder: (context, state, shell) => _fadeZoomPage(
+          state,
+          MainShell(shell: shell),
+        ),
         navigatorContainerBuilder: (context, shell, children) =>
             AnimatedTabContainer(
               currentIndex: shell.currentIndex,
@@ -163,6 +182,7 @@ final routerProvider = Provider<GoRouter>((ref) {
   );
 });
 
+/// Slide up from the bottom — used for full-screen modal routes (player, gallery, etc.)
 CustomTransitionPage<void> _slideUpPage(GoRouterState state, Widget child) {
   return CustomTransitionPage<void>(
     key: state.pageKey,
@@ -174,6 +194,45 @@ CustomTransitionPage<void> _slideUpPage(GoRouterState state, Widget child) {
               .chain(CurveTween(curve: Curves.easeOutCubic)),
         ),
         child: child,
+      );
+    },
+  );
+}
+
+/// Slide in from the right — used when moving forward in the setup flow.
+CustomTransitionPage<void> _slideRightPage(GoRouterState state, Widget child) {
+  return CustomTransitionPage<void>(
+    key: state.pageKey,
+    child: child,
+    transitionsBuilder: (context, animation, secondaryAnimation, child) {
+      return SlideTransition(
+        position: animation.drive(
+          Tween(begin: const Offset(1.0, 0.0), end: Offset.zero)
+              .chain(CurveTween(curve: Curves.easeOutCubic)),
+        ),
+        child: FadeTransition(opacity: animation, child: child),
+      );
+    },
+  );
+}
+
+/// Fade + scale forward — used for screen replacements (welcome → home).
+CustomTransitionPage<T> _fadeZoomPage<T>(GoRouterState state, Widget child) {
+  return CustomTransitionPage<T>(
+    key: state.pageKey,
+    child: child,
+    transitionsBuilder: (context, animation, secondaryAnimation, child) {
+      return FadeTransition(
+        opacity: CurvedAnimation(
+          parent: animation,
+          curve: Curves.easeOutCubic,
+        ),
+        child: ScaleTransition(
+          scale: Tween<double>(begin: 0.94, end: 1.0).animate(
+            CurvedAnimation(parent: animation, curve: Curves.easeOutCubic),
+          ),
+          child: child,
+        ),
       );
     },
   );

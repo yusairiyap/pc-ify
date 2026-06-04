@@ -144,7 +144,7 @@ class _MainScreenState extends ConsumerState<MainScreen> {
     final ip = state.ipAddresses.isNotEmpty
         ? state.ipAddresses.first
         : 'localhost';
-    Clipboard.setData(ClipboardData(text: 'http://$ip:${state.port}'));
+    Clipboard.setData(ClipboardData(text: ip));
     setState(() => _showCopied = true);
     _copyTimer?.cancel();
     _copyTimer = Timer(const Duration(seconds: 3), () {

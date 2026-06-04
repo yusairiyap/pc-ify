@@ -63,6 +63,26 @@ jobs:
       - name: Analyze
         run: flutter analyze --no-fatal-infos
 
+      - name: Set up release signing
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          if [ -n "$ANDROID_KEYSTORE_BASE64" ]; then
+            echo "$ANDROID_KEYSTORE_BASE64" | base64 -d > android/app/keystore.jks || { echo "base64 decode failed"; exit 1; }
+            {
+              echo "storeFile=keystore.jks"
+              echo "storePassword=$ANDROID_KEYSTORE_PASSWORD"
+              echo "keyAlias=$ANDROID_KEY_ALIAS"
+              echo "keyPassword=$ANDROID_KEY_PASSWORD"
+            } > android/key.properties
+            echo "Release signing configured."
+          else
+            echo "No keystore secret set — using debug signing."
+          fi
+
       - name: Build APK (split per ABI)
         run: flutter build apk --release --split-per-abi
 
@@ -114,6 +134,26 @@ jobs:
 
       - name: Analyze
         run: flutter analyze --no-fatal-infos
+
+      - name: Set up release signing
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          if [ -n "$ANDROID_KEYSTORE_BASE64" ]; then
+            echo "$ANDROID_KEYSTORE_BASE64" | base64 -d > android/app/keystore.jks || { echo "base64 decode failed"; exit 1; }
+            {
+              echo "storeFile=keystore.jks"
+              echo "storePassword=$ANDROID_KEYSTORE_PASSWORD"
+              echo "keyAlias=$ANDROID_KEY_ALIAS"
+              echo "keyPassword=$ANDROID_KEY_PASSWORD"
+            } > android/key.properties
+            echo "Release signing configured."
+          else
+            echo "No keystore secret set — using debug signing."
+          fi
 
       - name: Build APK (split per ABI)
         run: flutter build apk --release --split-per-abi
