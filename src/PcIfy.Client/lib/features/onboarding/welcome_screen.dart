@@ -41,8 +41,18 @@ class _WelcomeScreenState extends ConsumerState<WelcomeScreen> {
         GridDensityHelper.fromString(prefs.getString('grid_density') ?? 'normal');
   }
 
-  void _goNext() {
-    if (_page < _totalPages - 1) setState(() => _page++);
+  Future<void> _goNext() async {
+    // Apply theme & density immediately when the user taps Next on the
+    // personalize page so the change is visible on the next step.
+    if (_page == 2) {
+      await ref
+          .read(themeNotifierProvider.notifier)
+          .apply(_selectedMode, _selectedColor);
+      await ref
+          .read(sharedPrefsProvider)
+          .setString('grid_density', _selectedDensity.name);
+    }
+    if (_page < _totalPages - 1 && mounted) setState(() => _page++);
   }
 
   void _goPrev() {
@@ -50,12 +60,8 @@ class _WelcomeScreenState extends ConsumerState<WelcomeScreen> {
   }
 
   Future<void> _finish() async {
-    await ref
-        .read(themeNotifierProvider.notifier)
-        .apply(_selectedMode, _selectedColor);
-    await ref
-        .read(sharedPrefsProvider)
-        .setString('grid_density', _selectedDensity.name);
+    // Theme & density were applied on the personalize → all-set transition;
+    // just mark onboarding complete and navigate.
     await ref
         .read(sharedPrefsProvider)
         .setBool('client_onboarding_completed', true);
@@ -138,7 +144,7 @@ class _WelcomePage extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             const Spacer(),
-            Icon(Icons.cast_connected_rounded, size: 80, color: cs.primary),
+            Icon(Icons.computer, size: 80, color: cs.primary),
             const SizedBox(height: 28),
             Text(
               'Welcome to pc-ify',
