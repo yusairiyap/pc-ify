@@ -12,9 +12,9 @@ class DashboardItem {
       size ?? _defaultSizeFor(type);
 
   static WidgetSize _defaultSizeFor(WidgetType t) =>
-      (t == WidgetType.battery || t == WidgetType.cpu || t == WidgetType.ram)
-          ? WidgetSize.halfWidth
-          : WidgetSize.fullWidth;
+      (t == WidgetType.screenLock)
+          ? WidgetSize.fullWidth
+          : WidgetSize.halfWidth;
 
   DashboardItem copyWith({WidgetSize? size}) =>
       DashboardItem(id: id, type: type, size: size ?? this.size);
