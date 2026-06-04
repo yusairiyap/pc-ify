@@ -62,10 +62,15 @@ final _galleryProvider = AsyncNotifierProvider.autoDispose
 // --- Screen ---
 
 class ImageGalleryScreen extends ConsumerStatefulWidget {
-  const ImageGalleryScreen(
-      {super.key, required this.folderPath, required this.startIndex});
+  const ImageGalleryScreen({
+    super.key,
+    required this.folderPath,
+    required this.startIndex,
+    this.initialPositionMs,
+  });
   final String folderPath;
   final int startIndex;
+  final int? initialPositionMs;
 
   @override
   ConsumerState<ImageGalleryScreen> createState() => _ImageGalleryScreenState();
@@ -697,6 +702,9 @@ class _ImageGalleryScreenState extends ConsumerState<ImageGalleryScreen>
                         playerNotifier: _currentPlayerNotifier,
                         zoomedNotifier: _zoomedNotifier,
                         muteNotifier: _muteNotifier,
+                        initialPositionMs: i == widget.startIndex
+                            ? widget.initialPositionMs
+                            : null,
                       );
                     }
                     return GestureDetector(
@@ -809,6 +817,7 @@ class _GalleryVideoPage extends ConsumerStatefulWidget {
     required this.playerNotifier,
     required this.zoomedNotifier,
     required this.muteNotifier,
+    this.initialPositionMs,
   });
   final String streamUri;
   final int index;
@@ -816,6 +825,7 @@ class _GalleryVideoPage extends ConsumerStatefulWidget {
   final ValueNotifier<Player?> playerNotifier;
   final ValueNotifier<bool> zoomedNotifier;
   final ValueNotifier<bool> muteNotifier;
+  final int? initialPositionMs;
 
   @override
   ConsumerState<_GalleryVideoPage> createState() => _GalleryVideoPageState();
@@ -860,6 +870,10 @@ class _GalleryVideoPageState extends ConsumerState<_GalleryVideoPage> {
     final repeat = ref.read(videoRepeatProvider);
     await _player.setPlaylistMode(repeat ? PlaylistMode.loop : PlaylistMode.none);
     await _player.open(Media(widget.streamUri), play: false);
+    final pos = widget.initialPositionMs;
+    if (pos != null && pos > 0) {
+      await _player.seek(Duration(milliseconds: pos));
+    }
     _ready = true;
     if (_isActive) {
       widget.playerNotifier.value = _player;

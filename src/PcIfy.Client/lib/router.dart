@@ -133,6 +133,8 @@ final routerProvider = Provider<GoRouter>((ref) {
             folderPath: state.uri.queryParameters['path'] ?? '',
             startIndex:
                 int.tryParse(state.uri.queryParameters['index'] ?? '0') ?? 0,
+            initialPositionMs:
+                int.tryParse(state.uri.queryParameters['pos'] ?? ''),
           ),
         ),
       ),

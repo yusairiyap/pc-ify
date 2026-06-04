@@ -227,17 +227,20 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                         style: Theme.of(context).textTheme.bodySmall,
                       ),
                       const SizedBox(height: 10),
-                      SegmentedButton<int>(
-                        showSelectedIcon: false,
-                        segments: const [
-                          ButtonSegment(value: 25, label: Text('Low')),
-                          ButtonSegment(value: 50, label: Text('Medium')),
-                          ButtonSegment(value: 75, label: Text('High')),
-                          ButtonSegment(value: 100, label: Text('Ultra')),
-                        ],
-                        selected: {_thumbnailQuality},
-                        onSelectionChanged: (v) =>
-                            _onThumbnailQualityChanged(v.first),
+                      SizedBox(
+                        width: double.infinity,
+                        child: SegmentedButton<int>(
+                          showSelectedIcon: false,
+                          segments: const [
+                            ButtonSegment(value: 25, label: Text('Low')),
+                            ButtonSegment(value: 50, label: Text('Medium')),
+                            ButtonSegment(value: 75, label: Text('High')),
+                            ButtonSegment(value: 100, label: Text('Ultra')),
+                          ],
+                          selected: {_thumbnailQuality},
+                          onSelectionChanged: (v) =>
+                              _onThumbnailQualityChanged(v.first),
+                        ),
                       ),
                     ],
                   ),

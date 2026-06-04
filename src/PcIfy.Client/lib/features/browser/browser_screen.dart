@@ -1308,12 +1308,20 @@ class _BrowserLoadedState extends ConsumerState<_BrowserLoaded> {
 
     if (!context.mounted || action == null) return;
 
-    // Video seek-to action from timeline strip
+    // Video seek-to action from timeline strip — open gallery at this video + position
     if (action.startsWith('seek:')) {
       final posMs = int.tryParse(action.substring(5)) ?? 0;
       if (context.mounted) {
+        final listing =
+            ref.read(_browserNotifierProvider).valueOrNull?.listing;
+        final media = listing?.entries
+                .where(
+                    (x) => x.type == FileType.image || x.type == FileType.video)
+                .toList() ??
+            [];
+        final idx = media.indexWhere((x) => x.path == e.path);
         context.push(
-            '/player?path=${Uri.encodeComponent(e.path)}&name=${Uri.encodeComponent(e.name)}&pos=$posMs');
+            '/gallery?path=${Uri.encodeComponent(listing?.path ?? '')}&index=${idx < 0 ? 0 : idx}&pos=$posMs');
       }
       return;
     }

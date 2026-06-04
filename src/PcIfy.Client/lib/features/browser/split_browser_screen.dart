@@ -186,7 +186,7 @@ class _BrowserPaneState extends ConsumerState<_BrowserPaneWidget> {
     _density =
         GridDensityHelper.fromString(prefs.getString('grid_density') ?? 'normal');
     _sort = sortFromString(prefs.getString(sortPrefKey));
-    _navigateTo(widget.initialPath, addToHistory: false);
+    _navigateTo(widget.initialPath);
   }
 
   Future<void> _navigateTo(String path, {bool addToHistory = true}) async {
@@ -345,13 +345,7 @@ class _BrowserPaneState extends ConsumerState<_BrowserPaneWidget> {
     final e = item.entry;
     if (e.type == FileType.folder) {
       _navigateTo(e.path);
-    } else if (e.type == FileType.video) {
-      final uri = item.streamUri;
-      if (uri != null && context.mounted) {
-        context.push(
-            '/player?path=${Uri.encodeComponent(e.path)}&name=${Uri.encodeComponent(e.name)}');
-      }
-    } else if (e.type == FileType.image) {
+    } else if (e.type == FileType.image || e.type == FileType.video) {
       if (_listing == null || !context.mounted) return;
       final media = _listing!.entries
           .where((x) => x.type == FileType.image || x.type == FileType.video)
@@ -417,9 +411,13 @@ class _BrowserPaneState extends ConsumerState<_BrowserPaneWidget> {
               .showSnackBar(SnackBar(content: Text('Bookmarked ${e.name}')));
         }
       case 'play':
-        if (mounted) {
+        if (_listing != null && mounted) {
+          final media = _listing!.entries
+              .where((x) => x.type == FileType.image || x.type == FileType.video)
+              .toList();
+          final idx = media.indexWhere((x) => x.path == e.path);
           context.push(
-              '/player?path=${Uri.encodeComponent(e.path)}&name=${Uri.encodeComponent(e.name)}');
+              '/gallery?path=${Uri.encodeComponent(_listing!.path)}&index=${idx < 0 ? 0 : idx}');
         }
       case 'view':
         if (_listing != null && mounted) {
