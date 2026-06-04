@@ -8,6 +8,7 @@ import 'features/browser/background_crop_screen.dart';
 import 'features/browser/background_video_trim_screen.dart';
 import 'features/browser/browser_screen.dart';
 import 'features/browser/image_picker_screen.dart';
+import 'features/browser/split_browser_screen.dart';
 import 'features/onboarding/welcome_screen.dart';
 import 'features/split_view/split_view_screen.dart';
 import 'features/home/home_screen.dart';
@@ -119,6 +120,8 @@ final routerProvider = Provider<GoRouter>((ref) {
           VideoPlayerScreen(
             filePath: state.uri.queryParameters['path'] ?? '',
             fileName: state.uri.queryParameters['name'] ?? '',
+            initialPositionMs: int.tryParse(
+                state.uri.queryParameters['pos'] ?? ''),
           ),
         ),
       ),
@@ -175,6 +178,18 @@ final routerProvider = Provider<GoRouter>((ref) {
           return _slideUpPage(
             state,
             SplitViewScreen(folderPath: folderPath, selectedItems: entries),
+          );
+        },
+      ),
+      GoRoute(
+        path: '/split-browser',
+        pageBuilder: (context, state) {
+          final extra = state.extra as Map<String, dynamic>? ?? {};
+          final path1 = extra['path1'] as String? ?? '';
+          final path2 = extra['path2'] as String? ?? '';
+          return _slideUpPage(
+            state,
+            SplitBrowserScreen(path1: path1, path2: path2),
           );
         },
       ),

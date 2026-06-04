@@ -179,6 +179,73 @@ DashboardLayout
 - Right-edge resize handle: horizontal drag ≥ 40 px OR ≥ 300 px/s velocity triggers expand/shrink. Handle animates (scale pulse + colour change) during drag.
 - `isBookmarks` sections: delete button enabled; item list replaced by static label (items managed in Browse tab)
 
+### Thumbnail Quality Setting (Client)
+
+Thumbnails are requested with `?quality=N` (integer 10–100) instead of `?size=small/medium/large`. The quality maps to a max dimension and JPEG quality on the server.
+
+**Client:** `thumbnail_quality` (int) stored in SharedPreferences. Default: 50 (≈ 256 px, matching the old `medium` size). Configurable in Settings → Playback as a `SegmentedButton` with Low / Medium / High / Ultra (25 / 50 / 75 / 100).
+
+**`ApiService.buildThumbnailUri` / `buildThumbnailUriWithToken`** accepts `{int quality = 50, double? atSeconds}`. Pass `quality:` from the pref everywhere thumbnails are fetched.
+
+**Server `ThumbnailService.getOrCreate`** maps quality to:
+- `maxDim = (quality / 100 * 512).clamp(32, 512).round()`
+- `jpegQuality = (60 + quality * 0.35).clamp(60, 95).round()`
+
+Cache key: `sha256("$path:q$quality:t${atSeconds ?? 2.00}")` — distinct from old size-name keys, so a quality change always fetches a new thumbnail.
+
+Backwards-compat: `?size=small/medium/large` in `HttpServerService._handleThumbnail` maps to quality 25 / 50 / 100 before delegating to `getOrCreate`.
+
+---
+
+### Video Timeline Thumbnail Strip (Client)
+
+**Reusable widget:** `VideoTimelineStrip` in `lib/features/browser/video_timeline_strip.dart`
+- Renders 5 `CachedNetworkImage` thumbnails at 15 / 30 / 45 / 60 / 75 % of duration
+- Builds URIs async (calls `api.buildThumbnailUriWithToken` with `atSeconds:` for each position)
+- Tapping a thumbnail calls `onSeekTap(positionMs)`
+- Loading state: `_ShimmerBox` grey placeholders; error/Android stub: `_VideoPlaceholder` icon boxes
+- `VideoTimelinePlaceholder` (public): static 5-box placeholder for use before duration is known
+
+**Browser long-press (videos):** `_showVideoContextSheet()` in `browser_screen.dart`
+- `FutureBuilder(api.getVideoDurationMs(path))` → shows `VideoTimelineStrip` or `VideoTimelinePlaceholder`
+- Tapping a thumbnail: `Navigator.pop(sheetCtx, 'seek:$posMs')` → route to `/player?path=...&pos=$posMs`
+
+**Gallery video player panel:**
+- `bool _showTimelineStrip = false` state in `image_gallery_screen.dart`
+- Toggle `IconButton` (`Icons.view_timeline_outlined`) in the controls row
+- `AnimatedSize` wraps `_GalleryTimelineStrip` above the controls row for slide-up/down effect
+- `_GalleryTimelineStrip` seeks the open `Player` on thumbnail tap
+
+**Server `GET /api/files/video-info?path=...`** → `{"durationMs": N}`
+- Desktop: runs `ffprobe -v quiet -print_format json -show_format` and parses `"duration"` field
+- Android: `MediaMetadataRetriever` via `getVideoDurationMs` MethodChannel call in `MainActivity.kt`
+- Returns `{"durationMs": 0}` on failure; client handles gracefully
+
+**Server thumbnail endpoint** now accepts `?t=<float>` for frame extraction at a specific second.
+- Desktop FFmpeg: `-ss {t}` flag replaces the hard-coded `2` second offset
+- Android: still returns null (no stable cross-platform frame-extraction plugin); client shows placeholder
+
+---
+
+### Multi-Pane File Browser (Client)
+
+Long-pressing a folder in the browser shows **"Open in new pane"** (key: `open_in_pane`). This pushes `/split-browser` with `extra: {'path1': currentPath, 'path2': folderPath}`.
+
+**`SplitBrowserScreen`** (`lib/features/browser/split_browser_screen.dart`):
+- Two `_BrowserPaneWidget` instances, each with its own navigation history (`_history` stack)
+- Flex-weight divider (`_weights [50, 50]`, same pattern as `SplitViewScreen`) — horizontal or vertical, toggled by AppBar icon button
+- `_closePane(paneIndex)`: removes the pane and navigates to `/browse?path=...` for the remaining pane's current directory
+- AppBar replicates single-pane actions (H/V toggle, back); each pane header has bookmark, sort, density, and × close buttons scoped to that pane
+
+**`_BrowserPaneWidget`** (`ConsumerStatefulWidget`):
+- `navigateTo(path)` is public — called via `GlobalKey<_BrowserPaneState>` when the other pane uses "Open in other pane"
+- Long-press in a pane shows a minimal sheet: "Open in this pane" / "Open in other pane" for folders; Play / View for media
+- Tapping media pushes `/player` or `/gallery` normally
+
+**Router:** `/split-browser` GoRoute reads `extra['path1']` and `extra['path2']`; uses `_slideUpPage` transition.
+
+---
+
 ## System Control API Endpoints
 
 All protected (requires `Authorization: Bearer`):
@@ -229,7 +296,7 @@ All protected (requires `Authorization: Bearer`):
 | `lib/services/http_server_service.dart` | shelf router, middleware, all request handlers |
 | `lib/services/auth_service.dart` | JWT generation + BCrypt verification |
 | `lib/services/file_service.dart` | File listings, streaming, MIME types |
-| `lib/services/thumbnail_service.dart` | Image / video thumbnail generation + cache |
+| `lib/services/thumbnail_service.dart` | Image / video thumbnail generation + cache; `getOrCreate(path, roots, {quality, atSeconds})`; `getVideoDurationMs(path, roots)` |
 | `lib/services/ffmpeg_setup_service.dart` | FFmpeg binary download (Windows/macOS) |
 | `lib/services/settings_service.dart` | Settings load/save, Windows legacy path migration |
 | `lib/core/utils/path_sanitizer.dart` | Security — path traversal prevention |
@@ -241,7 +308,7 @@ All protected (requires `Authorization: Bearer`):
 | `lib/features/main_screen/main_screen.dart` | Main screen; copy button copies the bare IP address only (no `http://` prefix or port) |
 | `lib/features/onboarding/welcome_screen.dart` | First-run setup + permission wizard (also re-runnable from Settings → Background & Battery) |
 | `android/app/src/main/AndroidManifest.xml` | Permissions + service declarations |
-| `android/app/src/main/kotlin/.../MainActivity.kt` | MethodChannel handlers for permissions + system control |
+| `android/app/src/main/kotlin/.../MainActivity.kt` | MethodChannel handlers for permissions, system control + `getVideoDurationMs` via `MediaMetadataRetriever` |
 | `android/app/src/main/kotlin/.../PcIfyAccessibilityService.kt` | Remote screen lock via Accessibility API |
 | `android/app/src/main/res/xml/accessibility_service_config.xml` | Accessibility service configuration |
 | `macos/Runner/AppDelegate.swift` | macOS system control MethodChannel |
@@ -285,10 +352,12 @@ All protected (requires `Authorization: Bearer`):
 | `lib/features/home/widget_cards/volume_card.dart` | Volume slider + mute toggle |
 | `lib/features/home/widget_cards/screen_lock_card.dart` | Lock / Wake buttons |
 | `lib/features/home/widget_cards/bookmark_section_body.dart` | Bookmarked folders grid (extracted from home_screen) |
-| `lib/services/api_service.dart` | All HTTP calls to server |
+| `lib/services/api_service.dart` | All HTTP calls to server; `buildThumbnailUriWithToken({quality, atSeconds})`; `getVideoDurationMs(path)` |
 | `lib/services/dashboard_layout_service.dart` | Dashboard layout persistence (`dashboard_layout_v1`) |
 | `lib/services/backup_restore_service.dart` | Backup/restore including dashboard layout |
 | `lib/services/auth_token_service.dart` | JWT storage and retrieval |
 | `lib/services/theme_service.dart` | Dark/light + accent colour |
 | `lib/providers/dashboard_providers.dart` | `dashboardLayoutProvider`, `controlStatusProvider` (5s poll), `dashboardEditModeProvider` |
 | `lib/providers/services_providers.dart` | All service providers including `dashboardLayoutServiceProvider` |
+| `lib/features/browser/split_browser_screen.dart` | Two-pane file browser; `SplitBrowserScreen`, `_BrowserPaneWidget`, draggable divider |
+| `lib/features/browser/video_timeline_strip.dart` | `VideoTimelineStrip` — 5 thumbnail strip at fixed fractions; `VideoTimelinePlaceholder` |

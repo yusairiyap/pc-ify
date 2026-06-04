@@ -8,10 +8,15 @@ import '../../core/constants/media_types.dart';
 import '../../providers/services_providers.dart' show apiServiceProvider, externalPlayerServiceProvider, videoFitProvider, videoRepeatProvider;
 
 class VideoPlayerScreen extends ConsumerStatefulWidget {
-  const VideoPlayerScreen(
-      {super.key, required this.filePath, required this.fileName});
+  const VideoPlayerScreen({
+    super.key,
+    required this.filePath,
+    required this.fileName,
+    this.initialPositionMs,
+  });
   final String filePath;
   final String fileName;
+  final int? initialPositionMs;
 
   @override
   ConsumerState<VideoPlayerScreen> createState() => _VideoPlayerScreenState();
@@ -42,6 +47,10 @@ class _VideoPlayerScreenState extends ConsumerState<VideoPlayerScreen> {
     await _player.setPlaylistMode(repeat ? PlaylistMode.loop : PlaylistMode.none);
     setState(() => _streamUri = uri);
     await _player.open(Media(uri));
+    final pos = widget.initialPositionMs;
+    if (pos != null && pos > 0) {
+      await _player.seek(Duration(milliseconds: pos));
+    }
   }
 
   @override

@@ -13,6 +13,8 @@ abstract final class ApiRoutes {
   static const thumbnails = '/api/thumbnails';
   static const tokenParam = 'token';
 
+  static const videoInfo = '/api/files/video-info';
+
   static const controlStatus        = '/api/system/control/status';
   static const controlVolume        = '/api/system/control/volume';
   static const controlMute          = '/api/system/control/mute';

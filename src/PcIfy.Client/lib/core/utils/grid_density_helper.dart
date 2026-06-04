@@ -1,3 +1,5 @@
+import 'package:flutter/material.dart' show IconData, Icons;
+
 enum GridDensity { compact, normal, large }
 
 abstract final class GridDensityHelper {
@@ -49,4 +51,10 @@ abstract final class GridDensityHelper {
         (e) => e.name == s,
         orElse: () => GridDensity.normal,
       );
+
+  static IconData icon(GridDensity density) => switch (density) {
+        GridDensity.compact => Icons.grid_on,
+        GridDensity.normal => Icons.grid_view,
+        GridDensity.large => Icons.view_module,
+      };
 }

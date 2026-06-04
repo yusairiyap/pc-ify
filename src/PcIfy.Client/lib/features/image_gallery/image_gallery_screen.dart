@@ -8,6 +8,7 @@ import 'package:media_kit_video/media_kit_video.dart';
 
 import '../../core/models/file_entry.dart';
 import '../../providers/services_providers.dart';
+import '../../services/api_service.dart' show ApiService;
 
 // --- Data model ---
 
@@ -97,6 +98,8 @@ class _ImageGalleryScreenState extends ConsumerState<ImageGalleryScreen>
   Animation<Matrix4>? _zoomAnim;
   int? _zoomAnimIndex;
   Offset? _doubleTapPos;
+
+  bool _showTimelineStrip = false;
 
   static const _thumbSize = 60.0;
   static const _thumbMargin = 4.0;
@@ -419,7 +422,7 @@ class _ImageGalleryScreenState extends ConsumerState<ImageGalleryScreen>
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          // Video seek bar
+          // Video seek bar + controls
           if (items[_currentIndex].isVideo)
             ValueListenableBuilder<Player?>(
               valueListenable: _currentPlayerNotifier,
@@ -438,8 +441,37 @@ class _ImageGalleryScreenState extends ConsumerState<ImageGalleryScreen>
                     ),
                   );
                 }
-                return Row(
+                // Timeline strip — slides up/down with AnimatedSize
+                final durationMs =
+                    player.state.duration.inMilliseconds;
+                final api = ref.read(apiServiceProvider);
+                final quality = ref
+                        .read(sharedPrefsProvider)
+                        .getInt('thumbnail_quality') ??
+                    50;
+                return Column(
+                  mainAxisSize: MainAxisSize.min,
                   children: [
+                    // Collapsible timeline strip
+                    AnimatedSize(
+                      duration: const Duration(milliseconds: 220),
+                      curve: Curves.easeInOut,
+                      child: _showTimelineStrip && durationMs > 0
+                          ? Padding(
+                              padding:
+                                  const EdgeInsets.fromLTRB(8, 8, 8, 0),
+                              child: _GalleryTimelineStrip(
+                                player: player,
+                                durationMs: durationMs,
+                                filePath: items[_currentIndex].streamUri,
+                                api: api,
+                                quality: quality,
+                              ),
+                            )
+                          : const SizedBox.shrink(),
+                    ),
+                    Row(
+                      children: [
                     // Play/pause
                     StreamBuilder<bool>(
                       stream: player.stream.playing,
@@ -466,6 +498,21 @@ class _ImageGalleryScreenState extends ConsumerState<ImageGalleryScreen>
                         builder: (_, constraints) =>
                             _buildSeekBar(player, constraints.maxWidth - 80),
                       ),
+                    ),
+                    // Timeline strip toggle
+                    IconButton(
+                      tooltip: _showTimelineStrip
+                          ? 'Hide timeline'
+                          : 'Show timeline',
+                      icon: Icon(
+                        Icons.view_timeline_outlined,
+                        color: _showTimelineStrip
+                            ? Colors.white
+                            : Colors.white38,
+                        size: 20,
+                      ),
+                      onPressed: () => setState(
+                          () => _showTimelineStrip = !_showTimelineStrip),
                     ),
                     // Fit mode cycle
                     Consumer(builder: (context, ref, _) {
@@ -507,7 +554,9 @@ class _ImageGalleryScreenState extends ConsumerState<ImageGalleryScreen>
                       ),
                     ),
                   ],
-                );
+                ),  // Row
+                  ],
+                ); // Column
               },
             ),
           // Thumbnail carousel
@@ -1036,6 +1085,148 @@ class _NavButton extends StatelessWidget {
         ),
         padding: const EdgeInsets.all(8),
         child: Icon(icon, color: Colors.white, size: 32),
+      ),
+    );
+  }
+}
+
+// ─── Gallery timeline strip ───────────────────────────────────────────────────
+
+/// Thin adapter: derives thumbnail URIs from [filePath] (the stream URI) by
+/// swapping the /stream/ segment for /thumbnails/ and appending quality + t=.
+/// When server path is not known (stream URI only), falls back to
+/// VideoTimelineStrip with directly built URIs via api.
+class _GalleryTimelineStrip extends StatefulWidget {
+  const _GalleryTimelineStrip({
+    required this.player,
+    required this.durationMs,
+    required this.filePath,
+    required this.api,
+    required this.quality,
+  });
+
+  final Player player;
+  final int durationMs;
+  final String filePath; // stream URI — used only as identifier for the item
+  final ApiService api;
+  final int quality;
+
+  @override
+  State<_GalleryTimelineStrip> createState() => _GalleryTimelineStripState();
+}
+
+class _GalleryTimelineStripState extends State<_GalleryTimelineStrip> {
+  static const _fracs = [0.15, 0.30, 0.45, 0.60, 0.75];
+  List<String?>? _uris;
+
+  @override
+  void initState() {
+    super.initState();
+    _buildUris();
+  }
+
+  @override
+  void didUpdateWidget(_GalleryTimelineStrip old) {
+    super.didUpdateWidget(old);
+    if (old.filePath != widget.filePath || old.durationMs != widget.durationMs) {
+      setState(() => _uris = null);
+      _buildUris();
+    }
+  }
+
+  /// Extracts the server path from the stream URI by reversing the encoding
+  /// applied by ApiService.buildStreamUriWithToken().
+  String? _serverPathFromStreamUri(String streamUri) {
+    try {
+      final uri = Uri.parse(streamUri);
+      // Path looks like /api/files/stream/<encodedServerPath>
+      const prefix = '/api/files/stream/';
+      if (uri.path.startsWith(prefix)) {
+        return Uri.decodeComponent(uri.path.substring(prefix.length));
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  Future<void> _buildUris() async {
+    final serverPath = _serverPathFromStreamUri(widget.filePath);
+    if (serverPath == null) return;
+    final uris = <String?>[];
+    for (final frac in _fracs) {
+      final posMs = (widget.durationMs * frac).round();
+      final atSec = posMs / 1000.0;
+      final uri = await widget.api.buildThumbnailUriWithToken(
+        serverPath,
+        quality: widget.quality,
+        atSeconds: atSec,
+      );
+      uris.add(uri);
+    }
+    if (mounted) setState(() => _uris = uris);
+  }
+
+  String _ts(int posMs) {
+    final d = Duration(milliseconds: posMs);
+    final h = d.inHours;
+    final m = d.inMinutes.remainder(60).toString().padLeft(2, '0');
+    final s = d.inSeconds.remainder(60).toString().padLeft(2, '0');
+    return h > 0 ? '$h:$m:$s' : '$m:$s';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: 88,
+      child: Row(
+        children: List.generate(_fracs.length, (i) {
+          final posMs = (widget.durationMs * _fracs[i]).round();
+          final uri = _uris?[i];
+          return Expanded(
+            child: GestureDetector(
+              onTap: () =>
+                  widget.player.seek(Duration(milliseconds: posMs)),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 3),
+                child: Column(
+                  children: [
+                    Expanded(
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(5),
+                        child: _uris == null
+                            ? Container(
+                                color: Colors.white12,
+                              )
+                            : uri != null
+                                ? CachedNetworkImage(
+                                    imageUrl: uri,
+                                    fit: BoxFit.cover,
+                                    width: double.infinity,
+                                    placeholder: (_, __) => Container(
+                                        color: Colors.white12),
+                                    errorWidget: (_, __, ___) => Container(
+                                      color: Colors.white12,
+                                      child: const Icon(
+                                          Icons.videocam_off_outlined,
+                                          color: Colors.white38,
+                                          size: 18),
+                                    ),
+                                  )
+                                : Container(color: Colors.white12),
+                      ),
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      _ts(posMs),
+                      style: const TextStyle(
+                          color: Colors.white70, fontSize: 9),
+                      textAlign: TextAlign.center,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          );
+        }),
       ),
     );
   }

@@ -51,7 +51,7 @@ final bookmarkThumbnailsProvider =
 
     return Future.wait(
       mediaFiles.map(
-        (e) => api.buildThumbnailUriWithToken(e.path, size: 'small'),
+        (e) => api.buildThumbnailUriWithToken(e.path, quality: 25),
       ),
     );
   },
