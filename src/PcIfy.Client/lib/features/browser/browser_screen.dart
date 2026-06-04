@@ -1397,6 +1397,14 @@ class _BrowserLoadedState extends ConsumerState<_BrowserLoaded> {
     final destFolder = state.listing?.path;
     if (destFolder == null || destFolder.isEmpty) return;
 
+    if (destFolder == clipboard.sourceFolderPath) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Items are already in this folder')),
+      );
+      return;
+    }
+
+    ScaffoldMessenger.of(context).hideCurrentSnackBar();
     final isMove = clipboard.mode == ClipboardMode.cut;
     ref.read(clipboardProvider.notifier).state = null;
 

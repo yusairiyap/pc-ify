@@ -17,6 +17,7 @@ class _TransferOverlayState extends ConsumerState<TransferOverlay>
     with SingleTickerProviderStateMixin {
   late AnimationController _ctrl;
   late Animation<Offset> _slideAnim;
+  bool _dismissingByDrag = false;
 
   @override
   void initState() {
@@ -42,7 +43,14 @@ class _TransferOverlayState extends ConsumerState<TransferOverlay>
     if (showing && !wasShowing) {
       _ctrl.forward(from: 0.0);
     } else if (!showing && wasShowing) {
-      _ctrl.reverse();
+      if (_dismissingByDrag) {
+        // Panel was already dragged off-screen — snap controller to hidden
+        // without re-playing the slide-down animation.
+        _dismissingByDrag = false;
+        _ctrl.value = 0.0;
+      } else {
+        _ctrl.reverse();
+      }
     }
   }
 
@@ -68,6 +76,7 @@ class _TransferOverlayState extends ConsumerState<TransferOverlay>
               child: _TransferPanel(
                 onDismiss:
                     ref.read(transferManagerProvider.notifier).hidePanel,
+                onDragDismiss: () => _dismissingByDrag = true,
               ),
             ),
           ),
@@ -127,8 +136,9 @@ class _MinimizedChip extends ConsumerWidget {
 // ── Transfer panel ─────────────────────────────────────────────────────────
 
 class _TransferPanel extends ConsumerStatefulWidget {
-  const _TransferPanel({required this.onDismiss});
+  const _TransferPanel({required this.onDismiss, required this.onDragDismiss});
   final VoidCallback onDismiss;
+  final VoidCallback onDragDismiss;
 
   @override
   ConsumerState<_TransferPanel> createState() => _TransferPanelState();
@@ -171,6 +181,7 @@ class _TransferPanelState extends ConsumerState<_TransferPanel> {
                   onVerticalDragEnd: (d) {
                     if (_dy > 80 ||
                         d.velocity.pixelsPerSecond.dy > 400) {
+                      widget.onDragDismiss();
                       setState(() => _dy = 0);
                       widget.onDismiss();
                     } else {
