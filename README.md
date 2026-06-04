@@ -13,7 +13,7 @@ A local-network home entertainment app. Run the server on Windows, Android, or m
 - Per-user directory ACL — restrict each account to specific source folders
 - Configurable port number and server name
 - Auto-start server on launch (optional)
-- One-click copy of the connection address
+- One-click copy of the server IP address
 - **Windows / macOS:** Minimize to system tray with running/stopped indicator
 - **Android:** Persistent foreground notification keeps the server running while the app is in the background
 - Full connection log: client IP, username, timestamp, action
@@ -39,6 +39,8 @@ A local-network home entertainment app. Run the server on Windows, Android, or m
 - Backup and restore: bookmarks, folder preferences, and dashboard layout
 - App lock (PIN / biometrics)
 - Dark / Light / System theme + customisable accent colour
+- **First-run wizard** — guides through accent colour, theme, and grid density; launches before the server connection screen on fresh installs
+- **About page** in Settings (developer + GitHub link)
 
 ## Requirements
 
@@ -59,7 +61,7 @@ A local-network home entertainment app. Run the server on Windows, Android, or m
 2. Tap **Settings** → **Source Directories** → add the folders you want to share
 3. (Optional) Change the default `admin`/`admin` credentials in **Settings → Users**
 4. (Optional) Set a custom server name and port in **Settings → General**
-5. Tap **Start Server** — the status card shows the IP and port; tap the copy icon to copy the address
+5. Tap **Start Server** — the status card shows the IP and port; tap the copy icon to copy the IP address
 
 > **Android:** Grant **Allow access to all files** (Settings → Special app access) so the server can read arbitrary directories you configure.
 >
@@ -75,9 +77,10 @@ A local-network home entertainment app. Run the server on Windows, Android, or m
 ### Client
 
 1. Install the app on your device
-2. Enter the server's local IP and port (shown in the server app)
-3. Log in with your configured credentials
-4. Browse, stream, and download your files
+2. On first launch a short wizard lets you choose accent colour, theme, and grid density
+3. Enter the server's local IP and port (shown in the server app — tap the copy icon)
+4. Log in with your configured credentials
+5. Browse, stream, and download your files
 
 ### Customising the Home Dashboard
 

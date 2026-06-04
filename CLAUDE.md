@@ -107,9 +107,19 @@ On Android, the shelf server runs on the main isolate. `flutter_foreground_task`
 
 **Background survival on modern Android:** The dominant reason the server "dies on minimize" is OEM battery optimization (Samsung/Xiaomi/OPPO/Vivo), not the foreground service itself. The fixes: `REQUEST_IGNORE_BATTERY_OPTIMIZATIONS` permission + in-app exemption request, and guidance to OEM autostart/lock-in-recents (no standard API — `MainActivity.openAppSettings` deep-links to the app's settings page). Note Android 15's `dataSync` 6-hour/24h background cap is a platform constraint that resets when the app is foregrounded.
 
-### First-Run Onboarding (Android)
+### First-Run Onboarding — Server (Android)
 
-`AppSettings.onboardingCompleted` (default `false`) gates the home in `app.dart`: on Android, `WelcomeScreen` (`lib/features/onboarding/welcome_screen.dart`) shows a permission wizard (notifications → battery optimization → all-files access → keep-alive tips) until completed; non-Android always goes straight to `MainScreen`. The wizard is re-runnable from Settings → **Background & Battery** (`WelcomeScreen(isRerun: true)`), which also shows live permission status and fix buttons.
+`AppSettings.onboardingCompleted` (default `false`) gates the home in `app.dart`: on Android, `WelcomeScreen` (`lib/features/onboarding/welcome_screen.dart`) shows a setup wizard (server name → admin credentials → source directories → notifications → battery optimization → keep-alive tips → done ✓) until completed; non-Android always goes straight to `MainScreen`. When `onboardingCompleted` flips to `true`, `app.dart`'s `AnimatedSwitcher` fades + scales the `MainScreen` in. The wizard is re-runnable from Settings → **Background & Battery** (`WelcomeScreen(isRerun: true)`), which also shows live permission status and fix buttons.
+
+### First-Run Onboarding — Client
+
+`WelcomeScreen` (`lib/features/onboarding/welcome_screen.dart`) is a 4-step wizard shown on first launch for unauthenticated users:
+1. **Welcome** — what pc-ify offers
+2. **Get the server** — numbered steps + GitHub link (`yusairiyap/pc-ify`)
+3. **Personalize** — accent colour, theme mode, grid density; tapping Next *immediately* applies the theme via `themeNotifierProvider`
+4. **All set ✓** — animated checkmark; "Connect to server" marks `client_onboarding_completed = true` in SharedPreferences and navigates to `/setup`
+
+The router redirects unauthenticated users to `/welcome` when `client_onboarding_completed` is absent or `false`. Existing authenticated sessions (already have a valid token) skip the wizard entirely.
 
 ### Android Release Signing (CI)
 
@@ -228,7 +238,8 @@ All protected (requires `Authorization: Bearer`):
 | `lib/services/platform/system_control_desktop.dart` | Windows/macOS MethodChannel implementation |
 | `lib/services/platform/tray_service_desktop.dart` | Windows/macOS tray icon |
 | `lib/services/platform/foreground_service_android.dart` | Android background keep-alive + notification/battery permission helpers |
-| `lib/features/onboarding/welcome_screen.dart` | First-run permission wizard (also re-runnable from Settings) |
+| `lib/features/main_screen/main_screen.dart` | Main screen; copy button copies the bare IP address only (no `http://` prefix or port) |
+| `lib/features/onboarding/welcome_screen.dart` | First-run setup + permission wizard (also re-runnable from Settings → Background & Battery) |
 | `android/app/src/main/AndroidManifest.xml` | Permissions + service declarations |
 | `android/app/src/main/kotlin/.../MainActivity.kt` | MethodChannel handlers for permissions + system control |
 | `android/app/src/main/kotlin/.../PcIfyAccessibilityService.kt` | Remote screen lock via Accessibility API |
@@ -257,7 +268,8 @@ All protected (requires `Authorization: Bearer`):
 | File | Purpose |
 |---|---|
 | `lib/main.dart` | Flutter entry point |
-| `lib/router.dart` | go_router navigation config |
+| `lib/router.dart` | go_router navigation config; page-transition helpers: `_fadeZoomPage` (fade+scale, used for `/welcome` and home shell), `_slideRightPage` (slide from right + fade, used for `/setup`), `_slideUpPage` (modal sheets) |
+| `lib/features/onboarding/welcome_screen.dart` | 4-step first-run wizard; writes `client_onboarding_completed` to SharedPreferences |
 | `lib/core/models/dashboard_models.dart` | `DashboardLayout`, `DashboardSection`, `DashboardItem`, `WidgetType`, `WidgetSize` |
 | `lib/core/models/control_status.dart` | `ControlStatus`, `BatteryStatus`, `VolumeStatus`, `CpuStatus`, `RamStatus`, `ScreenStatus` DTOs |
 | `lib/features/home/home_screen.dart` | Home screen — background image/video logic, AppBar with edit toggle |
