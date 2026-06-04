@@ -162,6 +162,42 @@ class ApiService {
     );
   }
 
+  Future<bool> deleteFile(String path) async {
+    try {
+      await _dio.delete(
+        '$_base${ApiRoutes.filesDelete}',
+        queryParameters: {'path': path},
+      );
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  Future<bool> copyFile(String src, String destFolder) async {
+    try {
+      await _dio.post(
+        '$_base${ApiRoutes.filesCopy}',
+        data: {'src': src, 'destFolder': destFolder},
+      );
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  Future<bool> moveFile(String src, String destFolder) async {
+    try {
+      await _dio.post(
+        '$_base${ApiRoutes.filesMove}',
+        data: {'src': src, 'destFolder': destFolder},
+      );
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
   Future<ControlStatus?> getControlStatus() async {
     try {
       final resp = await _dio.get('$_base${ApiRoutes.controlStatus}');

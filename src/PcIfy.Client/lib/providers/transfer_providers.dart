@@ -3,6 +3,23 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../core/models/transfer_task.dart';
 
+// ── Clipboard ──────────────────────────────────────────────────────────────
+
+enum ClipboardMode { copy, cut }
+
+class ClipboardState {
+  const ClipboardState({
+    required this.paths,
+    required this.sourceFolderPath,
+    required this.mode,
+  });
+  final List<String> paths;
+  final String sourceFolderPath;
+  final ClipboardMode mode;
+}
+
+final clipboardProvider = StateProvider<ClipboardState?>((ref) => null);
+
 class TransferState {
   const TransferState({
     this.tasks = const [],

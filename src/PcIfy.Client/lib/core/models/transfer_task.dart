@@ -1,4 +1,4 @@
-enum TransferType { upload, download }
+enum TransferType { upload, download, delete, copy, move }
 enum TransferStatus { active, completed, error, cancelled }
 
 class TransferTask {

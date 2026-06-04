@@ -7,6 +7,9 @@ abstract final class ApiRoutes {
   static const stream = '/api/files/stream';
   static const download = '/api/files/download';
   static const upload = '/api/files/upload';
+  static const filesDelete = '/api/files/delete';
+  static const filesCopy = '/api/files/copy';
+  static const filesMove = '/api/files/move';
   static const thumbnails = '/api/thumbnails';
   static const tokenParam = 'token';
 

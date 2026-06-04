@@ -472,6 +472,7 @@ class _BrowserLoadedState extends ConsumerState<_BrowserLoaded> {
     final hasBg = state.hasBg;
     final canUpload = listing.path.isNotEmpty;
 
+    final clipboard = ref.watch(clipboardProvider);
     final AppBar appBar;
     if (state.isSelecting) {
       final selectedItems = state.items
@@ -484,6 +485,7 @@ class _BrowserLoadedState extends ConsumerState<_BrowserLoaded> {
           single && selectedItems.first.entry.type == FileType.image;
       final fgColor =
           hasBg ? Colors.white : Theme.of(context).colorScheme.primary;
+      final errorColor = Theme.of(context).colorScheme.error;
       appBar = AppBar(
         backgroundColor: hasBg ? Colors.black87 : null,
         foregroundColor: hasBg ? Colors.white : null,
@@ -523,8 +525,18 @@ class _BrowserLoadedState extends ConsumerState<_BrowserLoaded> {
               ),
               PopupMenuItem(
                 value: 'download',
-                child: Text(
-                    selectedItems.length > 1 ? 'Download all' : 'Download'),
+                child: Text(selectedItems.length > 1
+                    ? 'Download ${selectedItems.length} files'
+                    : 'Download'),
+              ),
+              const PopupMenuItem(
+                  value: 'copy', child: Text('Copy')),
+              const PopupMenuItem(
+                  value: 'cut', child: Text('Cut')),
+              PopupMenuItem(
+                value: 'delete',
+                child:
+                    Text('Delete', style: TextStyle(color: errorColor)),
               ),
               if (single && (singleVideo || singleImage))
                 const PopupMenuItem(
@@ -560,6 +572,18 @@ class _BrowserLoadedState extends ConsumerState<_BrowserLoaded> {
               ),
               tooltip: 'Upload files',
               onPressed: () => _showUploadOptions(context),
+            ),
+          if (clipboard != null && canUpload)
+            IconButton(
+              icon: Icon(
+                Icons.content_paste_rounded,
+                color: hasBg
+                    ? Colors.white
+                    : Theme.of(context).colorScheme.primary,
+              ),
+              tooltip:
+                  'Paste ${clipboard.paths.length} item${clipboard.paths.length > 1 ? 's' : ''} (${clipboard.mode == ClipboardMode.cut ? 'move' : 'copy'})',
+              onPressed: () => _paste(context),
             ),
           IconButton(
             icon: Icon(
@@ -1063,6 +1087,48 @@ class _BrowserLoadedState extends ConsumerState<_BrowserLoaded> {
         for (final sel in selectedItems) {
           _startDownload(sel.entry.path, sel.entry.name);
         }
+      case 'copy':
+        notifier.clearSelection();
+        ref.read(clipboardProvider.notifier).state = ClipboardState(
+          paths: selectedItems.map((i) => i.entry.path).toList(),
+          sourceFolderPath: listing.path,
+          mode: ClipboardMode.copy,
+        );
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text(
+                '${selectedItems.length} item${selectedItems.length > 1 ? 's' : ''} copied'),
+            action: SnackBarAction(
+              label: 'Cancel',
+              onPressed: () =>
+                  ref.read(clipboardProvider.notifier).state = null,
+            ),
+          ));
+        }
+      case 'cut':
+        notifier.clearSelection();
+        ref.read(clipboardProvider.notifier).state = ClipboardState(
+          paths: selectedItems.map((i) => i.entry.path).toList(),
+          sourceFolderPath: listing.path,
+          mode: ClipboardMode.cut,
+        );
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text(
+                '${selectedItems.length} item${selectedItems.length > 1 ? 's' : ''} cut'),
+            action: SnackBarAction(
+              label: 'Cancel',
+              onPressed: () =>
+                  ref.read(clipboardProvider.notifier).state = null,
+            ),
+          ));
+        }
+      case 'delete':
+        notifier.clearSelection();
+        if (context.mounted) {
+          await _confirmAndDelete(
+              context, selectedItems.map((i) => i.entry).toList());
+        }
       case 'set_bg':
         notifier.clearSelection();
         if (context.mounted) {
@@ -1156,7 +1222,11 @@ class _BrowserLoadedState extends ConsumerState<_BrowserLoaded> {
 
     if (e.type == FileType.folder) {
       actions['open'] = 'Open';
+      actions['download'] = 'Download folder';
       actions['bookmark'] = 'Bookmark folder';
+      actions['copy_item'] = 'Copy';
+      actions['cut_item'] = 'Cut';
+      actions['delete_item'] = 'Delete';
       actions['properties'] = 'Properties';
     } else if (e.type == FileType.video) {
       final s = ref.read(_browserNotifierProvider).valueOrNull;
@@ -1167,6 +1237,9 @@ class _BrowserLoadedState extends ConsumerState<_BrowserLoaded> {
       actions['play'] = 'Play';
       actions['external'] = 'Open in external player';
       actions['download'] = 'Download';
+      actions['copy_item'] = 'Copy';
+      actions['cut_item'] = 'Cut';
+      actions['delete_item'] = 'Delete';
       actions['properties'] = 'Properties';
     } else if (e.type == FileType.image) {
       final s = ref.read(_browserNotifierProvider).valueOrNull;
@@ -1176,10 +1249,16 @@ class _BrowserLoadedState extends ConsumerState<_BrowserLoaded> {
       }
       actions['view'] = 'View';
       actions['download'] = 'Download';
+      actions['copy_item'] = 'Copy';
+      actions['cut_item'] = 'Cut';
+      actions['delete_item'] = 'Delete';
       actions['properties'] = 'Properties';
     } else {
       actions['open_file'] = 'Open';
       actions['download'] = 'Download';
+      actions['copy_item'] = 'Copy';
+      actions['cut_item'] = 'Cut';
+      actions['delete_item'] = 'Delete';
       actions['properties'] = 'Properties';
     }
 
@@ -1233,7 +1312,47 @@ class _BrowserLoadedState extends ConsumerState<_BrowserLoaded> {
         final mime = MediaTypes.getMimeType(MediaTypes.extensionOf(e.name));
         await ref.read(externalPlayerServiceProvider).openVideo(uri, mime);
       case 'download':
-        _startDownload(e.path, e.name);
+        if (e.type == FileType.folder) {
+          await _startFolderDownload(context, e);
+        } else {
+          _startDownload(e.path, e.name);
+        }
+      case 'copy_item':
+        ref.read(clipboardProvider.notifier).state = ClipboardState(
+          paths: [e.path],
+          sourceFolderPath: listing.path,
+          mode: ClipboardMode.copy,
+        );
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text('Copied ${e.name}'),
+            action: SnackBarAction(
+              label: 'Cancel',
+              onPressed: () =>
+                  ref.read(clipboardProvider.notifier).state = null,
+            ),
+          ));
+        }
+      case 'cut_item':
+        ref.read(clipboardProvider.notifier).state = ClipboardState(
+          paths: [e.path],
+          sourceFolderPath: listing.path,
+          mode: ClipboardMode.cut,
+        );
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text('Cut ${e.name}'),
+            action: SnackBarAction(
+              label: 'Cancel',
+              onPressed: () =>
+                  ref.read(clipboardProvider.notifier).state = null,
+            ),
+          ));
+        }
+      case 'delete_item':
+        if (context.mounted) {
+          await _confirmAndDelete(context, [e]);
+        }
       case 'view':
         final media = listing.entries
             .where((x) => x.type == FileType.image || x.type == FileType.video)
@@ -1263,9 +1382,131 @@ class _BrowserLoadedState extends ConsumerState<_BrowserLoaded> {
         'download' => Icons.download_outlined,
         'view' => Icons.image_outlined,
         'open_file' => Icons.open_in_new,
+        'copy_item' => Icons.copy_outlined,
+        'cut_item' => Icons.content_cut_rounded,
+        'delete_item' => Icons.delete_outline,
         'properties' => Icons.info_outline,
         _ => Icons.more_horiz,
       };
+
+  // ── Paste ──────────────────────────────────────────────────────────────────
+
+  Future<void> _paste(BuildContext context) async {
+    final clipboard = ref.read(clipboardProvider);
+    if (clipboard == null) return;
+    final destFolder = state.listing?.path;
+    if (destFolder == null || destFolder.isEmpty) return;
+
+    final isMove = clipboard.mode == ClipboardMode.cut;
+    ref.read(clipboardProvider.notifier).state = null;
+
+    final manager = ref.read(transferManagerProvider.notifier);
+    final notifier = ref.read(_browserNotifierProvider.notifier);
+    final api = ref.read(apiServiceProvider);
+    final futures = <Future<void>>[];
+
+    for (final srcPath in clipboard.paths) {
+      final name = p.basename(srcPath);
+      final type = isMove ? TransferType.move : TransferType.copy;
+      final (id, _) = manager.addTransfer(name, type);
+      futures.add(
+        (isMove
+                ? api.moveFile(srcPath, destFolder)
+                : api.copyFile(srcPath, destFolder))
+            .then((success) {
+          if (success) {
+            manager.complete(id);
+          } else {
+            manager.fail(id, '${isMove ? 'Move' : 'Copy'} failed');
+          }
+        }),
+      );
+    }
+
+    unawaited(Future.wait(futures).then((_) => notifier.reload()));
+  }
+
+  // ── Delete ─────────────────────────────────────────────────────────────────
+
+  Future<void> _confirmAndDelete(
+      BuildContext context, List<FileEntry> entries) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Delete'),
+        content: Text(entries.length == 1
+            ? 'Delete "${entries.first.name}"? This cannot be undone.'
+            : 'Delete ${entries.length} items? This cannot be undone.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: TextButton.styleFrom(
+                foregroundColor: Theme.of(ctx).colorScheme.error),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !context.mounted) return;
+    _startDeletes(entries);
+  }
+
+  void _startDeletes(List<FileEntry> entries) {
+    final manager = ref.read(transferManagerProvider.notifier);
+    final notifier = ref.read(_browserNotifierProvider.notifier);
+    final api = ref.read(apiServiceProvider);
+    final futures = <Future<void>>[];
+
+    for (final entry in entries) {
+      final (id, _) = manager.addTransfer(entry.name, TransferType.delete);
+      futures.add(
+        api.deleteFile(entry.path).then((success) {
+          if (success) {
+            manager.complete(id);
+          } else {
+            manager.fail(id, 'Delete failed');
+          }
+        }),
+      );
+    }
+
+    unawaited(Future.wait(futures).then((_) => notifier.reload()));
+  }
+
+  // ── Folder download ────────────────────────────────────────────────────────
+
+  Future<void> _startFolderDownload(
+      BuildContext context, FileEntry folderEntry) async {
+    FolderListing? listing;
+    try {
+      listing =
+          await ref.read(apiServiceProvider).getFolderListing(folderEntry.path);
+    } catch (_) {}
+
+    if (!context.mounted) return;
+
+    if (listing == null || listing.entries.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Folder is empty')));
+      return;
+    }
+
+    final files =
+        listing.entries.where((e) => e.type != FileType.folder).toList();
+    if (files.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('No files to download (folder only contains subfolders)')));
+      return;
+    }
+
+    for (final file in files) {
+      _startDownload(file.path, file.name);
+    }
+  }
 
   Future<void> _setItemAsBackground(BuildContext context, _BrowserItem item,
       FolderListing listing) async {
