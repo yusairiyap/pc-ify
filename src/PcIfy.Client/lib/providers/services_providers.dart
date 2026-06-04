@@ -11,6 +11,7 @@ import '../services/connection_service.dart';
 import '../services/dashboard_layout_service.dart';
 import '../services/download_service.dart';
 import '../services/external_player_service.dart';
+import '../services/upload_service.dart';
 import '../services/folder_prefs_service.dart';
 import '../services/theme_service.dart';
 import 'http_providers.dart';
@@ -58,6 +59,10 @@ final backupRestoreServiceProvider = Provider<BackupRestoreService>((ref) {
 
 final downloadServiceProvider = Provider<DownloadService>((ref) {
   return DownloadService(ref.watch(apiServiceProvider));
+});
+
+final uploadServiceProvider = Provider<UploadService>((ref) {
+  return UploadService(ref.watch(apiServiceProvider));
 });
 
 final externalPlayerServiceProvider = Provider<ExternalPlayerService>((ref) {

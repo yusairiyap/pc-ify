@@ -6,6 +6,7 @@ import 'features/app_lock/lock_overlay.dart';
 import 'providers/services_providers.dart';
 import 'providers/theme_providers.dart';
 import 'router.dart';
+import 'widgets/transfer_overlay.dart';
 
 class PcIfyApp extends ConsumerStatefulWidget {
   const PcIfyApp({super.key});
@@ -82,14 +83,15 @@ class _PcIfyAppState extends ConsumerState<PcIfyApp>
       routerConfig: router,
       builder: (context, child) {
         final lockState = ref.watch(lockNotifierProvider);
-        if (!lockState.isLocked) return child!;
+        Widget content = TransferOverlay(child: child!);
+        if (!lockState.isLocked) return content;
         // Wrap in a Navigator so TextField inside LockOverlay can find an
         // Overlay ancestor (MaterialApp.router's builder sits above the
         // Router's own Navigator/Overlay). Navigator also handles lifecycle
         // correctly when removed from the tree.
         return Stack(
           children: [
-            child!,
+            content,
             Positioned.fill(
               child: Theme(
                 data: Theme.of(context),

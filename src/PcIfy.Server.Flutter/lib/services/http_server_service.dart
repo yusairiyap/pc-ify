@@ -110,6 +110,14 @@ class HttpServerService {
         '${ApiRoutes.thumbnails}/<filePath|[^]*>',
         _streamGuard(authSvc,
             (req, fp) => _handleThumbnail(req, fp, fileSvc, thumbSvc, authSvc)));
+    r.post(ApiRoutes.filesUpload,
+        _withAuth(authSvc, (req) => _handleUpload(req, fileSvc, authSvc)));
+    r.delete(ApiRoutes.filesDelete,
+        _withAuth(authSvc, (req) => _handleDelete(req, fileSvc, authSvc)));
+    r.post(ApiRoutes.filesCopy,
+        _withAuth(authSvc, (req) => _handleCopy(req, fileSvc, authSvc)));
+    r.post(ApiRoutes.filesMove,
+        _withAuth(authSvc, (req) => _handleMove(req, fileSvc, authSvc)));
 
     // System control endpoints
     final ctrl = SystemControlServiceHelper.instance;
@@ -285,6 +293,185 @@ class HttpServerService {
       'content-length': '$size',
       'content-disposition': 'attachment; filename="$fileName"',
     });
+  }
+
+  Future<Response> _handleUpload(
+    Request req,
+    FileService fileSvc,
+    AuthService authSvc,
+  ) async {
+    final username = _getUsername(req, authSvc);
+    final roots = _effectiveRoots(username);
+
+    final destFolder = req.url.queryParameters['path'];
+    final rawFilename = req.url.queryParameters['filename'];
+
+    if (destFolder == null || rawFilename == null) {
+      return Response.badRequest(body: 'Missing path or filename');
+    }
+
+    if (!fileSvc.isPathAllowed(destFolder, allowedRoots: roots)) {
+      return Response.forbidden('Destination folder not allowed');
+    }
+
+    final safeFilename = p.basename(rawFilename);
+    if (safeFilename.isEmpty) {
+      return Response.badRequest(body: 'Invalid filename');
+    }
+
+    final destPath = p.join(destFolder, safeFilename);
+
+    if (!fileSvc.isPathAllowed(destPath, allowedRoots: roots)) {
+      return Response.forbidden('Destination path not allowed');
+    }
+
+    final destDir = Directory(destFolder);
+    if (!await destDir.exists()) {
+      return Response.badRequest(body: 'Destination folder does not exist');
+    }
+
+    final file = File(destPath);
+    final sink = file.openWrite();
+    try {
+      await req.read().forEach(sink.add);
+      await sink.flush();
+      await sink.close();
+      return _json({'ok': true, 'path': destPath, 'name': safeFilename});
+    } catch (_) {
+      await sink.close();
+      if (await file.exists()) await file.delete();
+      return Response.internalServerError(body: 'Upload failed');
+    }
+  }
+
+  Future<Response> _handleDelete(
+    Request req,
+    FileService fileSvc,
+    AuthService authSvc,
+  ) async {
+    final username = _getUsername(req, authSvc);
+    final roots = _effectiveRoots(username);
+    final path = req.url.queryParameters['path'];
+    if (path == null || path.isEmpty) {
+      return Response.badRequest(body: 'Missing path');
+    }
+    if (!fileSvc.isPathAllowed(path, allowedRoots: roots)) {
+      return Response.forbidden('Path not allowed');
+    }
+    try {
+      final f = File(path);
+      final d = Directory(path);
+      if (await f.exists()) {
+        await f.delete();
+      } else if (await d.exists()) {
+        await d.delete(recursive: true);
+      } else {
+        return Response.notFound('Not found');
+      }
+      return _json({'ok': true});
+    } catch (e) {
+      return Response.internalServerError(body: 'Delete failed: $e');
+    }
+  }
+
+  Future<Response> _handleCopy(
+    Request req,
+    FileService fileSvc,
+    AuthService authSvc,
+  ) async {
+    final username = _getUsername(req, authSvc);
+    final roots = _effectiveRoots(username);
+    final Map<String, dynamic> body;
+    try {
+      body = jsonDecode(await req.readAsString()) as Map<String, dynamic>;
+    } catch (_) {
+      return Response.badRequest(body: 'Invalid JSON');
+    }
+    final src = body['src'] as String?;
+    final destFolder = body['destFolder'] as String?;
+    if (src == null || destFolder == null) {
+      return Response.badRequest(body: 'Missing src or destFolder');
+    }
+    if (!fileSvc.isPathAllowed(src, allowedRoots: roots) ||
+        !fileSvc.isPathAllowed(destFolder, allowedRoots: roots)) {
+      return Response.forbidden('Path not allowed');
+    }
+    final destPath = p.join(destFolder, p.basename(src));
+    if (!fileSvc.isPathAllowed(destPath, allowedRoots: roots)) {
+      return Response.forbidden('Destination path not allowed');
+    }
+    try {
+      final srcFile = File(src);
+      if (await srcFile.exists()) {
+        await srcFile.copy(destPath);
+      } else {
+        final srcDir = Directory(src);
+        if (!await srcDir.exists()) return Response.notFound('Source not found');
+        await _copyDirectory(srcDir, Directory(destPath));
+      }
+      return _json({'ok': true, 'dest': destPath});
+    } catch (e) {
+      return Response.internalServerError(body: 'Copy failed: $e');
+    }
+  }
+
+  Future<void> _copyDirectory(Directory src, Directory dest) async {
+    await dest.create(recursive: true);
+    await for (final entity in src.list()) {
+      if (entity is File) {
+        await entity.copy(p.join(dest.path, p.basename(entity.path)));
+      } else if (entity is Directory) {
+        await _copyDirectory(
+            entity, Directory(p.join(dest.path, p.basename(entity.path))));
+      }
+    }
+  }
+
+  Future<Response> _handleMove(
+    Request req,
+    FileService fileSvc,
+    AuthService authSvc,
+  ) async {
+    final username = _getUsername(req, authSvc);
+    final roots = _effectiveRoots(username);
+    final Map<String, dynamic> body;
+    try {
+      body = jsonDecode(await req.readAsString()) as Map<String, dynamic>;
+    } catch (_) {
+      return Response.badRequest(body: 'Invalid JSON');
+    }
+    final src = body['src'] as String?;
+    final destFolder = body['destFolder'] as String?;
+    if (src == null || destFolder == null) {
+      return Response.badRequest(body: 'Missing src or destFolder');
+    }
+    if (!fileSvc.isPathAllowed(src, allowedRoots: roots) ||
+        !fileSvc.isPathAllowed(destFolder, allowedRoots: roots)) {
+      return Response.forbidden('Path not allowed');
+    }
+    final destPath = p.join(destFolder, p.basename(src));
+    if (!fileSvc.isPathAllowed(destPath, allowedRoots: roots)) {
+      return Response.forbidden('Destination path not allowed');
+    }
+    try {
+      final srcFile = File(src);
+      if (await srcFile.exists()) {
+        await srcFile.rename(destPath);
+      } else {
+        final srcDir = Directory(src);
+        if (!await srcDir.exists()) return Response.notFound('Source not found');
+        try {
+          await srcDir.rename(destPath);
+        } catch (_) {
+          // cross-filesystem fallback
+          await _copyDirectory(srcDir, Directory(destPath));
+          await srcDir.delete(recursive: true);
+        }
+      }
+      return _json({'ok': true, 'dest': destPath});
+    } catch (e) {
+      return Response.internalServerError(body: 'Move failed: $e');
+    }
   }
 
   Future<Response> _handleThumbnail(

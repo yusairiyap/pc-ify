@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:dio/dio.dart';
 
 import '../core/constants/api_routes.dart';
@@ -121,9 +123,79 @@ class ApiService {
     String serverPath,
     String savePath, {
     ProgressCallback? onReceiveProgress,
+    CancelToken? cancelToken,
   }) async {
     final uri = await buildDownloadUriWithToken(serverPath);
-    await _dio.download(uri, savePath, onReceiveProgress: onReceiveProgress);
+    await _dio.download(
+      uri,
+      savePath,
+      onReceiveProgress: onReceiveProgress,
+      cancelToken: cancelToken,
+      options: Options(receiveTimeout: Duration.zero),
+    );
+  }
+
+  Future<void> uploadFile(
+    String serverFolderPath,
+    String filename,
+    String localPath, {
+    ProgressCallback? onSendProgress,
+    CancelToken? cancelToken,
+  }) async {
+    final file = File(localPath);
+    final length = await file.length();
+    final encodedFolder = Uri.encodeComponent(serverFolderPath);
+    final encodedFilename = Uri.encodeComponent(filename);
+    final url =
+        '$_base${ApiRoutes.upload}?path=$encodedFolder&filename=$encodedFilename';
+    await _dio.post(
+      url,
+      data: file.openRead(),
+      options: Options(
+        contentType: 'application/octet-stream',
+        headers: {'content-length': length.toString()},
+        sendTimeout: Duration.zero,
+        receiveTimeout: const Duration(seconds: 60),
+      ),
+      onSendProgress: onSendProgress,
+      cancelToken: cancelToken,
+    );
+  }
+
+  Future<bool> deleteFile(String path) async {
+    try {
+      await _dio.delete(
+        '$_base${ApiRoutes.filesDelete}',
+        queryParameters: {'path': path},
+      );
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  Future<bool> copyFile(String src, String destFolder) async {
+    try {
+      await _dio.post(
+        '$_base${ApiRoutes.filesCopy}',
+        data: {'src': src, 'destFolder': destFolder},
+      );
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  Future<bool> moveFile(String src, String destFolder) async {
+    try {
+      await _dio.post(
+        '$_base${ApiRoutes.filesMove}',
+        data: {'src': src, 'destFolder': destFolder},
+      );
+      return true;
+    } catch (_) {
+      return false;
+    }
   }
 
   Future<ControlStatus?> getControlStatus() async {

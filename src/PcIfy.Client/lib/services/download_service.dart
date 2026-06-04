@@ -1,5 +1,6 @@
 import 'dart:io';
 
+import 'package:dio/dio.dart';
 import 'package:flutter/services.dart';
 import 'package:path_provider/path_provider.dart';
 
@@ -16,16 +17,25 @@ class DownloadService {
     String serverPath,
     String fileName, {
     void Function(int received, int total)? onProgress,
+    CancelToken? cancelToken,
   }) async {
     try {
       if (Platform.isAndroid) {
         return await _downloadToSystemDownloads(
-            serverPath, fileName, onProgress: onProgress);
+          serverPath,
+          fileName,
+          onProgress: onProgress,
+          cancelToken: cancelToken,
+        );
       }
       final dir = await _getDownloadsDir();
       final savePath = '${dir.path}/$fileName';
-      await _api.downloadFile(serverPath, savePath,
-          onReceiveProgress: onProgress);
+      await _api.downloadFile(
+        serverPath,
+        savePath,
+        onReceiveProgress: onProgress,
+        cancelToken: cancelToken,
+      );
       return savePath;
     } catch (_) {
       return null;
@@ -39,12 +49,17 @@ class DownloadService {
     String serverPath,
     String fileName, {
     void Function(int received, int total)? onProgress,
+    CancelToken? cancelToken,
   }) async {
     final tempDir = await getTemporaryDirectory();
     final tempPath = '${tempDir.path}/$fileName';
     try {
-      await _api.downloadFile(serverPath, tempPath,
-          onReceiveProgress: onProgress);
+      await _api.downloadFile(
+        serverPath,
+        tempPath,
+        onReceiveProgress: onProgress,
+        cancelToken: cancelToken,
+      );
       final uri = await _channel.invokeMethod<String>('saveToSystemDownloads', {
         'tempPath': tempPath,
         'fileName': fileName,
