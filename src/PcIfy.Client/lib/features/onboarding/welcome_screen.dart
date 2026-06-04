@@ -62,10 +62,15 @@ class _WelcomeScreenState extends ConsumerState<WelcomeScreen> {
   Future<void> _finish() async {
     // Theme & density were applied on the personalize → all-set transition;
     // just mark onboarding complete and navigate.
-    await ref
-        .read(sharedPrefsProvider)
-        .setBool('client_onboarding_completed', true);
-    if (mounted) context.go('/setup');
+    try {
+      await ref
+          .read(sharedPrefsProvider)
+          .setBool('client_onboarding_completed', true);
+      if (mounted) context.go('/setup');
+    } catch (_) {
+      // SharedPreferences failure is unlikely; stay on page — _AllSetPageState
+      // catch block will re-enable the button.
+    }
   }
 
   @override
@@ -340,7 +345,7 @@ class _NumberedStep extends StatelessWidget {
 
 // ── Step 3: Personalize ────────────────────────────────────────────────────────
 
-class _PersonalizePage extends StatelessWidget {
+class _PersonalizePage extends StatefulWidget {
   const _PersonalizePage({
     required this.selectedColor,
     required this.selectedMode,
@@ -357,7 +362,14 @@ class _PersonalizePage extends StatelessWidget {
   final ValueChanged<Color> onColorChanged;
   final ValueChanged<ThemeMode> onModeChanged;
   final ValueChanged<GridDensity> onDensityChanged;
-  final VoidCallback onNext;
+  final Future<void> Function() onNext;
+
+  @override
+  State<_PersonalizePage> createState() => _PersonalizePageState();
+}
+
+class _PersonalizePageState extends State<_PersonalizePage> {
+  bool _saving = false;
 
   @override
   Widget build(BuildContext context) {
@@ -392,9 +404,9 @@ class _PersonalizePage extends StatelessWidget {
               scrollDirection: Axis.horizontal,
               child: Row(
                 children: ThemeService.presetColors.map((color) {
-                  final selected = selectedColor == color;
+                  final selected = widget.selectedColor == color;
                   return GestureDetector(
-                    onTap: () => onColorChanged(color),
+                    onTap: _saving ? null : () => widget.onColorChanged(color),
                     child: Padding(
                       padding: const EdgeInsets.only(right: 10),
                       child: CircleAvatar(
@@ -414,9 +426,9 @@ class _PersonalizePage extends StatelessWidget {
             Text('Theme', style: Theme.of(context).textTheme.labelLarge),
             const SizedBox(height: 8),
             DropdownButton<ThemeMode>(
-              value: selectedMode,
+              value: widget.selectedMode,
               isExpanded: true,
-              onChanged: (v) => onModeChanged(v!),
+              onChanged: _saving ? null : (v) => widget.onModeChanged(v!),
               items: const [
                 DropdownMenuItem(
                     value: ThemeMode.system, child: Text('System default')),
@@ -431,9 +443,9 @@ class _PersonalizePage extends StatelessWidget {
                 style: Theme.of(context).textTheme.labelLarge),
             const SizedBox(height: 8),
             DropdownButton<GridDensity>(
-              value: selectedDensity,
+              value: widget.selectedDensity,
               isExpanded: true,
-              onChanged: (v) => onDensityChanged(v!),
+              onChanged: _saving ? null : (v) => widget.onDensityChanged(v!),
               items: GridDensity.values
                   .map((d) => DropdownMenuItem(
                         value: d,
@@ -443,8 +455,23 @@ class _PersonalizePage extends StatelessWidget {
             ),
             const SizedBox(height: 36),
             FilledButton(
-              onPressed: onNext,
-              child: const Text('Next'),
+              onPressed: _saving
+                  ? null
+                  : () async {
+                      setState(() => _saving = true);
+                      try {
+                        await widget.onNext();
+                      } finally {
+                        if (mounted) setState(() => _saving = false);
+                      }
+                    },
+              child: _saving
+                  ? const SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Text('Next'),
             ),
           ],
         ),
@@ -497,7 +524,11 @@ class _AllSetPageState extends State<_AllSetPage> {
                   ? null
                   : () async {
                       setState(() => _loading = true);
-                      await widget.onFinish();
+                      try {
+                        await widget.onFinish();
+                      } catch (_) {
+                        if (mounted) setState(() => _loading = false);
+                      }
                     },
               child: _loading
                   ? const SizedBox(

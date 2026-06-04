@@ -33,7 +33,7 @@ class PcIfyServerApp extends ConsumerWidget {
           brightness: Brightness.dark),
       themeMode: theme.mode,
       home: AnimatedSwitcher(
-        duration: const Duration(milliseconds: 600),
+        duration: const Duration(milliseconds: 300),
         switchInCurve: Curves.easeOutCubic,
         switchOutCurve: Curves.easeInCubic,
         transitionBuilder: (child, animation) => FadeTransition(

@@ -71,7 +71,7 @@ jobs:
           ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: |
           if [ -n "$ANDROID_KEYSTORE_BASE64" ]; then
-            echo "$ANDROID_KEYSTORE_BASE64" | base64 -d > android/app/keystore.jks
+            echo "$ANDROID_KEYSTORE_BASE64" | base64 -d > android/app/keystore.jks || { echo "base64 decode failed"; exit 1; }
             {
               echo "storeFile=keystore.jks"
               echo "storePassword=$ANDROID_KEYSTORE_PASSWORD"
@@ -143,7 +143,7 @@ jobs:
           ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: |
           if [ -n "$ANDROID_KEYSTORE_BASE64" ]; then
-            echo "$ANDROID_KEYSTORE_BASE64" | base64 -d > android/app/keystore.jks
+            echo "$ANDROID_KEYSTORE_BASE64" | base64 -d > android/app/keystore.jks || { echo "base64 decode failed"; exit 1; }
             {
               echo "storeFile=keystore.jks"
               echo "storePassword=$ANDROID_KEYSTORE_PASSWORD"

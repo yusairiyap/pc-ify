@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'package:file_picker/file_picker.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
@@ -137,7 +138,8 @@ class _WelcomeScreenState extends ConsumerState<WelcomeScreen>
             if (_passCtrl.text.isNotEmpty) {
               users.add(UserCredential(
                 username: uname,
-                passwordHash: AuthService.hashPassword(_passCtrl.text),
+                passwordHash: await compute(
+                    AuthService.hashPassword, _passCtrl.text),
               ));
             }
           } else {
@@ -145,7 +147,7 @@ class _WelcomeScreenState extends ConsumerState<WelcomeScreen>
             users[0] = old.copyWith(
               username: uname,
               passwordHash: _passCtrl.text.isNotEmpty
-                  ? AuthService.hashPassword(_passCtrl.text)
+                  ? await compute(AuthService.hashPassword, _passCtrl.text)
                   : old.passwordHash,
             );
           }
