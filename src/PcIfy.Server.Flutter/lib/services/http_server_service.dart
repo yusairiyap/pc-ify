@@ -110,6 +110,8 @@ class HttpServerService {
         '${ApiRoutes.thumbnails}/<filePath|[^]*>',
         _streamGuard(authSvc,
             (req, fp) => _handleThumbnail(req, fp, fileSvc, thumbSvc, authSvc)));
+    r.post(ApiRoutes.filesUpload,
+        _withAuth(authSvc, (req) => _handleUpload(req, fileSvc, authSvc)));
 
     // System control endpoints
     final ctrl = SystemControlServiceHelper.instance;
@@ -285,6 +287,55 @@ class HttpServerService {
       'content-length': '$size',
       'content-disposition': 'attachment; filename="$fileName"',
     });
+  }
+
+  Future<Response> _handleUpload(
+    Request req,
+    FileService fileSvc,
+    AuthService authSvc,
+  ) async {
+    final username = _getUsername(req, authSvc);
+    final roots = _effectiveRoots(username);
+
+    final destFolder = req.url.queryParameters['path'];
+    final rawFilename = req.url.queryParameters['filename'];
+
+    if (destFolder == null || rawFilename == null) {
+      return Response.badRequest(body: 'Missing path or filename');
+    }
+
+    if (!fileSvc.isPathAllowed(destFolder, allowedRoots: roots)) {
+      return Response.forbidden('Destination folder not allowed');
+    }
+
+    final safeFilename = p.basename(rawFilename);
+    if (safeFilename.isEmpty) {
+      return Response.badRequest(body: 'Invalid filename');
+    }
+
+    final destPath = p.join(destFolder, safeFilename);
+
+    if (!fileSvc.isPathAllowed(destPath, allowedRoots: roots)) {
+      return Response.forbidden('Destination path not allowed');
+    }
+
+    final destDir = Directory(destFolder);
+    if (!await destDir.exists()) {
+      return Response.badRequest(body: 'Destination folder does not exist');
+    }
+
+    final file = File(destPath);
+    final sink = file.openWrite();
+    try {
+      await req.read().forEach(sink.add);
+      await sink.flush();
+      await sink.close();
+      return _json({'ok': true, 'path': destPath, 'name': safeFilename});
+    } catch (_) {
+      await sink.close();
+      if (await file.exists()) await file.delete();
+      return Response.internalServerError(body: 'Upload failed');
+    }
   }
 
   Future<Response> _handleThumbnail(
