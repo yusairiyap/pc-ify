@@ -47,6 +47,9 @@ dependencies:
   # Android foreground service
   flutter_foreground_task: ^8.14.0
 
+  # Launch URLs (About page)
+  url_launcher: ^6.3.0
+
   # HTTP client + ZIP extraction (FFmpeg binary download on Windows/macOS)
   http: ^1.2.0
   archive: ^3.6.0

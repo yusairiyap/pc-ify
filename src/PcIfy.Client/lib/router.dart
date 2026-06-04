@@ -8,6 +8,7 @@ import 'features/browser/background_crop_screen.dart';
 import 'features/browser/background_video_trim_screen.dart';
 import 'features/browser/browser_screen.dart';
 import 'features/browser/image_picker_screen.dart';
+import 'features/onboarding/welcome_screen.dart';
 import 'features/split_view/split_view_screen.dart';
 import 'features/home/home_screen.dart';
 import 'features/image_gallery/image_gallery_screen.dart';
@@ -31,16 +32,25 @@ final routerProvider = Provider<GoRouter>((ref) {
         return '/setup';
       }
 
-      if (state.matchedLocation == '/setup') {
-        final conn = ref.read(connectionServiceProvider);
-        final auth = ref.read(authTokenServiceProvider);
-        if (conn.isConfigured && await auth.isTokenValid()) {
-          return '/home';
-        }
+      final conn = ref.read(connectionServiceProvider);
+      final auth = ref.read(authTokenServiceProvider);
+      final isAuthenticated = conn.isConfigured && await auth.isTokenValid();
+
+      // Redirect authenticated users away from /setup to /home.
+      if (state.matchedLocation == '/setup' && isAuthenticated) return '/home';
+
+      // Show the onboarding wizard on first launch for unauthenticated users.
+      if (state.matchedLocation != '/welcome' && !isAuthenticated) {
+        final prefs = ref.read(sharedPrefsProvider);
+        final onboardingDone =
+            prefs.getBool('client_onboarding_completed') ?? false;
+        if (!onboardingDone) return '/welcome';
       }
+
       return null;
     },
     routes: [
+      GoRoute(path: '/welcome', builder: (_, __) => const WelcomeScreen()),
       GoRoute(path: '/setup', builder: (_, __) => const SetupScreen()),
       StatefulShellRoute(
         builder: (context, state, shell) => MainShell(shell: shell),

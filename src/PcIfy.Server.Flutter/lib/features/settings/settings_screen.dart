@@ -5,6 +5,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../core/models/app_settings.dart';
 import '../../providers/server_providers.dart';
 import '../../providers/settings_providers.dart';
@@ -177,6 +178,10 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             const SizedBox(height: 24),
             const _BackgroundBatteryCard(),
           ],
+
+          // ── About ─────────────────────────────────────────────────────
+          const SizedBox(height: 24),
+          const _AboutCard(),
         ],
       ),
     );
@@ -530,6 +535,62 @@ class _StatusRow extends StatelessWidget {
               child: Text(actionLabel),
             ),
         ],
+      ),
+    );
+  }
+}
+
+// ── About Card ────────────────────────────────────────────────────────────────
+
+class _AboutCard extends StatelessWidget {
+  const _AboutCard();
+
+  Future<void> _openGitHub() async {
+    final uri = Uri.parse('https://github.com/yusairiyap/pc-ify');
+    if (await canLaunchUrl(uri)) {
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('About', style: Theme.of(context).textTheme.titleSmall),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Icon(Icons.info_outline, size: 20, color: cs.onSurfaceVariant),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text('pc-ify server',
+                          style: TextStyle(fontWeight: FontWeight.w600)),
+                      const SizedBox(height: 2),
+                      Text('Developed by Yusairi Yap',
+                          style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                color: cs.onSurfaceVariant,
+                              )),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            OutlinedButton.icon(
+              onPressed: _openGitHub,
+              icon: const Icon(Icons.open_in_new, size: 16),
+              label: const Text('github.com/yusairiyap/pc-ify'),
+            ),
+          ],
+        ),
       ),
     );
   }
