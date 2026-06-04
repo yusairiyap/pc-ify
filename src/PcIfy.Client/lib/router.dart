@@ -16,7 +16,6 @@ import 'features/image_gallery/image_gallery_screen.dart';
 import 'features/settings/backup_restore_screen.dart';
 import 'features/settings/settings_screen.dart';
 import 'features/setup/setup_screen.dart';
-import 'features/video_player/video_player_screen.dart';
 import 'providers/http_providers.dart';
 import 'providers/services_providers.dart';
 import 'widgets/main_shell.dart' show MainShell, AnimatedTabContainer;
@@ -112,18 +111,6 @@ final routerProvider = Provider<GoRouter>((ref) {
             ),
           ]),
         ],
-      ),
-      GoRoute(
-        path: '/player',
-        pageBuilder: (context, state) => _slideUpPage(
-          state,
-          VideoPlayerScreen(
-            filePath: state.uri.queryParameters['path'] ?? '',
-            fileName: state.uri.queryParameters['name'] ?? '',
-            initialPositionMs: int.tryParse(
-                state.uri.queryParameters['pos'] ?? ''),
-          ),
-        ),
       ),
       GoRoute(
         path: '/gallery',
