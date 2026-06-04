@@ -1264,24 +1264,37 @@ class _BrowserLoadedState extends ConsumerState<_BrowserLoaded> {
 
     final action = await showModalBottomSheet<String>(
       context: context,
+      isScrollControlled: true,
       builder: (_) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-              child: Text(e.name,
-                  style: Theme.of(context).textTheme.titleSmall,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis),
-            ),
-            const Divider(height: 1),
-            ...actions.entries.map((kv) => ListTile(
-                  leading: Icon(_actionIcon(kv.key)),
-                  title: Text(kv.value),
-                  onTap: () => Navigator.pop(context, kv.key),
-                )),
-          ],
+        child: ConstrainedBox(
+          constraints: BoxConstraints(
+            maxHeight: MediaQuery.of(context).size.height * 0.75,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+                child: Text(e.name,
+                    style: Theme.of(context).textTheme.titleSmall,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis),
+              ),
+              const Divider(height: 1),
+              Flexible(
+                child: ListView(
+                  shrinkWrap: true,
+                  children: actions.entries
+                      .map((kv) => ListTile(
+                            leading: Icon(_actionIcon(kv.key)),
+                            title: Text(kv.value),
+                            onTap: () => Navigator.pop(context, kv.key),
+                          ))
+                      .toList(),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );

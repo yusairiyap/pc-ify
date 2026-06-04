@@ -1,4 +1,3 @@
-import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -254,10 +253,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               ],
             ),
           ),
-          if (Platform.isAndroid) ...[
-            const SizedBox(height: 24),
-            _AndroidDisclaimerCard(),
-          ],
           const SizedBox(height: 24),
           const _SectionLabel('About'),
           _AboutCard(),
@@ -530,43 +525,6 @@ class _SecurityCard extends ConsumerWidget {
               ],
             ),
           ),
-        ),
-      ),
-    );
-  }
-}
-
-class _AndroidDisclaimerCard extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
-    return Card(
-      color: cs.surfaceContainerHighest,
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Icon(Icons.info_outline, color: cs.onSurfaceVariant, size: 20),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Text(
-                'Android notice\n\n'
-                'On certain devices — particularly those with aggressive battery '
-                'optimisation (e.g. Samsung, Xiaomi, OPPO) — the server app may '
-                'be killed by the system when running in the background, causing '
-                'the connection to drop unexpectedly.\n\n'
-                'Persistent background notifications may also not appear on some '
-                'devices regardless of permission settings.\n\n'
-                'For a reliable connection, keep the server app in the foreground, '
-                'or disable battery optimisation for it in your device settings.',
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                      color: cs.onSurfaceVariant,
-                      height: 1.5,
-                    ),
-              ),
-            ),
-          ],
         ),
       ),
     );
