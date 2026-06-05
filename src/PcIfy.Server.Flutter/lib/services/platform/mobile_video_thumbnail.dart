@@ -4,5 +4,6 @@ import 'dart:typed_data';
 // that compiles on both Android and Windows without breaking Gradle or the
 // Windows AOT compiler. Returns null so the thumbnail service falls back
 // gracefully (no cached entry, client shows a placeholder).
-Future<Uint8List?> getMobileVideoThumbnail(String path, int maxDim) async =>
+Future<Uint8List?> getMobileVideoThumbnail(
+        String path, int maxDim, int jpegQuality, double? atSeconds) async =>
     null;

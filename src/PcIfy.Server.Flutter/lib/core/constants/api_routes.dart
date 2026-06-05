@@ -19,6 +19,8 @@ abstract final class ApiRoutes {
   static const systemControlLock          = '/api/system/control/lock';
   static const systemControlWake          = '/api/system/control/wake';
 
+  static const filesVideoInfo = '/api/files/video-info';
+
   static const streamingPrefixes = [
     filesStream,
     filesDownload,

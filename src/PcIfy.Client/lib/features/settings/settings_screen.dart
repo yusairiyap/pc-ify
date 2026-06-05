@@ -21,6 +21,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   late bool _alwaysExternal;
   late BoxFit _videoFit;
   late bool _videoRepeat;
+  late int _thumbnailQuality;
   late AppLockType _lockType;
   late int _lockGrace;
 
@@ -37,6 +38,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       _ => BoxFit.contain,
     };
     _videoRepeat = prefs.getBool('video_auto_repeat') ?? false;
+    _thumbnailQuality = prefs.getInt('thumbnail_quality') ?? 50;
     final lockService = ref.read(appLockServiceProvider);
     _lockType = lockService.getLockType();
     _lockGrace = lockService.gracePeriodSeconds;
@@ -77,6 +79,11 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     setState(() => _videoRepeat = value);
     await ref.read(sharedPrefsProvider).setBool('video_auto_repeat', value);
     ref.read(videoRepeatProvider.notifier).state = value;
+  }
+
+  void _onThumbnailQualityChanged(int quality) {
+    setState(() => _thumbnailQuality = quality);
+    ref.read(sharedPrefsProvider).setInt('thumbnail_quality', quality);
   }
 
   Future<void> _logout() async {
@@ -202,6 +209,38 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                           DropdownMenuItem(
                               value: BoxFit.fill, child: Text('Stretch')),
                         ],
+                      ),
+                    ],
+                  ),
+                ),
+                const Divider(height: 1, indent: 16, endIndent: 16),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('Thumbnail Quality',
+                          style: Theme.of(context).textTheme.labelLarge),
+                      const SizedBox(height: 2),
+                      Text(
+                        'Higher quality improves sharpness on large screens but takes longer to generate',
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                      const SizedBox(height: 10),
+                      SizedBox(
+                        width: double.infinity,
+                        child: SegmentedButton<int>(
+                          showSelectedIcon: false,
+                          segments: const [
+                            ButtonSegment(value: 25, label: Text('Low')),
+                            ButtonSegment(value: 50, label: Text('Medium')),
+                            ButtonSegment(value: 75, label: Text('High')),
+                            ButtonSegment(value: 100, label: Text('Ultra')),
+                          ],
+                          selected: {_thumbnailQuality},
+                          onSelectionChanged: (v) =>
+                              _onThumbnailQualityChanged(v.first),
+                        ),
                       ),
                     ],
                   ),

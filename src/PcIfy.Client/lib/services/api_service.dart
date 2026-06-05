@@ -92,9 +92,12 @@ class ApiService {
     return '$_base${ApiRoutes.download}/$encoded';
   }
 
-  String buildThumbnailUri(String serverPath, {String size = 'medium'}) {
+  String buildThumbnailUri(String serverPath,
+      {int quality = 50, double? atSeconds}) {
     final encoded = Uri.encodeComponent(serverPath);
-    return '$_base${ApiRoutes.thumbnails}/$encoded?size=$size';
+    var url = '$_base${ApiRoutes.thumbnails}/$encoded?quality=$quality';
+    if (atSeconds != null) url += '&t=${atSeconds.toStringAsFixed(2)}';
+    return url;
   }
 
   Future<String> buildStreamUriWithToken(String serverPath) async {
@@ -112,11 +115,26 @@ class ApiService {
   }
 
   Future<String> buildThumbnailUriWithToken(String serverPath,
-      {String size = 'medium'}) async {
-    final base = buildThumbnailUri(serverPath, size: size);
+      {int quality = 50, double? atSeconds}) async {
+    final base = buildThumbnailUri(serverPath, quality: quality, atSeconds: atSeconds);
     final token = await _token();
     if (token == null) return base;
     return '$base&${ApiRoutes.tokenParam}=${Uri.encodeComponent(token)}';
+  }
+
+  Future<int?> getVideoDurationMs(String serverPath) async {
+    try {
+      final token = await _token();
+      final encoded = Uri.encodeComponent(serverPath);
+      final tokenPart = token != null
+          ? '&${ApiRoutes.tokenParam}=${Uri.encodeComponent(token)}'
+          : '';
+      final resp = await _dio.get(
+          '$_base${ApiRoutes.videoInfo}?path=$encoded$tokenPart');
+      return (resp.data as Map<String, dynamic>)['durationMs'] as int?;
+    } catch (_) {
+      return null;
+    }
   }
 
   Future<void> downloadFile(

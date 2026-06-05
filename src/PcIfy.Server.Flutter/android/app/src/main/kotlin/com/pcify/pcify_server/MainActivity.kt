@@ -81,6 +81,22 @@ class MainActivity : FlutterActivity() {
                         wakeScreen()
                         result.success(null)
                     }
+                    "getVideoDurationMs" -> {
+                        val path = call.argument<String>("path")
+                        if (path == null) {
+                            result.success(0L)
+                        } else {
+                            try {
+                                val mmr = android.media.MediaMetadataRetriever()
+                                mmr.setDataSource(path)
+                                val ms = mmr.extractMetadata(android.media.MediaMetadataRetriever.METADATA_KEY_DURATION)?.toLongOrNull() ?: 0L
+                                mmr.release()
+                                result.success(ms)
+                            } catch (e: Exception) {
+                                result.success(0L)
+                            }
+                        }
+                    }
                     else -> result.notImplemented()
                 }
             }

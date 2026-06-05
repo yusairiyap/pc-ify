@@ -8,6 +8,7 @@ import 'features/browser/background_crop_screen.dart';
 import 'features/browser/background_video_trim_screen.dart';
 import 'features/browser/browser_screen.dart';
 import 'features/browser/image_picker_screen.dart';
+import 'features/browser/split_browser_screen.dart';
 import 'features/onboarding/welcome_screen.dart';
 import 'features/split_view/split_view_screen.dart';
 import 'features/home/home_screen.dart';
@@ -15,7 +16,6 @@ import 'features/image_gallery/image_gallery_screen.dart';
 import 'features/settings/backup_restore_screen.dart';
 import 'features/settings/settings_screen.dart';
 import 'features/setup/setup_screen.dart';
-import 'features/video_player/video_player_screen.dart';
 import 'providers/http_providers.dart';
 import 'providers/services_providers.dart';
 import 'widgets/main_shell.dart' show MainShell, AnimatedTabContainer;
@@ -113,16 +113,6 @@ final routerProvider = Provider<GoRouter>((ref) {
         ],
       ),
       GoRoute(
-        path: '/player',
-        pageBuilder: (context, state) => _slideUpPage(
-          state,
-          VideoPlayerScreen(
-            filePath: state.uri.queryParameters['path'] ?? '',
-            fileName: state.uri.queryParameters['name'] ?? '',
-          ),
-        ),
-      ),
-      GoRoute(
         path: '/gallery',
         pageBuilder: (context, state) => _slideUpPage(
           state,
@@ -130,6 +120,8 @@ final routerProvider = Provider<GoRouter>((ref) {
             folderPath: state.uri.queryParameters['path'] ?? '',
             startIndex:
                 int.tryParse(state.uri.queryParameters['index'] ?? '0') ?? 0,
+            initialPositionMs:
+                int.tryParse(state.uri.queryParameters['pos'] ?? ''),
           ),
         ),
       ),
@@ -175,6 +167,18 @@ final routerProvider = Provider<GoRouter>((ref) {
           return _slideUpPage(
             state,
             SplitViewScreen(folderPath: folderPath, selectedItems: entries),
+          );
+        },
+      ),
+      GoRoute(
+        path: '/split-browser',
+        pageBuilder: (context, state) {
+          final extra = state.extra as Map<String, dynamic>? ?? {};
+          final path1 = extra['path1'] as String? ?? '';
+          final path2 = extra['path2'] as String? ?? '';
+          return _slideUpPage(
+            state,
+            SplitBrowserScreen(path1: path1, path2: path2),
           );
         },
       ),

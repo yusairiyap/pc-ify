@@ -16,6 +16,8 @@ import 'services/platform/foreground_service_android.dart'
 import 'services/platform/foreground_service.dart';
 import 'services/platform/mobile_video_thumbnail.dart'
     as mobile_thumb;
+import 'services/platform/mobile_video_info.dart'
+    as mobile_video_info;
 import 'services/platform/system_control_service.dart';
 import 'services/platform/system_control_android.dart'
     as sys_ctrl_android;
@@ -23,7 +25,8 @@ import 'services/platform/system_control_desktop.dart'
     as sys_ctrl_desktop;
 import 'services/platform/tray_service_desktop.dart';
 import 'services/settings_service.dart';
-import 'services/thumbnail_service.dart';
+import 'services/thumbnail_service.dart'
+    show PlatformThumbnailHelper, PlatformVideoInfoHelper;
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -82,6 +85,7 @@ Future<void> _registerAndroidServices() async {
   // first started (and survives even if the user later toggles the server off).
   await foreground.init();
   PlatformThumbnailHelper.register(mobile_thumb.getMobileVideoThumbnail);
+  PlatformVideoInfoHelper.register(mobile_video_info.getMobileVideoDurationMs);
   SystemControlServiceHelper.register(sys_ctrl_android.SystemControlAndroidImpl());
 }
 

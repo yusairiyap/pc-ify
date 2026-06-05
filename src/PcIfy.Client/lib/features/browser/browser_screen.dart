@@ -26,6 +26,7 @@ import '../../widgets/video_background_player.dart';
 import 'background_crop_screen.dart';
 import 'background_video_trim_screen.dart';
 import '../split_view/split_view_screen.dart' show SplitViewEntry;
+import 'video_timeline_strip.dart';
 
 // --- Data classes ---
 
@@ -231,10 +232,13 @@ class _BrowserNotifier extends AutoDisposeAsyncNotifier<_BrowserState> {
 
   Future<List<_BrowserItem>> _buildItems(List<FileEntry> entries) async {
     final api = ref.read(apiServiceProvider);
+    final quality =
+        ref.read(sharedPrefsProvider).getInt('thumbnail_quality') ?? 50;
     final result = <_BrowserItem>[];
     for (final e in entries) {
-      final String? thumbUri =
-          e.hasThumbnail ? await api.buildThumbnailUriWithToken(e.path) : null;
+      final String? thumbUri = e.hasThumbnail
+          ? await api.buildThumbnailUriWithToken(e.path, quality: quality)
+          : null;
       final String? streamUri =
           (e.type == FileType.video || e.type == FileType.image)
               ? await api.buildStreamUriWithToken(e.path)
@@ -1063,9 +1067,6 @@ class _BrowserLoadedState extends ConsumerState<_BrowserLoaded> {
 
     switch (action) {
       case 'play':
-        notifier.clearSelection();
-        context.push(
-            '/player?path=${Uri.encodeComponent(item.entry.path)}&name=${Uri.encodeComponent(item.entry.name)}');
       case 'view':
         final media = listing.entries
             .where((x) => x.type == FileType.image || x.type == FileType.video)
@@ -1222,6 +1223,7 @@ class _BrowserLoadedState extends ConsumerState<_BrowserLoaded> {
 
     if (e.type == FileType.folder) {
       actions['open'] = 'Open';
+      actions['open_in_pane'] = 'Open in new pane';
       actions['download'] = 'Download folder';
       actions['bookmark'] = 'Bookmark folder';
       actions['copy_item'] = 'Copy';
@@ -1262,44 +1264,64 @@ class _BrowserLoadedState extends ConsumerState<_BrowserLoaded> {
       actions['properties'] = 'Properties';
     }
 
-    final action = await showModalBottomSheet<String>(
-      context: context,
-      isScrollControlled: true,
-      builder: (_) => SafeArea(
-        child: ConstrainedBox(
-          constraints: BoxConstraints(
-            maxHeight: MediaQuery.of(context).size.height * 0.75,
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Padding(
-                padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-                child: Text(e.name,
-                    style: Theme.of(context).textTheme.titleSmall,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis),
-              ),
-              const Divider(height: 1),
-              Flexible(
-                child: ListView(
-                  shrinkWrap: true,
-                  children: actions.entries
-                      .map((kv) => ListTile(
-                            leading: Icon(_actionIcon(kv.key)),
-                            title: Text(kv.value),
-                            onTap: () => Navigator.pop(context, kv.key),
-                          ))
-                      .toList(),
+    final action = e.type == FileType.video
+        ? await _showVideoContextSheet(context, item, actions)
+        : await showModalBottomSheet<String>(
+            context: context,
+            isScrollControlled: true,
+            builder: (_) => SafeArea(
+              child: ConstrainedBox(
+                constraints: BoxConstraints(
+                  maxHeight: MediaQuery.of(context).size.height * 0.75,
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+                      child: Text(e.name,
+                          style: Theme.of(context).textTheme.titleSmall,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis),
+                    ),
+                    const Divider(height: 1),
+                    Flexible(
+                      child: ListView(
+                        shrinkWrap: true,
+                        children: actions.entries
+                            .map((kv) => ListTile(
+                                  leading: Icon(_actionIcon(kv.key)),
+                                  title: Text(kv.value),
+                                  onTap: () => Navigator.pop(context, kv.key),
+                                ))
+                            .toList(),
+                      ),
+                    ),
+                  ],
                 ),
               ),
-            ],
-          ),
-        ),
-      ),
-    );
+            ),
+          );
 
     if (!context.mounted || action == null) return;
+
+    // Video seek-to action from timeline strip — open gallery at this video + position
+    if (action.startsWith('seek:')) {
+      final posMs = int.tryParse(action.substring(5)) ?? 0;
+      if (context.mounted) {
+        final listing =
+            ref.read(_browserNotifierProvider).valueOrNull?.listing;
+        final media = listing?.entries
+                .where(
+                    (x) => x.type == FileType.image || x.type == FileType.video)
+                .toList() ??
+            [];
+        final idx = media.indexWhere((x) => x.path == e.path);
+        context.push(
+            '/gallery?path=${Uri.encodeComponent(listing?.path ?? '')}&index=${idx < 0 ? 0 : idx}&pos=$posMs');
+      }
+      return;
+    }
 
     switch (action) {
       case 'select':
@@ -1308,6 +1330,19 @@ class _BrowserLoadedState extends ConsumerState<_BrowserLoaded> {
         await _setItemAsBackground(context, item, listing);
       case 'open':
         ref.read(_browserNotifierProvider.notifier).navigateTo(e.path);
+      case 'open_in_pane':
+        final currentPath = ref
+                .read(_browserNotifierProvider)
+                .valueOrNull
+                ?.listing
+                ?.path ??
+            '';
+        if (context.mounted) {
+          context.push('/split-browser', extra: {
+            'path1': currentPath,
+            'path2': e.path,
+          });
+        }
       case 'bookmark':
         await ref
             .read(bookmarkServiceProvider)
@@ -1318,8 +1353,18 @@ class _BrowserLoadedState extends ConsumerState<_BrowserLoaded> {
               .showSnackBar(SnackBar(content: Text('Bookmarked ${e.name}')));
         }
       case 'play':
-        context.push(
-            '/player?path=${Uri.encodeComponent(e.path)}&name=${Uri.encodeComponent(e.name)}');
+        final playListing =
+            ref.read(_browserNotifierProvider).valueOrNull?.listing;
+        if (context.mounted) {
+          final playMedia = playListing?.entries
+                  .where((x) =>
+                      x.type == FileType.image || x.type == FileType.video)
+                  .toList() ??
+              [];
+          final playIdx = playMedia.indexWhere((x) => x.path == e.path);
+          context.push(
+              '/gallery?path=${Uri.encodeComponent(playListing?.path ?? '')}&index=${playIdx < 0 ? 0 : playIdx}');
+        }
       case 'external':
         final uri = item.streamUri ?? '';
         final mime = MediaTypes.getMimeType(MediaTypes.extensionOf(e.name));
@@ -1389,6 +1434,7 @@ class _BrowserLoadedState extends ConsumerState<_BrowserLoaded> {
         'select' => Icons.check_circle_outline,
         'set_bg' => Icons.wallpaper,
         'open' => Icons.folder_open,
+        'open_in_pane' => Icons.view_column_outlined,
         'bookmark' => Icons.bookmark_add_outlined,
         'play' => Icons.play_arrow_rounded,
         'external' => Icons.open_in_new,
@@ -1401,6 +1447,76 @@ class _BrowserLoadedState extends ConsumerState<_BrowserLoaded> {
         'properties' => Icons.info_outline,
         _ => Icons.more_horiz,
       };
+
+  Future<String?> _showVideoContextSheet(
+    BuildContext context,
+    _BrowserItem item,
+    Map<String, String> actions,
+  ) async {
+    final e = item.entry;
+    final api = ref.read(apiServiceProvider);
+    final quality =
+        ref.read(sharedPrefsProvider).getInt('thumbnail_quality') ?? 50;
+
+    return showModalBottomSheet<String>(
+      context: context,
+      isScrollControlled: true,
+      builder: (sheetCtx) => SafeArea(
+        child: ConstrainedBox(
+          constraints:
+              BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.85),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+                child: Text(e.name,
+                    style: Theme.of(context).textTheme.titleSmall,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis),
+              ),
+              const Divider(height: 1),
+              // Timeline thumbnails
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 8),
+                child: FutureBuilder<int?>(
+                  future: api.getVideoDurationMs(e.path),
+                  builder: (_, snap) {
+                    final durationMs = snap.data ?? 0;
+                    if (snap.connectionState == ConnectionState.waiting) {
+                      return const VideoTimelinePlaceholder();
+                    }
+                    if (durationMs <= 0) return const SizedBox.shrink();
+                    return VideoTimelineStrip(
+                      serverPath: e.path,
+                      durationMs: durationMs,
+                      api: api,
+                      quality: quality,
+                      onSeekTap: (posMs) =>
+                          Navigator.pop(sheetCtx, 'seek:$posMs'),
+                    );
+                  },
+                ),
+              ),
+              const Divider(height: 1),
+              Flexible(
+                child: ListView(
+                  shrinkWrap: true,
+                  children: actions.entries
+                      .map((kv) => ListTile(
+                            leading: Icon(_actionIcon(kv.key)),
+                            title: Text(kv.value),
+                            onTap: () => Navigator.pop(sheetCtx, kv.key),
+                          ))
+                      .toList(),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 
   // ── Paste ──────────────────────────────────────────────────────────────────
 

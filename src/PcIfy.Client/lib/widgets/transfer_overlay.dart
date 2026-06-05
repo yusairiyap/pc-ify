@@ -219,7 +219,6 @@ class _TransferPanelState extends ConsumerState<_TransferPanel> {
                             IconButton(
                               icon: const Icon(Icons.remove_rounded,
                                   size: 18),
-                              tooltip: 'Minimize',
                               onPressed: () =>
                                   notifier.setMinimized(true),
                               visualDensity: VisualDensity.compact,
@@ -227,7 +226,6 @@ class _TransferPanelState extends ConsumerState<_TransferPanel> {
                             IconButton(
                               icon: const Icon(Icons.close_rounded,
                                   size: 18),
-                              tooltip: 'Dismiss panel',
                               onPressed: widget.onDismiss,
                               visualDensity: VisualDensity.compact,
                             ),
@@ -350,7 +348,6 @@ class _TransferRow extends ConsumerWidget {
               ),
               IconButton(
                 icon: const Icon(Icons.close_rounded, size: 16),
-                tooltip: (isDone || isError) ? 'Dismiss' : 'Cancel',
                 onPressed: (isDone || isError)
                     ? () => notifier.dismiss(task.id)
                     : () => notifier.cancel(task.id),

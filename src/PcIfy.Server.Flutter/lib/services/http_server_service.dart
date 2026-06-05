@@ -110,6 +110,8 @@ class HttpServerService {
         '${ApiRoutes.thumbnails}/<filePath|[^]*>',
         _streamGuard(authSvc,
             (req, fp) => _handleThumbnail(req, fp, fileSvc, thumbSvc, authSvc)));
+    r.get(ApiRoutes.filesVideoInfo,
+        _withAuth(authSvc, (req) => _handleVideoInfo(req, fileSvc, thumbSvc, authSvc)));
     r.post(ApiRoutes.filesUpload,
         _withAuth(authSvc, (req) => _handleUpload(req, fileSvc, authSvc)));
     r.delete(ApiRoutes.filesDelete,
@@ -487,12 +489,51 @@ class HttpServerService {
       return Response.forbidden('Path not allowed');
     }
 
-    final sizeParam = req.url.queryParameters['size'];
-    final size = ThumbnailSizeExt.fromString(sizeParam);
-    final bytes = await thumbSvc.getOrCreate(filePath, roots, size);
+    final qualityParam = req.url.queryParameters['quality'];
+    final tParam = req.url.queryParameters['t'];
+
+    int quality;
+    if (qualityParam != null) {
+      quality = (int.tryParse(qualityParam) ?? 50).clamp(10, 100);
+    } else {
+      // Backwards-compat: map legacy size= strings to quality values
+      final sizeParam = req.url.queryParameters['size'];
+      quality = switch (sizeParam?.toLowerCase()) {
+        'small' => 25,
+        'large' => 100,
+        _ => 50,
+      };
+    }
+
+    final atSeconds = tParam != null ? double.tryParse(tParam) : null;
+
+    final bytes = await thumbSvc.getOrCreate(
+      filePath, roots,
+      quality: quality,
+      atSeconds: atSeconds,
+    );
     if (bytes == null) return Response.notFound('Cannot generate thumbnail');
 
     return Response.ok(bytes, headers: {'content-type': 'image/jpeg'});
+  }
+
+  Future<Response> _handleVideoInfo(
+    Request req,
+    FileService fileSvc,
+    ThumbnailService thumbSvc,
+    AuthService authSvc,
+  ) async {
+    final rawPath = req.url.queryParameters['path'];
+    if (rawPath == null || rawPath.isEmpty) {
+      return Response.badRequest(body: 'Missing path');
+    }
+    final filePath = Uri.decodeComponent(rawPath);
+    final roots = _effectiveRoots(_getUsername(req, authSvc));
+    if (!fileSvc.isPathAllowed(filePath, allowedRoots: roots)) {
+      return Response.forbidden('Path not allowed');
+    }
+    final durationMs = await thumbSvc.getVideoDurationMs(filePath, roots);
+    return _json({'durationMs': durationMs ?? 0});
   }
 
   // ── System control handlers ───────────────────────────────────────────────
