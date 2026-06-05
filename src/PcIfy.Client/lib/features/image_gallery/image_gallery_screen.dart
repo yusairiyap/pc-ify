@@ -887,13 +887,16 @@ class _ImageGalleryScreenState extends ConsumerState<ImageGalleryScreen>
 
     // ValueListenableBuilder limits repaints to this wrapper only — the video
     // Texture widget subtree is passed as `child` and never rebuilt by drags.
-    // Always wrap in Transform.translate (even at dy=0) so the widget tree
-    // structure never changes, preventing video player disposal on first drag.
+    // Always wrap in Transform (even at dy=0) so tree structure never changes,
+    // preventing video player disposal on the first drag frame.
     return ValueListenableBuilder<double>(
       valueListenable: _dismissDyNotifier,
-      builder: (_, dismissDy, child) => Transform.translate(
-        offset: Offset(0, dismissDy),
-        child: child,
+      builder: (_, dismissDy, child) => Opacity(
+        opacity: (1.0 - dismissDy / 300.0).clamp(0.2, 1.0),
+        child: Transform.translate(
+          offset: Offset(0, dismissDy),
+          child: child,
+        ),
       ),
       child: scaffold,
     );
@@ -963,15 +966,17 @@ class _GalleryVideoPageState extends ConsumerState<_GalleryVideoPage> {
     final repeat = ref.read(videoRepeatProvider);
     await _player.setPlaylistMode(repeat ? PlaylistMode.loop : PlaylistMode.none);
     await _player.open(Media(widget.streamUri), play: false);
-    final pos = widget.initialPositionMs;
-    if (pos != null && pos > 0) {
-      await _player.seek(Duration(milliseconds: pos));
-    }
     _ready = true;
     if (_isActive) {
       widget.playerNotifier.value = _player;
       _player.setVolume(widget.muteNotifier.value ? 0 : 100);
       await _player.play();
+      // Seek after play() so the HTTP stream has started buffering — seeking
+      // on a paused, not-yet-started stream silently fails for many codecs.
+      final pos = widget.initialPositionMs;
+      if (pos != null && pos > 0) {
+        await _player.seek(Duration(milliseconds: pos));
+      }
     }
   }
 

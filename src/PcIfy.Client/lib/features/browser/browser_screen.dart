@@ -424,10 +424,20 @@ class _BrowserBody extends ConsumerStatefulWidget {
 
 class _BrowserBodyState extends ConsumerState<_BrowserBody>
     with WidgetsBindingObserver {
+  // Cached during didChangeDependencies so it is safe to read from the
+  // async didPopRoute callback without calling GoRouter.of(context) there.
+  GoRouter? _router;
+
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _router = GoRouter.of(context);
   }
 
   @override
@@ -440,8 +450,8 @@ class _BrowserBodyState extends ConsumerState<_BrowserBody>
   Future<bool> didPopRoute() async {
     if (!mounted) return false;
     // Only intercept when the browse tab is the active route.
-    final uri = GoRouter.of(context).routeInformationProvider.value.uri;
-    if (!uri.path.startsWith('/browse')) return false;
+    final uri = _router?.routeInformationProvider.value.uri;
+    if (uri == null || !uri.path.startsWith('/browse')) return false;
     final browserState = ref.read(_browserNotifierProvider).valueOrNull;
     if (browserState?.canNavigateBack == true) {
       ref.read(_browserNotifierProvider.notifier).navigateBack();
