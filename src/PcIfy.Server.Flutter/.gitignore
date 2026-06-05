@@ -55,3 +55,6 @@ app.*.map.json
 
 # Flutter ephemeral build outputs
 **/Flutter/ephemeral/
+
+# IDE-generated DevTools config (machine-specific)
+devtools_options.yaml
