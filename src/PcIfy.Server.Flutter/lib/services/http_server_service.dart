@@ -175,6 +175,7 @@ class HttpServerService {
       'serverName': settings.serverName,
       'version': '1.0.0',
       'osVersion': Platform.operatingSystemVersion,
+      'platform': Platform.operatingSystem,
     });
   }
 

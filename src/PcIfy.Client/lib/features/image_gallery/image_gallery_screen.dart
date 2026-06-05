@@ -1,10 +1,13 @@
 import 'dart:async';
+import 'dart:io' show Platform;
 
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:media_kit_video/media_kit_video.dart';
+import '../../services/pip_service.dart';
 
 import '../../core/models/file_entry.dart';
 import '../../providers/services_providers.dart';
@@ -119,6 +122,15 @@ class _ImageGalleryScreenState extends ConsumerState<ImageGalleryScreen>
   Offset? _tapStart;
   bool _visibleAtTapStart = false;
 
+  // Swipe-down-to-dismiss state
+  double _dismissDy = 0;
+  bool _isDismissing = false;
+  double _dismissSnapFromDy = 0;
+  late final AnimationController _dismissAnimCtrl;
+
+  // Picture-in-Picture
+  bool _inPipMode = false;
+
   @override
   void initState() {
     super.initState();
@@ -130,6 +142,16 @@ class _ImageGalleryScreenState extends ConsumerState<ImageGalleryScreen>
       duration: const Duration(milliseconds: 220),
       vsync: this,
     )..addListener(_onZoomTick);
+    _dismissAnimCtrl = AnimationController(
+      duration: const Duration(milliseconds: 250),
+      vsync: this,
+    )..addListener(_onDismissSnapTick);
+    if (Platform.isAndroid) {
+      PipService.onPipChanged = (inPip) {
+        if (mounted) setState(() => _inPipMode = inPip);
+      };
+      PipService.initialize();
+    }
     _resetHideTimer();
   }
 
@@ -143,6 +165,8 @@ class _ImageGalleryScreenState extends ConsumerState<ImageGalleryScreen>
     _activeIndexNotifier.dispose();
     _muteNotifier.dispose();
     _zoomAnimCtrl.dispose();
+    _dismissAnimCtrl.dispose();
+    if (Platform.isAndroid) PipService.dispose();
     for (final ctrl in _tfControllers.values) {
       ctrl.dispose();
     }
@@ -165,6 +189,20 @@ class _ImageGalleryScreenState extends ConsumerState<ImageGalleryScreen>
     _scheduleHide();
   }
 
+  void _onDismissSnapTick() {
+    if (!mounted) return;
+    setState(() {
+      _dismissDy =
+          _dismissSnapFromDy * (1.0 - _dismissAnimCtrl.value);
+    });
+  }
+
+  void _snapDismissBack() {
+    _dismissSnapFromDy = _dismissDy;
+    _dismissAnimCtrl.value = 0;
+    _dismissAnimCtrl.forward();
+  }
+
   // --- Tap-to-toggle logic ---
   // onPointerDown / onPointerMove / onPointerUp are used by the Listener overlay.
   // A "tap" = pointer up with minimal movement.
@@ -181,15 +219,44 @@ class _ImageGalleryScreenState extends ConsumerState<ImageGalleryScreen>
       setState(() => _controlsVisible = true);
       _controlsShownAt = DateTime.now();
     }
+    // Reset dismiss state on every new touch
+    _dismissAnimCtrl.stop();
+    _isDismissing = false;
+    setState(() => _dismissDy = 0);
   }
 
   void _onPointerMove(PointerMoveEvent e) {
     if (_tapStart != null && (e.localPosition - _tapStart!).distance > 12) {
       _tapStart = null; // too much movement — treat as drag, not tap
     }
+    // Swipe-down-to-dismiss: activate when dragging primarily downward while
+    // not zoomed into an image and not dragging the video seek bar.
+    if (!_isDismissing && !_isVideoSeeking && !_zoomedNotifier.value) {
+      final dy = e.delta.dy;
+      final dx = e.delta.dx;
+      if (dy > 0 && dy.abs() > dx.abs() * 1.5) {
+        _isDismissing = true;
+      }
+    }
+    if (_isDismissing) {
+      setState(() {
+        _dismissDy = (_dismissDy + e.delta.dy).clamp(0.0, double.infinity);
+      });
+    }
   }
 
   void _onPointerUp(PointerUpEvent e) {
+    if (_isDismissing) {
+      _isDismissing = false;
+      if (_dismissDy > 150) {
+        context.pop();
+      } else {
+        _snapDismissBack();
+      }
+      _tapStart = null;
+      return;
+    }
+
     final wasTap = _tapStart != null;
     _tapStart = null;
 
@@ -558,6 +625,17 @@ class _ImageGalleryScreenState extends ConsumerState<ImageGalleryScreen>
                         },
                       ),
                     ),
+                    // Picture-in-Picture (Android only)
+                    if (Platform.isAndroid)
+                      IconButton(
+                        tooltip: 'Picture in picture',
+                        icon: const Icon(
+                          Icons.picture_in_picture_alt,
+                          color: Colors.white,
+                          size: 20,
+                        ),
+                        onPressed: () => PipService.enter(),
+                      ),
                   ],
                 ),  // Row
                   ],
@@ -624,15 +702,18 @@ class _ImageGalleryScreenState extends ConsumerState<ImageGalleryScreen>
     final asyncItems = ref.watch(_galleryProvider(widget.folderPath));
     final topPad = MediaQuery.of(context).padding.top;
 
-    return Scaffold(
+    // In PiP mode hide all controls so only the video is visible.
+    final controlsVisible = _controlsVisible && !_inPipMode;
+
+    final scaffold = Scaffold(
       extendBodyBehindAppBar: true,
       backgroundColor: Colors.black,
       appBar: PreferredSize(
         preferredSize: const Size.fromHeight(kToolbarHeight),
         child: IgnorePointer(
-          ignoring: !_controlsVisible,
+          ignoring: !controlsVisible,
           child: AnimatedOpacity(
-            opacity: _controlsVisible ? 1.0 : 0.0,
+            opacity: controlsVisible ? 1.0 : 0.0,
             duration: const Duration(milliseconds: 300),
             child: AppBar(
               backgroundColor: Colors.transparent,
@@ -750,9 +831,9 @@ class _ImageGalleryScreenState extends ConsumerState<ImageGalleryScreen>
                   bottom: bottomOverlayH,
                   child: Center(
                     child: IgnorePointer(
-                      ignoring: !_controlsVisible,
+                      ignoring: !controlsVisible,
                       child: AnimatedOpacity(
-                        opacity: _controlsVisible ? 1.0 : 0.0,
+                        opacity: controlsVisible ? 1.0 : 0.0,
                         duration: const Duration(milliseconds: 300),
                         child: _NavButton(
                           icon: Icons.chevron_left,
@@ -771,9 +852,9 @@ class _ImageGalleryScreenState extends ConsumerState<ImageGalleryScreen>
                   bottom: bottomOverlayH,
                   child: Center(
                     child: IgnorePointer(
-                      ignoring: !_controlsVisible,
+                      ignoring: !controlsVisible,
                       child: AnimatedOpacity(
-                        opacity: _controlsVisible ? 1.0 : 0.0,
+                        opacity: controlsVisible ? 1.0 : 0.0,
                         duration: const Duration(milliseconds: 300),
                         child: _NavButton(
                           icon: Icons.chevron_right,
@@ -791,9 +872,9 @@ class _ImageGalleryScreenState extends ConsumerState<ImageGalleryScreen>
                 left: 0,
                 right: 0,
                 child: IgnorePointer(
-                  ignoring: !_controlsVisible,
+                  ignoring: !controlsVisible,
                   child: AnimatedOpacity(
-                    opacity: _controlsVisible ? 1.0 : 0.0,
+                    opacity: controlsVisible ? 1.0 : 0.0,
                     duration: const Duration(milliseconds: 300),
                     child: _buildBottomOverlay(items),
                   ),
@@ -802,6 +883,15 @@ class _ImageGalleryScreenState extends ConsumerState<ImageGalleryScreen>
             ],
           );
         },
+      ),
+    );
+
+    if (_dismissDy == 0) return scaffold;
+    return Transform.translate(
+      offset: Offset(0, _dismissDy),
+      child: Opacity(
+        opacity: (1.0 - _dismissDy / 300.0).clamp(0.2, 1.0),
+        child: scaffold,
       ),
     );
   }

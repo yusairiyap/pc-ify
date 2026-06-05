@@ -4,6 +4,7 @@ import '../core/models/bookmarked_folder.dart';
 import '../core/models/control_status.dart';
 import '../core/models/dashboard_models.dart';
 import '../core/models/file_entry.dart';
+import '../core/models/server_info.dart';
 import 'services_providers.dart';
 
 // ── Layout ────────────────────────────────────────────────────────────────────
@@ -77,6 +78,31 @@ class ControlStatusNotifier extends AutoDisposeAsyncNotifier<ControlStatus> {
     return await ref.read(apiServiceProvider).getControlStatus() ??
         ControlStatus.unavailable();
   }
+
+  Future<void> _refresh() async {
+    final fresh = await _fetch();
+    state = AsyncData(fresh);
+  }
+}
+
+// ── Server info (30-second poll) ──────────────────────────────────────────────
+
+final serverInfoProvider = AsyncNotifierProvider.autoDispose<
+    _ServerInfoNotifier, ServerInfo?>(_ServerInfoNotifier.new);
+
+class _ServerInfoNotifier extends AutoDisposeAsyncNotifier<ServerInfo?> {
+  Timer? _timer;
+
+  @override
+  Future<ServerInfo?> build() async {
+    ref.onDispose(() => _timer?.cancel());
+    final info = await _fetch();
+    _timer = Timer.periodic(const Duration(seconds: 30), (_) => _refresh());
+    return info;
+  }
+
+  Future<ServerInfo?> _fetch() =>
+      ref.read(apiServiceProvider).getServerInfo();
 
   Future<void> _refresh() async {
     final fresh = await _fetch();

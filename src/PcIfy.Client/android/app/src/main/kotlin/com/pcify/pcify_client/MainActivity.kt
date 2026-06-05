@@ -1,10 +1,15 @@
 package com.pcify.pcify_client
 
+import android.content.ActivityNotFoundException
 import android.content.ContentValues
+import android.content.Intent
 import android.content.pm.PackageManager
+import android.content.res.Configuration
+import android.net.Uri
 import android.os.Build
 import android.os.Environment
 import android.provider.MediaStore
+import android.util.Rational
 import android.webkit.MimeTypeMap
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
@@ -17,15 +22,40 @@ class MainActivity : FlutterActivity() {
 
     companion object {
         private const val CHANNEL = "com.pcify.pcify_client/downloads"
+        private const val PIP_CHANNEL = "com.pcify.pcify_client/pip"
         private const val REQUEST_WRITE_PERMISSION = 1001
     }
 
     private var pendingResult: MethodChannel.Result? = null
     private var pendingTempPath: String? = null
     private var pendingFileName: String? = null
+    private var pipChannel: MethodChannel? = null
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
+
+        // Picture-in-Picture channel
+        pipChannel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, PIP_CHANNEL)
+        pipChannel!!.setMethodCallHandler { call, result ->
+            when (call.method) {
+                "isAvailable" -> result.success(Build.VERSION.SDK_INT >= Build.VERSION_CODES.O)
+                "enterPipMode" -> {
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                        val num = call.argument<Int>("ratioNum") ?: 16
+                        val den = call.argument<Int>("ratioDen") ?: 9
+                        val params = android.app.PictureInPictureParams.Builder()
+                            .setAspectRatio(Rational(num, den))
+                            .build()
+                        enterPictureInPictureMode(params)
+                        result.success(null)
+                    } else {
+                        result.error("NOT_SUPPORTED", "PiP requires Android 8+", null)
+                    }
+                }
+                else -> result.notImplemented()
+            }
+        }
+
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CHANNEL).setMethodCallHandler { call, result ->
             when (call.method) {
                 "saveToSystemDownloads" -> {
@@ -35,6 +65,27 @@ class MainActivity : FlutterActivity() {
                         result.error("INVALID_ARGS", "tempPath and fileName are required", null)
                     } else {
                         saveToSystemDownloads(tempPath, fileName, result)
+                    }
+                }
+                "openFileFromUri" -> {
+                    val uriStr = call.argument<String>("uri") ?: ""
+                    val ext = call.argument<String>("ext") ?: ""
+                    val mime = MimeTypeMap.getSingleton()
+                        .getMimeTypeFromExtension(ext.lowercase()) ?: "*/*"
+                    try {
+                        val uri = Uri.parse(uriStr)
+                        val intent = Intent(Intent.ACTION_VIEW)
+                        intent.setDataAndType(uri, mime)
+                        intent.addFlags(
+                            Intent.FLAG_GRANT_READ_URI_PERMISSION or
+                            Intent.FLAG_ACTIVITY_NEW_TASK
+                        )
+                        startActivity(intent)
+                        result.success(null)
+                    } catch (e: ActivityNotFoundException) {
+                        result.error("NO_APP", "No app found to open this file type", null)
+                    } catch (e: Exception) {
+                        result.error("OPEN_ERROR", e.message, null)
                     }
                 }
                 else -> result.notImplemented()
@@ -100,6 +151,14 @@ class MainActivity : FlutterActivity() {
                 runOnUiThread { result.error("SAVE_ERROR", e.message, null) }
             }
         }.start()
+    }
+
+    override fun onPictureInPictureModeChanged(
+        isInPictureInPictureMode: Boolean,
+        newConfig: Configuration,
+    ) {
+        super.onPictureInPictureModeChanged(isInPictureInPictureMode, newConfig)
+        pipChannel?.invokeMethod("onPipChanged", isInPictureInPictureMode)
     }
 
     override fun onRequestPermissionsResult(

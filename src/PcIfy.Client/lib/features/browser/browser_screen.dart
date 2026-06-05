@@ -1,5 +1,5 @@
 import 'dart:async' show unawaited;
-import 'dart:io' show Directory, File;
+import 'dart:io' show Directory, File, Platform;
 
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:file_picker/file_picker.dart' hide FileType;
@@ -671,58 +671,70 @@ class _BrowserLoadedState extends ConsumerState<_BrowserLoaded> {
     );
 
     if (hasBg) {
-      return Scaffold(
-        extendBodyBehindAppBar: true,
-        appBar: appBar,
-        body: Stack(
-          fit: StackFit.expand,
-          children: [
-            if (state.backgroundVideoUri != null)
-              VideoBackgroundPlayer(
-                videoUri: state.backgroundVideoUri!,
-                prefs: state.prefs,
-              )
-            else
-              FolderBackgroundImage(
-                imageUri: state.backgroundImageUri!,
-                prefs: state.prefs,
+      return PopScope(
+        canPop: !state.canNavigateBack,
+        onPopInvokedWithResult: (didPop, _) {
+          if (!didPop) notifier.navigateBack();
+        },
+        child: Scaffold(
+          extendBodyBehindAppBar: true,
+          appBar: appBar,
+          body: Stack(
+            fit: StackFit.expand,
+            children: [
+              if (state.backgroundVideoUri != null)
+                VideoBackgroundPlayer(
+                  videoUri: state.backgroundVideoUri!,
+                  prefs: state.prefs,
+                )
+              else
+                FolderBackgroundImage(
+                  imageUri: state.backgroundImageUri!,
+                  prefs: state.prefs,
+                ),
+              DecoratedBox(
+                decoration:
+                    BoxDecoration(color: Colors.black.withValues(alpha: 0.35)),
               ),
-            DecoratedBox(
-              decoration:
-                  BoxDecoration(color: Colors.black.withValues(alpha: 0.35)),
-            ),
-            Column(
-              children: [
-                SizedBox(
-                    height:
-                        MediaQuery.viewPaddingOf(context).top + kToolbarHeight),
-                _DensityToolbar(
-                    count: state.items.length,
-                    density: state.density,
-                    sort: state.sort,
-                    onCycle: notifier.cycleDensity,
-                    onSort: notifier.setSortOption,
-                    hasBackground: true),
-                Expanded(child: grid),
-              ],
-            ),
-          ],
+              Column(
+                children: [
+                  SizedBox(
+                      height:
+                          MediaQuery.viewPaddingOf(context).top + kToolbarHeight),
+                  _DensityToolbar(
+                      count: state.items.length,
+                      density: state.density,
+                      sort: state.sort,
+                      onCycle: notifier.cycleDensity,
+                      onSort: notifier.setSortOption,
+                      hasBackground: true),
+                  Expanded(child: grid),
+                ],
+              ),
+            ],
+          ),
         ),
       );
     }
 
-    return Scaffold(
-      appBar: appBar,
-      body: Column(
-        children: [
-          _DensityToolbar(
-              count: state.items.length,
-              density: state.density,
-              sort: state.sort,
-              onCycle: notifier.cycleDensity,
-              onSort: notifier.setSortOption),
-          Expanded(child: grid),
-        ],
+    return PopScope(
+      canPop: !state.canNavigateBack,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop) notifier.navigateBack();
+      },
+      child: Scaffold(
+        appBar: appBar,
+        body: Column(
+          children: [
+            _DensityToolbar(
+                count: state.items.length,
+                density: state.density,
+                sort: state.sort,
+                onCycle: notifier.cycleDensity,
+                onSort: notifier.setSortOption),
+            Expanded(child: grid),
+          ],
+        ),
       ),
     );
   }
@@ -884,10 +896,33 @@ class _BrowserLoadedState extends ConsumerState<_BrowserLoaded> {
     if (saved != null) {
       manager.complete(id);
       if (!context.mounted) return;
-      final result = await OpenFilex.open(saved);
-      if (context.mounted && result.type != ResultType.done) {
-        ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Cannot open file: ${result.message}')));
+      String? errorMsg;
+      try {
+        if (Platform.isAndroid && saved.startsWith('content://')) {
+          await ref
+              .read(downloadServiceProvider)
+              .openContentUri(saved, e.name);
+        } else {
+          final result = await OpenFilex.open(saved);
+          if (result.type != ResultType.done) errorMsg = result.message;
+        }
+      } on Exception catch (ex) {
+        errorMsg = ex.toString().replaceFirst('Exception: ', '');
+      }
+      if (errorMsg != null && context.mounted) {
+        showDialog<void>(
+          context: context,
+          builder: (_) => AlertDialog(
+            title: const Text('Cannot open file'),
+            content: Text(errorMsg!),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('OK'),
+              ),
+            ],
+          ),
+        );
       }
     } else {
       if (!ct.isCancelled) manager.fail(id, 'Download failed');
