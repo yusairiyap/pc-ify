@@ -421,9 +421,19 @@ class _BrowserBody extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final async = ref.watch(_browserNotifierProvider);
-    final isNavigating = async.isLoading &&
-        ref.read(_browserNotifierProvider.notifier).navigating;
-    return Stack(
+    final notifier = ref.read(_browserNotifierProvider.notifier);
+    final isNavigating = async.isLoading && notifier.navigating;
+    final canNavigateBack = async.valueOrNull?.canNavigateBack ?? false;
+
+    return BackButtonListener(
+      onBackButtonPressed: () async {
+        if (canNavigateBack) {
+          notifier.navigateBack();
+          return true;
+        }
+        return false;
+      },
+      child: Stack(
       children: [
         async.when(
           skipLoadingOnReload: true,
@@ -451,7 +461,8 @@ class _BrowserBody extends ConsumerWidget {
             ),
           ),
       ],
-    );
+    ), // Stack
+    ); // BackButtonListener
   }
 }
 
@@ -671,70 +682,58 @@ class _BrowserLoadedState extends ConsumerState<_BrowserLoaded> {
     );
 
     if (hasBg) {
-      return PopScope(
-        canPop: !state.canNavigateBack,
-        onPopInvokedWithResult: (didPop, _) {
-          if (!didPop) notifier.navigateBack();
-        },
-        child: Scaffold(
-          extendBodyBehindAppBar: true,
-          appBar: appBar,
-          body: Stack(
-            fit: StackFit.expand,
-            children: [
-              if (state.backgroundVideoUri != null)
-                VideoBackgroundPlayer(
-                  videoUri: state.backgroundVideoUri!,
-                  prefs: state.prefs,
-                )
-              else
-                FolderBackgroundImage(
-                  imageUri: state.backgroundImageUri!,
-                  prefs: state.prefs,
-                ),
-              DecoratedBox(
-                decoration:
-                    BoxDecoration(color: Colors.black.withValues(alpha: 0.35)),
+      return Scaffold(
+        extendBodyBehindAppBar: true,
+        appBar: appBar,
+        body: Stack(
+          fit: StackFit.expand,
+          children: [
+            if (state.backgroundVideoUri != null)
+              VideoBackgroundPlayer(
+                videoUri: state.backgroundVideoUri!,
+                prefs: state.prefs,
+              )
+            else
+              FolderBackgroundImage(
+                imageUri: state.backgroundImageUri!,
+                prefs: state.prefs,
               ),
-              Column(
-                children: [
-                  SizedBox(
-                      height:
-                          MediaQuery.viewPaddingOf(context).top + kToolbarHeight),
-                  _DensityToolbar(
-                      count: state.items.length,
-                      density: state.density,
-                      sort: state.sort,
-                      onCycle: notifier.cycleDensity,
-                      onSort: notifier.setSortOption,
-                      hasBackground: true),
-                  Expanded(child: grid),
-                ],
-              ),
-            ],
-          ),
+            DecoratedBox(
+              decoration:
+                  BoxDecoration(color: Colors.black.withValues(alpha: 0.35)),
+            ),
+            Column(
+              children: [
+                SizedBox(
+                    height:
+                        MediaQuery.viewPaddingOf(context).top + kToolbarHeight),
+                _DensityToolbar(
+                    count: state.items.length,
+                    density: state.density,
+                    sort: state.sort,
+                    onCycle: notifier.cycleDensity,
+                    onSort: notifier.setSortOption,
+                    hasBackground: true),
+                Expanded(child: grid),
+              ],
+            ),
+          ],
         ),
       );
     }
 
-    return PopScope(
-      canPop: !state.canNavigateBack,
-      onPopInvokedWithResult: (didPop, _) {
-        if (!didPop) notifier.navigateBack();
-      },
-      child: Scaffold(
-        appBar: appBar,
-        body: Column(
-          children: [
-            _DensityToolbar(
-                count: state.items.length,
-                density: state.density,
-                sort: state.sort,
-                onCycle: notifier.cycleDensity,
-                onSort: notifier.setSortOption),
-            Expanded(child: grid),
-          ],
-        ),
+    return Scaffold(
+      appBar: appBar,
+      body: Column(
+        children: [
+          _DensityToolbar(
+              count: state.items.length,
+              density: state.density,
+              sort: state.sort,
+              onCycle: notifier.cycleDensity,
+              onSort: notifier.setSortOption),
+          Expanded(child: grid),
+        ],
       ),
     );
   }

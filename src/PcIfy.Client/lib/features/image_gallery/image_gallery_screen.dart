@@ -123,7 +123,9 @@ class _ImageGalleryScreenState extends ConsumerState<ImageGalleryScreen>
   bool _visibleAtTapStart = false;
 
   // Swipe-down-to-dismiss state
-  double _dismissDy = 0;
+  // ValueNotifier so only the outer Transform rebuilds on each drag frame —
+  // avoids full rebuild of the video Texture widget which causes flicker.
+  final _dismissDyNotifier = ValueNotifier<double>(0.0);
   bool _isDismissing = false;
   double _dismissSnapFromDy = 0;
   late final AnimationController _dismissAnimCtrl;
@@ -166,6 +168,7 @@ class _ImageGalleryScreenState extends ConsumerState<ImageGalleryScreen>
     _muteNotifier.dispose();
     _zoomAnimCtrl.dispose();
     _dismissAnimCtrl.dispose();
+    _dismissDyNotifier.dispose();
     if (Platform.isAndroid) PipService.dispose();
     for (final ctrl in _tfControllers.values) {
       ctrl.dispose();
@@ -190,15 +193,12 @@ class _ImageGalleryScreenState extends ConsumerState<ImageGalleryScreen>
   }
 
   void _onDismissSnapTick() {
-    if (!mounted) return;
-    setState(() {
-      _dismissDy =
-          _dismissSnapFromDy * (1.0 - _dismissAnimCtrl.value);
-    });
+    _dismissDyNotifier.value =
+        _dismissSnapFromDy * (1.0 - _dismissAnimCtrl.value);
   }
 
   void _snapDismissBack() {
-    _dismissSnapFromDy = _dismissDy;
+    _dismissSnapFromDy = _dismissDyNotifier.value;
     _dismissAnimCtrl.value = 0;
     _dismissAnimCtrl.forward();
   }
@@ -219,10 +219,10 @@ class _ImageGalleryScreenState extends ConsumerState<ImageGalleryScreen>
       setState(() => _controlsVisible = true);
       _controlsShownAt = DateTime.now();
     }
-    // Reset dismiss state on every new touch
+    // Reset dismiss state on every new touch (ValueNotifier — no setState)
     _dismissAnimCtrl.stop();
     _isDismissing = false;
-    setState(() => _dismissDy = 0);
+    _dismissDyNotifier.value = 0;
   }
 
   void _onPointerMove(PointerMoveEvent e) {
@@ -239,16 +239,15 @@ class _ImageGalleryScreenState extends ConsumerState<ImageGalleryScreen>
       }
     }
     if (_isDismissing) {
-      setState(() {
-        _dismissDy = (_dismissDy + e.delta.dy).clamp(0.0, double.infinity);
-      });
+      _dismissDyNotifier.value =
+          (_dismissDyNotifier.value + e.delta.dy).clamp(0.0, double.infinity);
     }
   }
 
   void _onPointerUp(PointerUpEvent e) {
     if (_isDismissing) {
       _isDismissing = false;
-      if (_dismissDy > 150) {
+      if (_dismissDyNotifier.value > 150) {
         context.pop();
       } else {
         _snapDismissBack();
@@ -886,13 +885,18 @@ class _ImageGalleryScreenState extends ConsumerState<ImageGalleryScreen>
       ),
     );
 
-    if (_dismissDy == 0) return scaffold;
-    return Transform.translate(
-      offset: Offset(0, _dismissDy),
-      child: Opacity(
-        opacity: (1.0 - _dismissDy / 300.0).clamp(0.2, 1.0),
-        child: scaffold,
-      ),
+    // ValueListenableBuilder limits repaints to this wrapper only — the video
+    // Texture widget subtree is passed as `child` and never rebuilt by drags.
+    return ValueListenableBuilder<double>(
+      valueListenable: _dismissDyNotifier,
+      builder: (_, dismissDy, child) {
+        if (dismissDy == 0) return child!;
+        return Transform.translate(
+          offset: Offset(0, dismissDy),
+          child: child,
+        );
+      },
+      child: scaffold,
     );
   }
 }
