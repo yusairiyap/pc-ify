@@ -415,25 +415,48 @@ class BrowserScreen extends ConsumerWidget {
   }
 }
 
-class _BrowserBody extends ConsumerWidget {
+class _BrowserBody extends ConsumerStatefulWidget {
   const _BrowserBody();
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<_BrowserBody> createState() => _BrowserBodyState();
+}
+
+class _BrowserBodyState extends ConsumerState<_BrowserBody>
+    with WidgetsBindingObserver {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  Future<bool> didPopRoute() async {
+    if (!mounted) return false;
+    // Only intercept when the browse tab is the active route.
+    final uri = GoRouter.of(context).routeInformationProvider.value.uri;
+    if (!uri.path.startsWith('/browse')) return false;
+    final browserState = ref.read(_browserNotifierProvider).valueOrNull;
+    if (browserState?.canNavigateBack == true) {
+      ref.read(_browserNotifierProvider.notifier).navigateBack();
+      return true;
+    }
+    return false;
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final async = ref.watch(_browserNotifierProvider);
     final notifier = ref.read(_browserNotifierProvider.notifier);
     final isNavigating = async.isLoading && notifier.navigating;
-    final canNavigateBack = async.valueOrNull?.canNavigateBack ?? false;
 
-    return BackButtonListener(
-      onBackButtonPressed: () async {
-        if (canNavigateBack) {
-          notifier.navigateBack();
-          return true;
-        }
-        return false;
-      },
-      child: Stack(
+    return Stack(
       children: [
         async.when(
           skipLoadingOnReload: true,
@@ -461,8 +484,7 @@ class _BrowserBody extends ConsumerWidget {
             ),
           ),
       ],
-    ), // Stack
-    ); // BackButtonListener
+    );
   }
 }
 

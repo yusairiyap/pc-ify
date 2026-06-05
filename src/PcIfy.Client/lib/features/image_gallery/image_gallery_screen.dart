@@ -887,15 +887,14 @@ class _ImageGalleryScreenState extends ConsumerState<ImageGalleryScreen>
 
     // ValueListenableBuilder limits repaints to this wrapper only — the video
     // Texture widget subtree is passed as `child` and never rebuilt by drags.
+    // Always wrap in Transform.translate (even at dy=0) so the widget tree
+    // structure never changes, preventing video player disposal on first drag.
     return ValueListenableBuilder<double>(
       valueListenable: _dismissDyNotifier,
-      builder: (_, dismissDy, child) {
-        if (dismissDy == 0) return child!;
-        return Transform.translate(
-          offset: Offset(0, dismissDy),
-          child: child,
-        );
-      },
+      builder: (_, dismissDy, child) => Transform.translate(
+        offset: Offset(0, dismissDy),
+        child: child,
+      ),
       child: scaffold,
     );
   }
