@@ -127,7 +127,17 @@ class _BrowserNotifier extends AutoDisposeAsyncNotifier<_BrowserState> {
     navigating = true;
     state = const AsyncLoading<_BrowserState>().copyWithPrevious(state);
     _history.add(path);
-    state = await AsyncValue.guard(() => _load(path));
+    var result = await AsyncValue.guard(() => _load(path));
+    // On failure navigating to a non-root path, fall back to root listing.
+    if (result.hasError && path.isNotEmpty) {
+      _history.removeLast();
+      _history.add('');
+      result = await AsyncValue.guard(() => _load(''));
+      // If root also fails, remove the '' we just added so history isn't inflated
+      // with a phantom root entry that would cause spurious back-navigation.
+      if (result.hasError) _history.removeLast();
+    }
+    state = result;
     navigating = false;
   }
 
@@ -479,7 +489,34 @@ class _BrowserBodyState extends ConsumerState<_BrowserBody>
             final msg = err is Exception
                 ? err.toString().replaceFirst('Exception: ', '')
                 : err.toString();
-            return Scaffold(appBar: AppBar(), body: Center(child: Text(msg)));
+            return Scaffold(
+              appBar: AppBar(),
+              body: Center(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 32),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.folder_off_outlined,
+                          size: 48,
+                          color: Theme.of(context).colorScheme.error),
+                      const SizedBox(height: 16),
+                      Text(
+                        msg,
+                        textAlign: TextAlign.center,
+                        style: Theme.of(context).textTheme.bodyMedium,
+                      ),
+                      const SizedBox(height: 20),
+                      FilledButton.icon(
+                        onPressed: () => notifier.navigateTo(''),
+                        icon: const Icon(Icons.home_outlined),
+                        label: const Text('Go to root'),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            );
           },
           data: (s) => AnimatedSwitcher(
             duration: const Duration(milliseconds: 200),
@@ -661,7 +698,7 @@ class _BrowserLoadedState extends ConsumerState<_BrowserLoaded> {
       );
     }
 
-    final grid = AnimatedSwitcher(
+    final rawGrid = AnimatedSwitcher(
       duration: const Duration(milliseconds: 250),
       child: LayoutBuilder(
         key: ValueKey('${state.density.name}_${state.sort.name}'),
@@ -681,6 +718,9 @@ class _BrowserLoadedState extends ConsumerState<_BrowserLoaded> {
                 : null,
             child: GridView.builder(
               padding: const EdgeInsets.all(8),
+              // Required so pull-to-refresh fires even when the grid is shorter
+              // than the viewport (fewer items than fill the screen).
+              physics: const AlwaysScrollableScrollPhysics(),
               // ignore: deprecated_member_use
               cacheExtent: 600,
               gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
@@ -714,6 +754,11 @@ class _BrowserLoadedState extends ConsumerState<_BrowserLoaded> {
           );
         },
       ),
+    );
+
+    final grid = RefreshIndicator(
+      onRefresh: notifier.reload,
+      child: rawGrid,
     );
 
     if (hasBg) {

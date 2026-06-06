@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:math' show min;
+import 'package:flutter/services.dart';
 import 'package:network_info_plus/network_info_plus.dart';
 import 'package:path/path.dart' as p;
 import 'package:shelf/shelf.dart';
@@ -37,6 +38,7 @@ class HttpServerService {
   HttpServerService(this.settings, this.logService);
 
   HttpServer? _server;
+  String? _osDisplayName;
   final _stateController = StreamController<ServerState>.broadcast();
 
   Stream<ServerState> get stateStream => _stateController.stream;
@@ -45,6 +47,8 @@ class HttpServerService {
 
   Future<void> start(int port) async {
     if (isRunning) await stop();
+
+    _osDisplayName ??= await _resolveOsDisplayName();
 
     final authSvc = AuthService(settings);
     final fileSvc = FileService(settings);
@@ -174,9 +178,36 @@ class HttpServerService {
     return _json({
       'serverName': settings.serverName,
       'version': '1.0.0',
-      'osVersion': Platform.operatingSystemVersion,
+      'osVersion': _osDisplayName ?? Platform.operatingSystemVersion,
       'platform': Platform.operatingSystem,
     });
+  }
+
+  static Future<String> _resolveOsDisplayName() async {
+    if (Platform.isAndroid) {
+      try {
+        const ch = MethodChannel('com.pcify.pcify_server/system_control');
+        final name = await ch.invokeMethod<String>('getOsDisplayName');
+        if (name != null && name.isNotEmpty) return name;
+      } catch (_) {}
+    }
+    return _parseFriendlyOsVersion();
+  }
+
+  static String _parseFriendlyOsVersion() {
+    final raw = Platform.operatingSystemVersion;
+    if (Platform.isWindows) {
+      final m = RegExp(r'Windows\s+(\d+)').firstMatch(raw);
+      if (m != null) return 'Windows ${m.group(1)}';
+    }
+    if (Platform.isMacOS) {
+      // operatingSystemVersion may be "Version 14.4.1 (Build …)", "14.4.1",
+      // or already "macOS 14.4.1" depending on the Flutter runtime version.
+      // Extract just the numeric version to avoid a "macOS macOS …" double prefix.
+      final m = RegExp(r'(\d+\.\d+(?:\.\d+)?)').firstMatch(raw);
+      return m != null ? 'macOS ${m.group(1)}' : raw;
+    }
+    return raw;
   }
 
   // ── Per-user directory access helpers ────────────────────────────────────

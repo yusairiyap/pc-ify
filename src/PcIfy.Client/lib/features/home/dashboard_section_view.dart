@@ -10,7 +10,8 @@ import 'widget_cards/screen_lock_card.dart';
 import 'widget_cards/server_info_card.dart';
 import 'widget_cards/volume_card.dart';
 
-const _kResizeThreshold = 40.0;
+const _kTallMinHeight = 180.0;
+const _kNormalMinHeight = 112.0;
 
 class DashboardSectionView extends ConsumerWidget {
   const DashboardSectionView(
@@ -174,7 +175,8 @@ class _WidgetGridState extends ConsumerState<_WidgetGrid> {
 
     for (var i = 0; i < _items.length; i++) {
       final item = _items[i];
-      if (item.effectiveSize == WidgetSize.halfWidth) {
+      if (!item.effectiveSize.isWide) {
+        // halfWidth or halfWidthTall — pair up two per row
         pending.add((i, item));
         if (pending.length == 2) {
           rows.add(_halfRow(pending[0], pending[1]));
@@ -193,25 +195,35 @@ class _WidgetGridState extends ConsumerState<_WidgetGrid> {
     }
     if (pending.isNotEmpty) rows.add(_halfRow(pending[0], null));
 
-    return Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch, children: rows);
+    // AnimatedSwitcher cross-fades between layout configurations so that
+    // row reflows (e.g. halfWidthTall → fullWidthTall) look smooth instead
+    // of teleporting items.
+    final layoutKey = _items
+        .map((i) => '${i.id}:${i.effectiveSize.name}')
+        .join(',');
+    return AnimatedSwitcher(
+      duration: const Duration(milliseconds: 180),
+      child: Column(
+        key: ValueKey(layoutKey),
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: rows,
+      ),
+    );
   }
 
   Widget _halfRow((int, DashboardItem) a, (int, DashboardItem)? b) =>
       Padding(
         padding: const EdgeInsets.fromLTRB(16, 4, 16, 4),
-        child: IntrinsicHeight(
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Expanded(child: _draggableCard(a.$1, a.$2)),
-              if (b != null) ...[
-                const SizedBox(width: 8),
-                Expanded(child: _draggableCard(b.$1, b.$2)),
-              ] else
-                const Expanded(child: SizedBox.shrink()),
-            ],
-          ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(child: _draggableCard(a.$1, a.$2)),
+            if (b != null) ...[
+              const SizedBox(width: 8),
+              Expanded(child: _draggableCard(b.$1, b.$2)),
+            ] else
+              const Expanded(child: SizedBox.shrink()),
+          ],
         ),
       );
 
@@ -219,9 +231,16 @@ class _WidgetGridState extends ConsumerState<_WidgetGrid> {
     final isHovered = _hoverIndex == idx && _draggingIndex != idx;
     final cs = Theme.of(context).colorScheme;
     final screenWidth = MediaQuery.sizeOf(context).width;
-    final feedbackWidth = item.effectiveSize == WidgetSize.halfWidth
-        ? (screenWidth - 40) / 2
-        : screenWidth - 32;
+    final feedbackWidth = item.effectiveSize.isWide
+        ? screenWidth - 32
+        : (screenWidth - 40) / 2;
+
+    // Displacement: hovered widget slides aside to signal "I'll move here"
+    final slideOffset = isHovered
+        ? (item.effectiveSize.isWide
+            ? const Offset(0, 0.04)
+            : const Offset(0.07, 0))
+        : Offset.zero;
 
     return DragTarget<_DragData>(
       key: ValueKey(item.id),
@@ -241,179 +260,177 @@ class _WidgetGridState extends ConsumerState<_WidgetGrid> {
           _hoverIndex = null;
         });
       },
-      builder: (ctx, _, __) => AnimatedContainer(
+      builder: (ctx, _, __) => AnimatedSlide(
+        offset: slideOffset,
         duration: const Duration(milliseconds: 150),
-        decoration: isHovered
-            ? BoxDecoration(
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: cs.primary, width: 2),
-              )
-            : null,
-        child: LongPressDraggable<_DragData>(
-          data: _DragData(
-              sectionId: widget.section.id, item: item, fromIndex: idx),
-          delay: const Duration(milliseconds: 400),
-          onDragStarted: () => setState(() => _draggingIndex = idx),
-          onDragEnd: (_) => setState(() {
-            _draggingIndex = null;
-            _hoverIndex = null;
-          }),
-          feedback: Material(
-            color: Colors.transparent,
-            child: Opacity(
-              opacity: 0.85,
-              child: SizedBox(width: feedbackWidth, child: _buildCard(item)),
+        curve: Curves.easeOut,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 150),
+          decoration: isHovered
+              ? BoxDecoration(
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                      color: cs.primary.withValues(alpha: 0.6), width: 2),
+                )
+              : null,
+          child: LongPressDraggable<_DragData>(
+            data: _DragData(
+                sectionId: widget.section.id, item: item, fromIndex: idx),
+            delay: const Duration(milliseconds: 400),
+            onDragStarted: () => setState(() => _draggingIndex = idx),
+            onDragEnd: (_) => setState(() {
+              _draggingIndex = null;
+              _hoverIndex = null;
+            }),
+            feedback: Material(
+              color: Colors.transparent,
+              child: Opacity(
+                opacity: 0.85,
+                child: SizedBox(width: feedbackWidth, child: _buildCard(item)),
+              ),
             ),
+            childWhenDragging:
+                Opacity(opacity: 0.3, child: _buildCard(item)),
+            child: _withSizeBadge(item),
           ),
-          childWhenDragging:
-              Opacity(opacity: 0.3, child: _buildCard(item)),
-          child: _withResizeHandle(item),
         ),
       ),
     );
   }
 
-  Widget _withResizeHandle(DashboardItem item) => Stack(
-        children: [
-          _buildCard(item),
-          Positioned(
-            right: 0,
-            top: 0,
-            bottom: 0,
-            width: 20,
-            child: _ResizeHandle(
-              item: item,
-              onResize: (size) => _resizeItem(item, size),
-            ),
-          ),
-        ],
-      );
+  Widget _withSizeBadge(DashboardItem item) {
+    final badge = _SizeBadge(
+      item: item,
+      onResize: (size) => _resizeItem(item, size),
+    );
+    return _buildCard(item, badge: badge);
+  }
 
-  Widget _buildCard(DashboardItem item) => switch (item.type) {
-        WidgetType.battery => BatteryCard(hasBg: widget.hasBg),
-        WidgetType.cpu => CpuCard(hasBg: widget.hasBg),
-        WidgetType.ram => RamCard(hasBg: widget.hasBg),
-        WidgetType.volume => VolumeCard(hasBg: widget.hasBg),
-        WidgetType.screenLock => ScreenLockCard(hasBg: widget.hasBg),
-        WidgetType.serverInfo => ServerInfoCard(hasBg: widget.hasBg),
-      };
+  // Fixed heights ensure all cards of the same size class are consistent.
+  // Tall cards use SizedBox so Column Spacers distribute space correctly.
+  // Non-wide normal cards use a fixed height so paired half-width cards
+  // never stretch each other via IntrinsicHeight.
+  Widget _buildCard(DashboardItem item, {Widget? badge}) {
+    final size = item.effectiveSize;
+    Widget card = switch (item.type) {
+      WidgetType.battery => BatteryCard(hasBg: widget.hasBg, size: size, badge: badge),
+      WidgetType.cpu => CpuCard(hasBg: widget.hasBg, size: size, badge: badge),
+      WidgetType.ram => RamCard(hasBg: widget.hasBg, size: size, badge: badge),
+      WidgetType.volume => VolumeCard(hasBg: widget.hasBg, size: size, badge: badge),
+      WidgetType.screenLock => ScreenLockCard(hasBg: widget.hasBg, size: size, badge: badge),
+      WidgetType.serverInfo => ServerInfoCard(hasBg: widget.hasBg, size: size, badge: badge),
+    };
+    if (size.isTall) return SizedBox(height: _kTallMinHeight, child: card);
+    if (!size.isWide) return SizedBox(height: _kNormalMinHeight, child: card);
+    return card;
+  }
 }
 
-// ── Resize handle ─────────────────────────────────────────────────────────────
+// ── Tap-based size badge ──────────────────────────────────────────────────────
 
-class _ResizeHandle extends StatefulWidget {
-  const _ResizeHandle({required this.item, required this.onResize});
+class _SizeBadge extends StatelessWidget {
+  const _SizeBadge({required this.item, required this.onResize});
   final DashboardItem item;
   final void Function(WidgetSize) onResize;
 
-  @override
-  State<_ResizeHandle> createState() => _ResizeHandleState();
-}
-
-class _ResizeHandleState extends State<_ResizeHandle>
-    with SingleTickerProviderStateMixin {
-  double _dragDx = 0;
-  bool _active = false;
-
-  late final AnimationController _ctrl;
-  late final Animation<double> _scale;
-
-  @override
-  void initState() {
-    super.initState();
-    _ctrl = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 250),
-    );
-    _scale = Tween<double>(begin: 1.0, end: 1.5).animate(
-      CurvedAnimation(parent: _ctrl, curve: Curves.easeInOut),
-    );
-  }
-
-  @override
-  void dispose() {
-    _ctrl.dispose();
-    super.dispose();
-  }
-
-  void _onDragStart(DragStartDetails _) {
-    setState(() {
-      _active = true;
-      _dragDx = 0;
-    });
-    _ctrl.repeat(reverse: true);
-  }
-
-  void _onDragUpdate(DragUpdateDetails d) {
-    setState(() => _dragDx += d.delta.dx);
-  }
-
-  void _onDragEnd(DragEndDetails d) {
-    _ctrl.stop();
-    _ctrl.reset();
-    final totalDx = _dragDx;
-    final vel = d.velocity.pixelsPerSecond.dx;
-    setState(() {
-      _active = false;
-      _dragDx = 0;
-    });
-    final expandTrigger = totalDx > _kResizeThreshold || vel > 300;
-    final shrinkTrigger = totalDx < -_kResizeThreshold || vel < -300;
-    if (expandTrigger && widget.item.effectiveSize == WidgetSize.halfWidth) {
-      widget.onResize(WidgetSize.fullWidth);
-    } else if (shrinkTrigger && widget.item.effectiveSize == WidgetSize.fullWidth) {
-      widget.onResize(WidgetSize.halfWidth);
-    }
-  }
-
-  void _onDragCancel() {
-    _ctrl.stop();
-    _ctrl.reset();
-    setState(() {
-      _active = false;
-      _dragDx = 0;
-    });
-  }
+  static String _label(WidgetSize s) => switch (s) {
+        WidgetSize.halfWidth => '2×1',
+        WidgetSize.fullWidth => '4×1',
+        WidgetSize.halfWidthTall => '2×2',
+        WidgetSize.fullWidthTall => '4×2',
+      };
 
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
-    final dotColor = _active
-        ? cs.primary.withValues(alpha: 0.9)
-        : cs.onSurfaceVariant.withValues(alpha: 0.4);
+    final current = item.effectiveSize;
 
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
-      onHorizontalDragStart: _onDragStart,
-      onHorizontalDragUpdate: _onDragUpdate,
-      onHorizontalDragEnd: _onDragEnd,
-      onHorizontalDragCancel: _onDragCancel,
-      child: AnimatedBuilder(
-        animation: _scale,
-        builder: (_, child) => Transform.scale(
-          scale: _active ? _scale.value : 1.0,
-          child: child,
+      onTapUp: (details) => _showPicker(context, cs, current),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        decoration: BoxDecoration(
+          color: cs.surfaceContainerHighest.withValues(alpha: 0.92),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: cs.outline.withValues(alpha: 0.4), width: 0.5),
+          boxShadow: const [
+            BoxShadow(color: Colors.black12, blurRadius: 4, offset: Offset(0, 1)),
+          ],
         ),
-        child: Center(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              _dot(dotColor),
-              const SizedBox(height: 3),
-              _dot(dotColor),
-              const SizedBox(height: 3),
-              _dot(dotColor),
-            ],
+        child: Text(
+          _label(current),
+          style: TextStyle(
+            fontSize: 10,
+            color: cs.onSurfaceVariant,
+            fontWeight: FontWeight.w700,
+            letterSpacing: 0.3,
           ),
         ),
       ),
     );
   }
 
-  Widget _dot(Color color) => AnimatedContainer(
-        duration: const Duration(milliseconds: 150),
-        width: _active ? 4 : 3,
-        height: _active ? 4 : 3,
-        decoration: BoxDecoration(color: color, shape: BoxShape.circle),
-      );
+  void _showPicker(BuildContext context, ColorScheme cs, WidgetSize current) {
+    final box = context.findRenderObject() as RenderBox?;
+    if (box == null) return;
+    final offset = box.localToGlobal(Offset.zero);
+    final size = box.size;
+
+    showMenu<WidgetSize>(
+      context: context,
+      // Position the menu above-left of the badge
+      position: RelativeRect.fromLTRB(
+        offset.dx - 96,
+        offset.dy - 152,
+        offset.dx + size.width,
+        offset.dy,
+      ),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      items: WidgetSize.values
+          .map(
+            (s) => PopupMenuItem<WidgetSize>(
+              value: s,
+              height: 40,
+              child: Row(
+                children: [
+                  SizedBox(
+                    width: 32,
+                    child: Text(
+                      _label(s),
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: s == current
+                            ? FontWeight.w700
+                            : FontWeight.normal,
+                        color: s == current ? cs.primary : null,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      _description(s),
+                      style: TextStyle(
+                          fontSize: 11, color: cs.onSurfaceVariant),
+                    ),
+                  ),
+                  if (s == current)
+                    Icon(Icons.check_rounded, size: 16, color: cs.primary),
+                ],
+              ),
+            ),
+          )
+          .toList(),
+    ).then((chosen) {
+      if (chosen != null && chosen != current) onResize(chosen);
+    });
+  }
+
+  static String _description(WidgetSize s) => switch (s) {
+        WidgetSize.halfWidth => 'Half width',
+        WidgetSize.fullWidth => 'Full width',
+        WidgetSize.halfWidthTall => 'Half width, tall',
+        WidgetSize.fullWidthTall => 'Full width, tall',
+      };
 }

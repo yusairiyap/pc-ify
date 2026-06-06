@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'package:flutter/services.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 import '../core/models/app_settings.dart';
@@ -69,6 +70,16 @@ class SettingsService {
 
   Future<void> _createDefaults() async {
     _settings = AppSettings.defaults();
+    // On Android, replace the hostname default with the actual device model name.
+    if (Platform.isAndroid) {
+      try {
+        const ch = MethodChannel('com.pcify.pcify_server/system_control');
+        final name = await ch.invokeMethod<String>('getDeviceName');
+        if (name != null && name.isNotEmpty) {
+          _settings = _settings.copyWith(serverName: name);
+        }
+      } catch (_) {}
+    }
     await _seedDefaultUser();
   }
 

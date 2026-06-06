@@ -97,8 +97,6 @@ class DashboardSectionEditor extends StatelessWidget {
                   },
                   itemBuilder: (context, index) {
                     final item = section.items[index];
-                    final isHalf =
-                        item.effectiveSize == WidgetSize.halfWidth;
                     return ListTile(
                       key: ValueKey(item.id),
                       dense: true,
@@ -109,29 +107,6 @@ class DashboardSectionEditor extends StatelessWidget {
                       trailing: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Tooltip(
-                            message: isHalf
-                                ? 'Expand to full width'
-                                : 'Shrink to half width',
-                            child: IconButton(
-                              icon: Icon(
-                                isHalf
-                                    ? Icons.open_in_full
-                                    : Icons.close_fullscreen,
-                                size: 16,
-                                color: cs.onSurfaceVariant,
-                              ),
-                              padding: EdgeInsets.zero,
-                              constraints: const BoxConstraints(
-                                  minWidth: 32, minHeight: 32),
-                              onPressed: () => onResizeWidget(
-                                item.id,
-                                isHalf
-                                    ? WidgetSize.fullWidth
-                                    : WidgetSize.halfWidth,
-                              ),
-                            ),
-                          ),
                           IconButton(
                             icon: Icon(Icons.remove_circle_outline,
                                 size: 18, color: cs.error),
