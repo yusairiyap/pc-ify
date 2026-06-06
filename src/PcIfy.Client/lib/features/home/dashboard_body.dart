@@ -17,14 +17,21 @@ class DashboardBody extends ConsumerWidget {
       return DashboardEditView(layout: layout, hasBg: hasBg);
     }
 
-    return CustomScrollView(
-      slivers: [
-        for (final section in layout.sections)
-          SliverToBoxAdapter(
-            child: DashboardSectionView(section: section, hasBg: hasBg),
-          ),
-        const SliverToBoxAdapter(child: SizedBox(height: 80)),
-      ],
+    return RefreshIndicator(
+      onRefresh: () async {
+        ref.invalidate(controlStatusProvider);
+        ref.invalidate(serverInfoProvider);
+        await Future.delayed(const Duration(milliseconds: 600));
+      },
+      child: CustomScrollView(
+        slivers: [
+          for (final section in layout.sections)
+            SliverToBoxAdapter(
+              child: DashboardSectionView(section: section, hasBg: hasBg),
+            ),
+          const SliverToBoxAdapter(child: SizedBox(height: 80)),
+        ],
+      ),
     );
   }
 }

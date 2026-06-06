@@ -97,6 +97,42 @@ class MainActivity : FlutterActivity() {
                             }
                         }
                     }
+                    "getVideoThumbnail" -> {
+                        val path = call.argument<String>("path")
+                        val quality = call.argument<Int>("quality") ?: 75
+                        val atSeconds = call.argument<Double>("atSeconds") ?: 2.0
+                        if (path == null) {
+                            result.success(null)
+                        } else {
+                            try {
+                                val mmr = android.media.MediaMetadataRetriever()
+                                mmr.setDataSource(path)
+                                val atMicros = (atSeconds * 1_000_000).toLong()
+                                val bitmap = mmr.getFrameAtTime(atMicros, android.media.MediaMetadataRetriever.OPTION_CLOSEST_SYNC)
+                                mmr.release()
+                                if (bitmap != null) {
+                                    val bos = java.io.ByteArrayOutputStream()
+                                    bitmap.compress(android.graphics.Bitmap.CompressFormat.JPEG, quality.coerceIn(1, 100), bos)
+                                    result.success(bos.toByteArray())
+                                } else {
+                                    result.success(null)
+                                }
+                            } catch (e: Exception) {
+                                result.success(null)
+                            }
+                        }
+                    }
+                    "getDeviceName" -> {
+                        val manufacturer = Build.MANUFACTURER
+                            .replaceFirstChar { if (it.isLowerCase()) it.titlecase() else it.toString() }
+                        val model = Build.MODEL
+                        val name = if (model.startsWith(manufacturer, ignoreCase = true)) model
+                                   else "$manufacturer $model"
+                        result.success(name)
+                    }
+                    "getOsDisplayName" -> {
+                        result.success("Android ${Build.VERSION.RELEASE}")
+                    }
                     else -> result.notImplemented()
                 }
             }

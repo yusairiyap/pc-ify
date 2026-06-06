@@ -1,6 +1,11 @@
 enum WidgetType { battery, volume, cpu, ram, screenLock, serverInfo }
 
-enum WidgetSize { halfWidth, fullWidth }
+enum WidgetSize { halfWidth, fullWidth, halfWidthTall, fullWidthTall }
+
+extension WidgetSizeX on WidgetSize {
+  bool get isWide => this == WidgetSize.fullWidth || this == WidgetSize.fullWidthTall;
+  bool get isTall => this == WidgetSize.halfWidthTall || this == WidgetSize.fullWidthTall;
+}
 
 class DashboardItem {
   const DashboardItem({required this.id, required this.type, this.size});
@@ -31,7 +36,7 @@ class DashboardItem {
           ? null
           : WidgetSize.values.firstWhere(
               (e) => e.name == sizeStr,
-              orElse: () => WidgetSize.fullWidth,
+              orElse: () => WidgetSize.halfWidth,
             ),
     );
   }

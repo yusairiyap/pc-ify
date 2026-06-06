@@ -11,6 +11,7 @@ import 'widget_cards/server_info_card.dart';
 import 'widget_cards/volume_card.dart';
 
 const _kResizeThreshold = 40.0;
+const _kTallMinHeight = 180.0;
 
 class DashboardSectionView extends ConsumerWidget {
   const DashboardSectionView(
@@ -174,7 +175,8 @@ class _WidgetGridState extends ConsumerState<_WidgetGrid> {
 
     for (var i = 0; i < _items.length; i++) {
       final item = _items[i];
-      if (item.effectiveSize == WidgetSize.halfWidth) {
+      if (!item.effectiveSize.isWide) {
+        // halfWidth or halfWidthTall — pair up two per row
         pending.add((i, item));
         if (pending.length == 2) {
           rows.add(_halfRow(pending[0], pending[1]));
@@ -219,9 +221,16 @@ class _WidgetGridState extends ConsumerState<_WidgetGrid> {
     final isHovered = _hoverIndex == idx && _draggingIndex != idx;
     final cs = Theme.of(context).colorScheme;
     final screenWidth = MediaQuery.sizeOf(context).width;
-    final feedbackWidth = item.effectiveSize == WidgetSize.halfWidth
-        ? (screenWidth - 40) / 2
-        : screenWidth - 32;
+    final feedbackWidth = item.effectiveSize.isWide
+        ? screenWidth - 32
+        : (screenWidth - 40) / 2;
+
+    // Displacement: hovered widget slides aside to signal "I'll move here"
+    final slideOffset = isHovered
+        ? (item.effectiveSize.isWide
+            ? const Offset(0, 0.04)
+            : const Offset(0.07, 0))
+        : Offset.zero;
 
     return DragTarget<_DragData>(
       key: ValueKey(item.id),
@@ -241,53 +250,72 @@ class _WidgetGridState extends ConsumerState<_WidgetGrid> {
           _hoverIndex = null;
         });
       },
-      builder: (ctx, _, __) => AnimatedContainer(
+      builder: (ctx, _, __) => AnimatedSlide(
+        offset: slideOffset,
         duration: const Duration(milliseconds: 150),
-        decoration: isHovered
-            ? BoxDecoration(
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: cs.primary, width: 2),
-              )
-            : null,
-        child: LongPressDraggable<_DragData>(
-          data: _DragData(
-              sectionId: widget.section.id, item: item, fromIndex: idx),
-          delay: const Duration(milliseconds: 400),
-          onDragStarted: () => setState(() => _draggingIndex = idx),
-          onDragEnd: (_) => setState(() {
-            _draggingIndex = null;
-            _hoverIndex = null;
-          }),
-          feedback: Material(
-            color: Colors.transparent,
-            child: Opacity(
-              opacity: 0.85,
-              child: SizedBox(width: feedbackWidth, child: _buildCard(item)),
+        curve: Curves.easeOut,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 150),
+          decoration: isHovered
+              ? BoxDecoration(
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                      color: cs.primary.withValues(alpha: 0.6), width: 2),
+                )
+              : null,
+          child: LongPressDraggable<_DragData>(
+            data: _DragData(
+                sectionId: widget.section.id, item: item, fromIndex: idx),
+            delay: const Duration(milliseconds: 400),
+            onDragStarted: () => setState(() => _draggingIndex = idx),
+            onDragEnd: (_) => setState(() {
+              _draggingIndex = null;
+              _hoverIndex = null;
+            }),
+            feedback: Material(
+              color: Colors.transparent,
+              child: Opacity(
+                opacity: 0.85,
+                child: SizedBox(width: feedbackWidth, child: _buildCard(item)),
+              ),
             ),
+            childWhenDragging:
+                Opacity(opacity: 0.3, child: _buildCard(item)),
+            child: _withResizeHandle(item),
           ),
-          childWhenDragging:
-              Opacity(opacity: 0.3, child: _buildCard(item)),
-          child: _withResizeHandle(item),
         ),
       ),
     );
   }
 
-  Widget _withResizeHandle(DashboardItem item) => Stack(
+  // Wraps card with corner resize handle and animates size changes.
+  Widget _withResizeHandle(DashboardItem item) {
+    final targetH = item.effectiveSize.isTall ? _kTallMinHeight : 0.0;
+    return TweenAnimationBuilder<double>(
+      tween: Tween(end: targetH),
+      duration: const Duration(milliseconds: 250),
+      curve: Curves.easeInOut,
+      builder: (_, h, child) => h > 0
+          ? ConstrainedBox(
+              constraints: BoxConstraints(minHeight: h),
+              child: child,
+            )
+          : child!,
+      child: Stack(
         children: [
           _buildCard(item),
           Positioned(
-            right: 0,
-            top: 0,
-            bottom: 0,
-            width: 20,
-            child: _ResizeHandle(
+            right: 4,
+            bottom: 4,
+            child: _CornerResizeHandle(
               item: item,
               onResize: (size) => _resizeItem(item, size),
             ),
           ),
         ],
-      );
+      ),
+    );
+  }
 
   Widget _buildCard(DashboardItem item) => switch (item.type) {
         WidgetType.battery => BatteryCard(hasBg: widget.hasBg),
@@ -299,20 +327,21 @@ class _WidgetGridState extends ConsumerState<_WidgetGrid> {
       };
 }
 
-// ── Resize handle ─────────────────────────────────────────────────────────────
+// ── Corner resize handle (H + V) ─────────────────────────────────────────────
 
-class _ResizeHandle extends StatefulWidget {
-  const _ResizeHandle({required this.item, required this.onResize});
+class _CornerResizeHandle extends StatefulWidget {
+  const _CornerResizeHandle({required this.item, required this.onResize});
   final DashboardItem item;
   final void Function(WidgetSize) onResize;
 
   @override
-  State<_ResizeHandle> createState() => _ResizeHandleState();
+  State<_CornerResizeHandle> createState() => _CornerResizeHandleState();
 }
 
-class _ResizeHandleState extends State<_ResizeHandle>
+class _CornerResizeHandleState extends State<_CornerResizeHandle>
     with SingleTickerProviderStateMixin {
-  double _dragDx = 0;
+  double _totalDx = 0;
+  double _totalDy = 0;
   bool _active = false;
 
   late final AnimationController _ctrl;
@@ -325,7 +354,7 @@ class _ResizeHandleState extends State<_ResizeHandle>
       vsync: this,
       duration: const Duration(milliseconds: 250),
     );
-    _scale = Tween<double>(begin: 1.0, end: 1.5).animate(
+    _scale = Tween<double>(begin: 1.0, end: 1.6).animate(
       CurvedAnimation(parent: _ctrl, curve: Curves.easeInOut),
     );
   }
@@ -336,84 +365,120 @@ class _ResizeHandleState extends State<_ResizeHandle>
     super.dispose();
   }
 
-  void _onDragStart(DragStartDetails _) {
+  void _onPanStart(DragStartDetails _) {
     setState(() {
       _active = true;
-      _dragDx = 0;
+      _totalDx = 0;
+      _totalDy = 0;
     });
     _ctrl.repeat(reverse: true);
   }
 
-  void _onDragUpdate(DragUpdateDetails d) {
-    setState(() => _dragDx += d.delta.dx);
+  void _onPanUpdate(DragUpdateDetails d) {
+    setState(() {
+      _totalDx += d.delta.dx;
+      _totalDy += d.delta.dy;
+    });
   }
 
-  void _onDragEnd(DragEndDetails d) {
+  void _onPanEnd(DragEndDetails d) {
     _ctrl.stop();
     _ctrl.reset();
-    final totalDx = _dragDx;
-    final vel = d.velocity.pixelsPerSecond.dx;
+    final dx = _totalDx;
+    final dy = _totalDy;
+    final vel = d.velocity.pixelsPerSecond;
     setState(() {
       _active = false;
-      _dragDx = 0;
+      _totalDx = 0;
+      _totalDy = 0;
     });
-    final expandTrigger = totalDx > _kResizeThreshold || vel > 300;
-    final shrinkTrigger = totalDx < -_kResizeThreshold || vel < -300;
-    if (expandTrigger && widget.item.effectiveSize == WidgetSize.halfWidth) {
-      widget.onResize(WidgetSize.fullWidth);
-    } else if (shrinkTrigger && widget.item.effectiveSize == WidgetSize.fullWidth) {
-      widget.onResize(WidgetSize.halfWidth);
+    final newSize = _computeNewSize(widget.item.effectiveSize, dx, dy, vel);
+    if (newSize != widget.item.effectiveSize) {
+      widget.onResize(newSize);
     }
   }
 
-  void _onDragCancel() {
+  void _onPanCancel() {
     _ctrl.stop();
     _ctrl.reset();
     setState(() {
       _active = false;
-      _dragDx = 0;
+      _totalDx = 0;
+      _totalDy = 0;
     });
+  }
+
+  WidgetSize _computeNewSize(
+      WidgetSize current, double dx, double dy, Offset velocity) {
+    bool isWide = current.isWide;
+    bool isTall = current.isTall;
+
+    if (dx > _kResizeThreshold || velocity.dx > 300) isWide = true;
+    if (dx < -_kResizeThreshold || velocity.dx < -300) isWide = false;
+    if (dy > _kResizeThreshold || velocity.dy > 300) isTall = true;
+    if (dy < -_kResizeThreshold || velocity.dy < -300) isTall = false;
+
+    return switch ((isWide, isTall)) {
+      (false, false) => WidgetSize.halfWidth,
+      (true, false) => WidgetSize.fullWidth,
+      (false, true) => WidgetSize.halfWidthTall,
+      _ => WidgetSize.fullWidthTall,
+    };
   }
 
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
-    final dotColor = _active
+    final color = _active
         ? cs.primary.withValues(alpha: 0.9)
-        : cs.onSurfaceVariant.withValues(alpha: 0.4);
+        : cs.onSurfaceVariant.withValues(alpha: 0.45);
 
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
-      onHorizontalDragStart: _onDragStart,
-      onHorizontalDragUpdate: _onDragUpdate,
-      onHorizontalDragEnd: _onDragEnd,
-      onHorizontalDragCancel: _onDragCancel,
+      onPanStart: _onPanStart,
+      onPanUpdate: _onPanUpdate,
+      onPanEnd: _onPanEnd,
+      onPanCancel: _onPanCancel,
       child: AnimatedBuilder(
         animation: _scale,
         builder: (_, child) => Transform.scale(
           scale: _active ? _scale.value : 1.0,
+          alignment: Alignment.bottomRight,
           child: child,
         ),
-        child: Center(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              _dot(dotColor),
-              const SizedBox(height: 3),
-              _dot(dotColor),
-              const SizedBox(height: 3),
-              _dot(dotColor),
-            ],
-          ),
+        child: SizedBox(
+          width: 22,
+          height: 22,
+          child: CustomPaint(painter: _CornerGripPainter(color: color)),
         ),
       ),
     );
   }
+}
 
-  Widget _dot(Color color) => AnimatedContainer(
-        duration: const Duration(milliseconds: 150),
-        width: _active ? 4 : 3,
-        height: _active ? 4 : 3,
-        decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+// Draws a resize-grip: three short diagonal lines at the bottom-right corner.
+class _CornerGripPainter extends CustomPainter {
+  const _CornerGripPainter({required this.color});
+  final Color color;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = color
+      ..strokeWidth = 1.5
+      ..strokeCap = StrokeCap.round;
+    const gap = 4.0;
+    const len = 6.0;
+    for (var i = 0; i < 3; i++) {
+      final offset = i * gap;
+      canvas.drawLine(
+        Offset(size.width - offset, size.height - len),
+        Offset(size.width - len, size.height - offset),
+        paint,
       );
+    }
+  }
+
+  @override
+  bool shouldRepaint(_CornerGripPainter old) => old.color != color;
 }
