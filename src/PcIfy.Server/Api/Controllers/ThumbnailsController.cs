@@ -1,4 +1,4 @@
-﻿using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using PcIfy.Server.Services.Interfaces;
 using PcIfy.Server.Constants;
@@ -19,7 +19,11 @@ public class ThumbnailsController : ControllerBase
     }
 
     [HttpGet(ApiRoutes.Thumbnails + "/{*filePath}")]
-    public async Task<IActionResult> GetThumbnail(string filePath, [FromQuery] string size = "medium")
+    public async Task<IActionResult> GetThumbnail(
+        string filePath,
+        [FromQuery] int? quality,
+        [FromQuery] string size = "medium",
+        [FromQuery] double? t = null)
     {
         var fullPath = Uri.UnescapeDataString(filePath.Replace('/', Path.DirectorySeparatorChar));
         if (!System.IO.Path.IsPathRooted(fullPath))
@@ -29,16 +33,25 @@ public class ThumbnailsController : ControllerBase
         if (!_files.IsPathAllowed(fullPath, username)) return StatusCode(403, "Access denied.");
         if (!System.IO.File.Exists(fullPath)) return NotFound();
 
-        var thumbSize = size.ToLowerInvariant() switch
+        string? thumbPath;
+
+        if (quality.HasValue)
         {
-            "small"  => ThumbnailSize.Small,
-            "large"  => ThumbnailSize.Large,
-            _        => ThumbnailSize.Medium
-        };
+            thumbPath = await _thumbnails.GetOrCreateThumbnailAsync(fullPath, quality.Value, t);
+        }
+        else
+        {
+            // Legacy size-based fallback for old clients
+            var thumbSize = size.ToLowerInvariant() switch
+            {
+                "small" => ThumbnailSize.Small,
+                "large" => ThumbnailSize.Large,
+                _       => ThumbnailSize.Medium
+            };
+            thumbPath = await _thumbnails.GetOrCreateThumbnailAsync(fullPath, thumbSize);
+        }
 
-        var thumbPath = await _thumbnails.GetOrCreateThumbnailAsync(fullPath, thumbSize);
         if (thumbPath is null) return NotFound();
-
         return PhysicalFile(thumbPath, "image/jpeg");
     }
 }
