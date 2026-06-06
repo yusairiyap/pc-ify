@@ -54,6 +54,16 @@ class _ServerInfoBody extends StatelessWidget {
         _ => Icons.dns,
       };
 
+  // Same header row pattern as Battery/CPU/RAM/Volume:
+  // [icon 18px, "Server" label, Spacer, badge]
+  Widget _headerRow(Color iconColor, Color labelColor) => Row(children: [
+        Icon(_platformIcon, size: 18, color: iconColor),
+        const SizedBox(width: 6),
+        Text('Server', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: labelColor)),
+        const Spacer(),
+        if (badge != null) badge!,
+      ]);
+
   Widget _statusDot() => Row(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -66,93 +76,68 @@ class _ServerInfoBody extends StatelessWidget {
         ],
       );
 
-  // Badge row — shared header row pattern used by all other cards.
-  // Puts the badge at the trailing end; collapses if badge is null.
-  Widget _headerRow({required Widget leading, Widget? trailing}) => Row(
-        children: [
-          leading,
-          const Spacer(),
-          if (trailing != null) trailing,
-          if (badge != null) ...[
-            if (trailing != null) const SizedBox(width: 4),
-            badge!,
-          ],
-        ],
-      );
-
   @override
   Widget build(BuildContext context) {
-    final textColor = hasBg ? Colors.white : cs.onSurface;
-    final iconColor = hasBg ? Colors.white70 : cs.primary;
+    final iconColor  = hasBg ? Colors.white70 : cs.primary;
     final labelColor = hasBg ? Colors.white70 : cs.onSurfaceVariant;
-    final subColor = hasBg ? Colors.white54 : cs.outline;
+    final textColor  = hasBg ? Colors.white   : cs.onSurface;
+    final subColor   = hasBg ? Colors.white54 : cs.outline;
 
-    // 2×2: vertical centered layout — badge in header row at top
+    // 2×2: tall, half-width — big centered icon below shared header
     if (size.isTall && !size.isWide) {
       return Card(
-        elevation: hasBg ? 0 : 1,
         color: hasBg ? Colors.black45 : null,
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          padding: const EdgeInsets.all(12),
           child: Column(
-            crossAxisAlignment: CrossAxisAlignment.center,
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Header row with small label + badge (always shown)
-              _headerRow(
-                leading: Row(mainAxisSize: MainAxisSize.min, children: [
-                  Icon(_platformIcon, size: 14, color: labelColor),
-                  const SizedBox(width: 4),
-                  Text('Server', style: TextStyle(fontSize: 11, color: labelColor, fontWeight: FontWeight.w600)),
-                ]),
-              ),
+              _headerRow(iconColor, labelColor),
               const Spacer(),
-              Icon(_platformIcon, size: 44, color: iconColor),
+              Center(child: Icon(_platformIcon, size: 44, color: iconColor)),
               const SizedBox(height: 8),
-              Text(
-                serverName,
-                style: tt.titleMedium?.copyWith(color: textColor, fontWeight: FontWeight.w600),
-                overflow: TextOverflow.ellipsis,
-                textAlign: TextAlign.center,
+              Center(
+                child: Text(
+                  serverName,
+                  style: tt.titleMedium?.copyWith(color: textColor, fontWeight: FontWeight.w600),
+                  overflow: TextOverflow.ellipsis,
+                  textAlign: TextAlign.center,
+                ),
               ),
               const SizedBox(height: 2),
-              Text(
-                osVersion,
-                style: tt.bodySmall?.copyWith(color: subColor),
-                overflow: TextOverflow.ellipsis,
-                textAlign: TextAlign.center,
+              Center(
+                child: Text(
+                  osVersion,
+                  style: tt.bodySmall?.copyWith(color: subColor),
+                  overflow: TextOverflow.ellipsis,
+                  textAlign: TextAlign.center,
+                ),
               ),
               const Spacer(),
-              _statusDot(),
+              Center(child: _statusDot()),
             ],
           ),
         ),
       );
     }
 
-    // 4×2: horizontal layout — badge in header row, content fills remaining space
+    // 4×2: tall, full-width — header then expanded horizontal content
     if (size.isTall && size.isWide) {
       return Card(
-        elevation: hasBg ? 0 : 1,
         color: hasBg ? Colors.black45 : null,
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+          padding: const EdgeInsets.all(12),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              _headerRow(
-                leading: Row(mainAxisSize: MainAxisSize.min, children: [
-                  Icon(_platformIcon, size: 14, color: labelColor),
-                  const SizedBox(width: 4),
-                  Text('Server', style: TextStyle(fontSize: 11, color: labelColor, fontWeight: FontWeight.w600)),
-                ]),
-              ),
+              _headerRow(iconColor, labelColor),
               const SizedBox(height: 8),
               Expanded(
                 child: Row(
                   crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
-                    Icon(_platformIcon, size: 60, color: iconColor),
-                    const SizedBox(width: 20),
+                    Icon(_platformIcon, size: 56, color: iconColor),
+                    const SizedBox(width: 16),
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
@@ -183,29 +168,23 @@ class _ServerInfoBody extends StatelessWidget {
       );
     }
 
-    // 2×1: compact column layout — badge trailing in the name row
+    // 2×1: compact — shared header then server name + status
     if (!size.isWide) {
       return Card(
-        elevation: hasBg ? 0 : 1,
         color: hasBg ? Colors.black45 : null,
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          padding: const EdgeInsets.all(12),
           child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
+            mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Row(children: [
-                Icon(_platformIcon, size: 18, color: iconColor),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    serverName,
-                    style: tt.labelLarge?.copyWith(color: textColor, fontWeight: FontWeight.w600),
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-                if (badge != null) ...[const SizedBox(width: 4), badge!],
-              ]),
+              _headerRow(iconColor, labelColor),
+              const SizedBox(height: 8),
+              Text(
+                serverName,
+                style: tt.titleSmall?.copyWith(color: textColor, fontWeight: FontWeight.w600),
+                overflow: TextOverflow.ellipsis,
+              ),
               const SizedBox(height: 4),
               _statusDot(),
             ],
@@ -214,40 +193,44 @@ class _ServerInfoBody extends StatelessWidget {
       );
     }
 
-    // 4×1 (default fullWidth): horizontal layout — badge trailing in the Row
+    // 4×1 (default fullWidth): shared header then horizontal content row
     return Card(
-      elevation: hasBg ? 0 : 1,
       color: hasBg ? Colors.black45 : null,
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.center,
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Icon(_platformIcon, size: 44, color: iconColor),
-            const SizedBox(width: 16),
-            Expanded(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    serverName,
-                    style: tt.titleMedium?.copyWith(color: textColor, fontWeight: FontWeight.w600),
-                    overflow: TextOverflow.ellipsis,
+            _headerRow(iconColor, labelColor),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                Icon(_platformIcon, size: 36, color: iconColor),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        serverName,
+                        style: tt.titleSmall?.copyWith(color: textColor, fontWeight: FontWeight.w600),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        osVersion,
+                        style: tt.bodySmall?.copyWith(color: subColor),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      const SizedBox(height: 4),
+                      _statusDot(),
+                    ],
                   ),
-                  const SizedBox(height: 2),
-                  Text(
-                    osVersion,
-                    style: tt.bodySmall?.copyWith(color: subColor),
-                    overflow: TextOverflow.ellipsis,
-                    maxLines: 2,
-                  ),
-                  const SizedBox(height: 6),
-                  _statusDot(),
-                ],
-              ),
+                ),
+              ],
             ),
-            if (badge != null) ...[const SizedBox(width: 8), badge!],
           ],
         ),
       ),
