@@ -133,6 +133,9 @@ class _BrowserNotifier extends AutoDisposeAsyncNotifier<_BrowserState> {
       _history.removeLast();
       _history.add('');
       result = await AsyncValue.guard(() => _load(''));
+      // If root also fails, remove the '' we just added so history isn't inflated
+      // with a phantom root entry that would cause spurious back-navigation.
+      if (result.hasError) _history.removeLast();
     }
     state = result;
     navigating = false;
@@ -715,6 +718,9 @@ class _BrowserLoadedState extends ConsumerState<_BrowserLoaded> {
                 : null,
             child: GridView.builder(
               padding: const EdgeInsets.all(8),
+              // Required so pull-to-refresh fires even when the grid is shorter
+              // than the viewport (fewer items than fill the screen).
+              physics: const AlwaysScrollableScrollPhysics(),
               // ignore: deprecated_member_use
               cacheExtent: 600,
               gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(

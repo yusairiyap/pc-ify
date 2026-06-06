@@ -21,9 +21,17 @@ class DashboardBody extends ConsumerWidget {
       onRefresh: () async {
         ref.invalidate(controlStatusProvider);
         ref.invalidate(serverInfoProvider);
-        await Future.delayed(const Duration(milliseconds: 600));
+        // Await the new load (up to 5 s) so the indicator stays visible until
+        // data arrives, not just until a fixed timer fires.
+        try {
+          await ref
+              .read(controlStatusProvider.future)
+              .timeout(const Duration(seconds: 5));
+        } catch (_) {}
       },
       child: CustomScrollView(
+        // Required so the pull gesture fires even when content fits the viewport.
+        physics: const AlwaysScrollableScrollPhysics(),
         slivers: [
           for (final section in layout.sections)
             SliverToBoxAdapter(

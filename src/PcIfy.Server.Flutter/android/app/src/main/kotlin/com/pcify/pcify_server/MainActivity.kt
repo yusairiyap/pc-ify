@@ -86,14 +86,15 @@ class MainActivity : FlutterActivity() {
                         if (path == null) {
                             result.success(0L)
                         } else {
+                            val mmr = android.media.MediaMetadataRetriever()
                             try {
-                                val mmr = android.media.MediaMetadataRetriever()
                                 mmr.setDataSource(path)
                                 val ms = mmr.extractMetadata(android.media.MediaMetadataRetriever.METADATA_KEY_DURATION)?.toLongOrNull() ?: 0L
-                                mmr.release()
                                 result.success(ms)
                             } catch (e: Exception) {
                                 result.success(0L)
+                            } finally {
+                                mmr.release()
                             }
                         }
                     }
@@ -104,12 +105,11 @@ class MainActivity : FlutterActivity() {
                         if (path == null) {
                             result.success(null)
                         } else {
+                            val mmr = android.media.MediaMetadataRetriever()
                             try {
-                                val mmr = android.media.MediaMetadataRetriever()
                                 mmr.setDataSource(path)
                                 val atMicros = (atSeconds * 1_000_000).toLong()
                                 val bitmap = mmr.getFrameAtTime(atMicros, android.media.MediaMetadataRetriever.OPTION_CLOSEST_SYNC)
-                                mmr.release()
                                 if (bitmap != null) {
                                     val bos = java.io.ByteArrayOutputStream()
                                     bitmap.compress(android.graphics.Bitmap.CompressFormat.JPEG, quality.coerceIn(1, 100), bos)
@@ -119,6 +119,8 @@ class MainActivity : FlutterActivity() {
                                 }
                             } catch (e: Exception) {
                                 result.success(null)
+                            } finally {
+                                mmr.release()
                             }
                         }
                     }

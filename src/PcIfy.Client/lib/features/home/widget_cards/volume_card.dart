@@ -28,16 +28,18 @@ class _VolumeCardState extends ConsumerState<VolumeCard> {
     _debounce?.cancel();
     _debounce = Timer(const Duration(milliseconds: 300), () async {
       await ref.read(apiServiceProvider).setVolume(v.round());
+      if (!mounted) return;
       ref.invalidate(controlStatusProvider);
-      if (mounted) setState(() => _localLevel = null);
+      setState(() => _localLevel = null);
     });
   }
 
   Future<void> _commitVolume(double v) async {
     _debounce?.cancel();
     await ref.read(apiServiceProvider).setVolume(v.round());
+    if (!mounted) return;
     ref.invalidate(controlStatusProvider);
-    if (mounted) setState(() => _localLevel = null);
+    setState(() => _localLevel = null);
   }
 
   @override

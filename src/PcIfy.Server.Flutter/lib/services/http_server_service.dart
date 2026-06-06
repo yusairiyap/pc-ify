@@ -201,9 +201,11 @@ class HttpServerService {
       if (m != null) return 'Windows ${m.group(1)}';
     }
     if (Platform.isMacOS) {
-      final m = RegExp(r'Version\s+([\d.]+)').firstMatch(raw);
-      if (m != null) return 'macOS ${m.group(1)}';
-      return 'macOS $raw';
+      // operatingSystemVersion may be "Version 14.4.1 (Build …)", "14.4.1",
+      // or already "macOS 14.4.1" depending on the Flutter runtime version.
+      // Extract just the numeric version to avoid a "macOS macOS …" double prefix.
+      final m = RegExp(r'(\d+\.\d+(?:\.\d+)?)').firstMatch(raw);
+      return m != null ? 'macOS ${m.group(1)}' : raw;
     }
     return raw;
   }

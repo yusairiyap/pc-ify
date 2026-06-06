@@ -299,24 +299,23 @@ class _WidgetGridState extends ConsumerState<_WidgetGrid> {
     );
   }
 
-  // Wraps the card with a tap-based size badge; AnimatedSize handles height transitions.
+  // Wraps the card with a tap-based size badge.
+  // AnimatedSwitcher at the grid level handles cross-fade on layout changes;
+  // we deliberately avoid AnimatedSize here because it doesn't implement
+  // intrinsic-dimension methods and would crash inside _halfRow's IntrinsicHeight.
   Widget _withSizeBadge(DashboardItem item) {
-    return AnimatedSize(
-      duration: const Duration(milliseconds: 250),
-      curve: Curves.easeInOut,
-      child: Stack(
-        children: [
-          _buildCard(item),
-          Positioned(
-            right: 8,
-            bottom: 8,
-            child: _SizeBadge(
-              item: item,
-              onResize: (size) => _resizeItem(item, size),
-            ),
+    return Stack(
+      children: [
+        _buildCard(item),
+        Positioned(
+          right: 8,
+          bottom: 8,
+          child: _SizeBadge(
+            item: item,
+            onResize: (size) => _resizeItem(item, size),
           ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 
