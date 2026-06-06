@@ -83,7 +83,6 @@ class _ServerInfoContent extends StatelessWidget {
     return Card(
       elevation: hasBg ? 0 : 1,
       color: hasBg ? Colors.black26 : cs.surfaceContainerLow,
-      margin: const EdgeInsets.all(8),
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
         child: Row(
