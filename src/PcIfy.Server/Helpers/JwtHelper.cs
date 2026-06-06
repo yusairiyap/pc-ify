@@ -8,7 +8,7 @@ namespace PcIfy.Server.Helpers;
 
 public static class JwtHelper
 {
-    private static readonly string[] StreamingPathPrefixes = ["/api/files/stream", "/api/files/download", "/api/thumbnails"];
+    private static readonly string[] StreamingPathPrefixes = ["/api/files/stream", "/api/files/download", "/api/thumbnails", "/api/files/video-info"];
 
     public static string GenerateToken(string username, string secret, int expiryHours)
     {

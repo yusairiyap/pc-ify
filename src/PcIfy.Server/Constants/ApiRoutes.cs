@@ -15,6 +15,7 @@ public static class ApiRoutes
     public const string FilesDelete = "/api/files/delete";
     public const string FilesCopy = "/api/files/copy";
     public const string FilesMove = "/api/files/move";
+    public const string FilesVideoInfo = "/api/files/video-info";
 
     public const string Thumbnails = "/api/thumbnails";
 

@@ -12,8 +12,13 @@ namespace PcIfy.Server.Api.Controllers;
 public class FilesController : ControllerBase
 {
     private readonly IFileService _files;
+    private readonly IThumbnailService _thumbnails;
 
-    public FilesController(IFileService files) => _files = files;
+    public FilesController(IFileService files, IThumbnailService thumbnails)
+    {
+        _files = files;
+        _thumbnails = thumbnails;
+    }
 
     private string CurrentUsername => User.Identity?.Name ?? string.Empty;
 
@@ -36,6 +41,17 @@ public class FilesController : ControllerBase
         {
             return NotFound();
         }
+    }
+
+    [HttpGet(ApiRoutes.FilesVideoInfo)]
+    public async Task<IActionResult> GetVideoInfo([FromQuery] string path)
+    {
+        if (string.IsNullOrWhiteSpace(path)) return BadRequest("path is required.");
+        if (!_files.IsPathAllowed(path, CurrentUsername)) return StatusCode(403, "Access denied.");
+        if (!System.IO.File.Exists(path)) return NotFound();
+
+        var durationMs = await _thumbnails.GetVideoDurationMsAsync(path);
+        return Ok(new { durationMs = durationMs ?? 0 });
     }
 
     [HttpGet(ApiRoutes.FilesStream + "/{*filePath}")]
