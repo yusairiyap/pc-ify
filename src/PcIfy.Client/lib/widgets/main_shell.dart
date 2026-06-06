@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
+import '../core/utils/shell_state.dart';
+
 class AnimatedTabContainer extends StatefulWidget {
   const AnimatedTabContainer({
     super.key,
@@ -22,12 +24,14 @@ class _AnimatedTabContainerState extends State<AnimatedTabContainer> {
   void initState() {
     super.initState();
     _controller = PageController(initialPage: widget.currentIndex);
+    ShellState.currentTabIndex = widget.currentIndex;
   }
 
   @override
   void didUpdateWidget(AnimatedTabContainer old) {
     super.didUpdateWidget(old);
     if (widget.currentIndex != old.currentIndex) {
+      ShellState.currentTabIndex = widget.currentIndex;
       _controller.animateToPage(
         widget.currentIndex,
         duration: const Duration(milliseconds: 350),

@@ -1,15 +1,17 @@
 import 'dart:async' show unawaited;
-import 'dart:io' show Directory, File;
+import 'dart:io' show Directory, File, Platform;
 
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:file_picker/file_picker.dart' hide FileType;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart' show MethodCall, MethodChannel;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:open_filex/open_filex.dart';
 import 'package:path/path.dart' as p;
 
 import '../../core/constants/media_types.dart';
+import '../../core/utils/shell_state.dart';
 import '../../core/models/bookmarked_folder.dart';
 import '../../core/models/file_entry.dart';
 import '../../core/models/folder_listing.dart';
@@ -415,14 +417,58 @@ class BrowserScreen extends ConsumerWidget {
   }
 }
 
-class _BrowserBody extends ConsumerWidget {
+class _BrowserBody extends ConsumerStatefulWidget {
   const _BrowserBody();
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<_BrowserBody> createState() => _BrowserBodyState();
+}
+
+class _BrowserBodyState extends ConsumerState<_BrowserBody>
+    with WidgetsBindingObserver {
+  static const _browserChannel = MethodChannel('com.pcify.pcify_client/browser');
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    // Primary back intercept: native Android calls handleBack before Flutter's
+    // router sees the event, so we can navigate up a folder instead of popping.
+    _browserChannel.setMethodCallHandler(_handleNativeBack);
+  }
+
+  @override
+  void dispose() {
+    _browserChannel.setMethodCallHandler(null);
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  Future<bool> _tryHandleBack() async {
+    if (!mounted) return false;
+    if (ShellState.currentTabIndex != 1) return false;
+    final browserState = ref.read(_browserNotifierProvider).valueOrNull;
+    if (browserState?.canNavigateBack == true) {
+      ref.read(_browserNotifierProvider.notifier).navigateBack();
+      return true;
+    }
+    return false;
+  }
+
+  Future<dynamic> _handleNativeBack(MethodCall call) {
+    if (call.method == 'handleBack') return _tryHandleBack();
+    return Future.value(null);
+  }
+
+  @override
+  Future<bool> didPopRoute() => _tryHandleBack();
+
+  @override
+  Widget build(BuildContext context) {
     final async = ref.watch(_browserNotifierProvider);
-    final isNavigating = async.isLoading &&
-        ref.read(_browserNotifierProvider.notifier).navigating;
+    final notifier = ref.read(_browserNotifierProvider.notifier);
+    final isNavigating = async.isLoading && notifier.navigating;
+
     return Stack(
       children: [
         async.when(
@@ -884,10 +930,33 @@ class _BrowserLoadedState extends ConsumerState<_BrowserLoaded> {
     if (saved != null) {
       manager.complete(id);
       if (!context.mounted) return;
-      final result = await OpenFilex.open(saved);
-      if (context.mounted && result.type != ResultType.done) {
-        ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Cannot open file: ${result.message}')));
+      String? errorMsg;
+      try {
+        if (Platform.isAndroid && saved.startsWith('content://')) {
+          await ref
+              .read(downloadServiceProvider)
+              .openContentUri(saved, e.name);
+        } else {
+          final result = await OpenFilex.open(saved);
+          if (result.type != ResultType.done) errorMsg = result.message;
+        }
+      } on Exception catch (ex) {
+        errorMsg = ex.toString().replaceFirst('Exception: ', '');
+      }
+      if (errorMsg != null && context.mounted) {
+        showDialog<void>(
+          context: context,
+          builder: (_) => AlertDialog(
+            title: const Text('Cannot open file'),
+            content: Text(errorMsg!),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('OK'),
+              ),
+            ],
+          ),
+        );
       }
     } else {
       if (!ct.isCancelled) manager.fail(id, 'Download failed');

@@ -71,6 +71,16 @@ class DownloadService {
     }
   }
 
+  /// Opens a file identified by a content:// URI on Android (e.g. a MediaStore
+  /// Downloads entry returned by [downloadFile] on API 29+).
+  Future<void> openContentUri(String uri, String fileName) async {
+    final ext = fileName.contains('.') ? fileName.split('.').last : '';
+    await _channel.invokeMethod<void>(
+      'openFileFromUri',
+      {'uri': uri, 'ext': ext},
+    );
+  }
+
   Future<Directory> _getDownloadsDir() async {
     final base = await getApplicationDocumentsDirectory();
     final dir = Directory('${base.path}/Downloads');

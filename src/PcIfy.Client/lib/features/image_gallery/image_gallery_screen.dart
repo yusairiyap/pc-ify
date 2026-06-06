@@ -1,10 +1,13 @@
 import 'dart:async';
+import 'dart:io' show Platform;
 
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:media_kit/media_kit.dart';
 import 'package:media_kit_video/media_kit_video.dart';
+import '../../services/pip_service.dart';
 
 import '../../core/models/file_entry.dart';
 import '../../providers/services_providers.dart';
@@ -119,6 +122,22 @@ class _ImageGalleryScreenState extends ConsumerState<ImageGalleryScreen>
   Offset? _tapStart;
   bool _visibleAtTapStart = false;
 
+  // Swipe-down-to-dismiss state
+  // ValueNotifier so only the outer Transform rebuilds on each drag frame —
+  // avoids full rebuild of the video Texture widget which causes flicker.
+  final _dismissDyNotifier = ValueNotifier<double>(0.0);
+  bool _isDismissing = false;
+  double _dismissSnapFromDy = 0;
+  late final AnimationController _dismissAnimCtrl;
+
+  // Picture-in-Picture
+  bool _inPipMode = false;
+
+  // Cached overlay heights — updated in build() and used by pointer handlers to
+  // distinguish taps on the empty video area from taps on control widgets.
+  double _controlsTopH = 0;    // AppBar area height (top padding + toolbar)
+  double _controlsBottomH = 0; // Bottom overlay height (seek bar + carousel + timeline)
+
   @override
   void initState() {
     super.initState();
@@ -130,6 +149,16 @@ class _ImageGalleryScreenState extends ConsumerState<ImageGalleryScreen>
       duration: const Duration(milliseconds: 220),
       vsync: this,
     )..addListener(_onZoomTick);
+    _dismissAnimCtrl = AnimationController(
+      duration: const Duration(milliseconds: 250),
+      vsync: this,
+    )..addListener(_onDismissSnapTick);
+    if (Platform.isAndroid) {
+      PipService.onPipChanged = (inPip) {
+        if (mounted) setState(() => _inPipMode = inPip);
+      };
+      PipService.initialize();
+    }
     _resetHideTimer();
   }
 
@@ -143,6 +172,9 @@ class _ImageGalleryScreenState extends ConsumerState<ImageGalleryScreen>
     _activeIndexNotifier.dispose();
     _muteNotifier.dispose();
     _zoomAnimCtrl.dispose();
+    _dismissAnimCtrl.dispose();
+    _dismissDyNotifier.dispose();
+    if (Platform.isAndroid) PipService.dispose();
     for (final ctrl in _tfControllers.values) {
       ctrl.dispose();
     }
@@ -165,6 +197,17 @@ class _ImageGalleryScreenState extends ConsumerState<ImageGalleryScreen>
     _scheduleHide();
   }
 
+  void _onDismissSnapTick() {
+    _dismissDyNotifier.value =
+        _dismissSnapFromDy * (1.0 - _dismissAnimCtrl.value);
+  }
+
+  void _snapDismissBack() {
+    _dismissSnapFromDy = _dismissDyNotifier.value;
+    _dismissAnimCtrl.value = 0;
+    _dismissAnimCtrl.forward();
+  }
+
   // --- Tap-to-toggle logic ---
   // onPointerDown / onPointerMove / onPointerUp are used by the Listener overlay.
   // A "tap" = pointer up with minimal movement.
@@ -181,15 +224,43 @@ class _ImageGalleryScreenState extends ConsumerState<ImageGalleryScreen>
       setState(() => _controlsVisible = true);
       _controlsShownAt = DateTime.now();
     }
+    // Reset dismiss state on every new touch (ValueNotifier — no setState)
+    _dismissAnimCtrl.stop();
+    _isDismissing = false;
+    _dismissDyNotifier.value = 0;
   }
 
   void _onPointerMove(PointerMoveEvent e) {
     if (_tapStart != null && (e.localPosition - _tapStart!).distance > 12) {
       _tapStart = null; // too much movement — treat as drag, not tap
     }
+    // Swipe-down-to-dismiss: activate when dragging primarily downward while
+    // not zoomed into an image and not dragging the video seek bar.
+    if (!_isDismissing && !_isVideoSeeking && !_zoomedNotifier.value) {
+      final dy = e.delta.dy;
+      final dx = e.delta.dx;
+      if (dy > 0 && dy.abs() > dx.abs() * 1.5) {
+        _isDismissing = true;
+      }
+    }
+    if (_isDismissing) {
+      _dismissDyNotifier.value =
+          (_dismissDyNotifier.value + e.delta.dy).clamp(0.0, double.infinity);
+    }
   }
 
   void _onPointerUp(PointerUpEvent e) {
+    if (_isDismissing) {
+      _isDismissing = false;
+      if (_dismissDyNotifier.value > 150) {
+        context.pop();
+      } else {
+        _snapDismissBack();
+      }
+      _tapStart = null;
+      return;
+    }
+
     final wasTap = _tapStart != null;
     _tapStart = null;
 
@@ -197,10 +268,18 @@ class _ImageGalleryScreenState extends ConsumerState<ImageGalleryScreen>
       final justShown = _controlsShownAt != null &&
           DateTime.now().difference(_controlsShownAt!).inMilliseconds < 400;
       if (!justShown) {
-        // Single tap while controls were already visible → hide now
-        _hideTimer?.cancel();
-        setState(() => _controlsVisible = false);
-        return;
+        // Only hide immediately when the tap landed on the empty video area,
+        // not on any control widget (AppBar, seek bar, buttons, carousel, timeline).
+        final screenH = MediaQuery.sizeOf(context).height;
+        final tapY = e.localPosition.dy;
+        final inVideoArea =
+            tapY > _controlsTopH && tapY < screenH - _controlsBottomH;
+        if (inVideoArea) {
+          _hideTimer?.cancel();
+          setState(() => _controlsVisible = false);
+          return;
+        }
+        // Tap was on a control — reset the timer so controls stay visible.
       }
     }
 
@@ -558,6 +637,17 @@ class _ImageGalleryScreenState extends ConsumerState<ImageGalleryScreen>
                         },
                       ),
                     ),
+                    // Picture-in-Picture (Android only)
+                    if (Platform.isAndroid)
+                      IconButton(
+                        tooltip: 'Picture in picture',
+                        icon: const Icon(
+                          Icons.picture_in_picture_alt,
+                          color: Colors.white,
+                          size: 20,
+                        ),
+                        onPressed: () => PipService.enter(),
+                      ),
                   ],
                 ),  // Row
                   ],
@@ -623,16 +713,20 @@ class _ImageGalleryScreenState extends ConsumerState<ImageGalleryScreen>
   Widget build(BuildContext context) {
     final asyncItems = ref.watch(_galleryProvider(widget.folderPath));
     final topPad = MediaQuery.of(context).padding.top;
+    _controlsTopH = topPad + kToolbarHeight;
 
-    return Scaffold(
+    // In PiP mode hide all controls so only the video is visible.
+    final controlsVisible = _controlsVisible && !_inPipMode;
+
+    final scaffold = Scaffold(
       extendBodyBehindAppBar: true,
       backgroundColor: Colors.black,
       appBar: PreferredSize(
         preferredSize: const Size.fromHeight(kToolbarHeight),
         child: IgnorePointer(
-          ignoring: !_controlsVisible,
+          ignoring: !controlsVisible,
           child: AnimatedOpacity(
-            opacity: _controlsVisible ? 1.0 : 0.0,
+            opacity: controlsVisible ? 1.0 : 0.0,
             duration: const Duration(milliseconds: 300),
             child: AppBar(
               backgroundColor: Colors.transparent,
@@ -674,11 +768,15 @@ class _ImageGalleryScreenState extends ConsumerState<ImageGalleryScreen>
           }
           // Carousel height used to vertically center nav buttons
           const carouselH = _thumbSize + _thumbMargin * 2 + 8;
-          final seekBarH =
-              items[_currentIndex].isVideo ? 52.0 : 0.0;
+          final isCurrentVideo = items[_currentIndex].isVideo;
+          final seekBarH = isCurrentVideo ? 52.0 : 0.0;
+          // Include the timeline strip (88 px content + 16 px padding) when visible.
+          final timelineStripH = (_showTimelineStrip && isCurrentVideo) ? 104.0 : 0.0;
           final bottomOverlayH = carouselH +
               seekBarH +
               MediaQuery.of(context).padding.bottom;
+          // Wider bound for tap detection — includes timeline strip if open.
+          _controlsBottomH = bottomOverlayH + timelineStripH;
 
           return Stack(
             children: [
@@ -750,9 +848,9 @@ class _ImageGalleryScreenState extends ConsumerState<ImageGalleryScreen>
                   bottom: bottomOverlayH,
                   child: Center(
                     child: IgnorePointer(
-                      ignoring: !_controlsVisible,
+                      ignoring: !controlsVisible,
                       child: AnimatedOpacity(
-                        opacity: _controlsVisible ? 1.0 : 0.0,
+                        opacity: controlsVisible ? 1.0 : 0.0,
                         duration: const Duration(milliseconds: 300),
                         child: _NavButton(
                           icon: Icons.chevron_left,
@@ -771,9 +869,9 @@ class _ImageGalleryScreenState extends ConsumerState<ImageGalleryScreen>
                   bottom: bottomOverlayH,
                   child: Center(
                     child: IgnorePointer(
-                      ignoring: !_controlsVisible,
+                      ignoring: !controlsVisible,
                       child: AnimatedOpacity(
-                        opacity: _controlsVisible ? 1.0 : 0.0,
+                        opacity: controlsVisible ? 1.0 : 0.0,
                         duration: const Duration(milliseconds: 300),
                         child: _NavButton(
                           icon: Icons.chevron_right,
@@ -791,9 +889,9 @@ class _ImageGalleryScreenState extends ConsumerState<ImageGalleryScreen>
                 left: 0,
                 right: 0,
                 child: IgnorePointer(
-                  ignoring: !_controlsVisible,
+                  ignoring: !controlsVisible,
                   child: AnimatedOpacity(
-                    opacity: _controlsVisible ? 1.0 : 0.0,
+                    opacity: controlsVisible ? 1.0 : 0.0,
                     duration: const Duration(milliseconds: 300),
                     child: _buildBottomOverlay(items),
                   ),
@@ -803,6 +901,22 @@ class _ImageGalleryScreenState extends ConsumerState<ImageGalleryScreen>
           );
         },
       ),
+    );
+
+    // ValueListenableBuilder limits repaints to this wrapper only — the video
+    // Texture widget subtree is passed as `child` and never rebuilt by drags.
+    // Always wrap in Transform (even at dy=0) so tree structure never changes,
+    // preventing video player disposal on the first drag frame.
+    return ValueListenableBuilder<double>(
+      valueListenable: _dismissDyNotifier,
+      builder: (_, dismissDy, child) => Opacity(
+        opacity: (1.0 - dismissDy / 300.0).clamp(0.2, 1.0),
+        child: Transform.translate(
+          offset: Offset(0, dismissDy),
+          child: child,
+        ),
+      ),
+      child: scaffold,
     );
   }
 }
@@ -836,6 +950,10 @@ class _GalleryVideoPageState extends ConsumerState<_GalleryVideoPage> {
   late final VideoController _controller;
   bool _ready = false;
 
+  // Always start hidden and fade in after the first frame is ready, so the
+  // user never sees a flash of the start frame or a seek-landing glitch.
+  bool _videoVisible = false;
+
   // Pinch-zoom / pan state (managed via Listener to bypass gesture arena)
   double _scale = 1.0;
   Offset _offset = Offset.zero;
@@ -862,6 +980,15 @@ class _GalleryVideoPageState extends ConsumerState<_GalleryVideoPage> {
     _initStream();
   }
 
+  // Fire-and-forget: reveals the video once the position advances from zero.
+  void _waitForFirstFrame() {
+    _player.stream.position
+        .firstWhere((p) => p > Duration.zero)
+        .timeout(const Duration(seconds: 5))
+        .then((_) { if (mounted) setState(() => _videoVisible = true); })
+        .catchError((_) { if (mounted) setState(() => _videoVisible = true); });
+  }
+
   void _onMuteChanged() {
     _player.setVolume(widget.muteNotifier.value ? 0 : 100);
   }
@@ -870,16 +997,40 @@ class _GalleryVideoPageState extends ConsumerState<_GalleryVideoPage> {
     final repeat = ref.read(videoRepeatProvider);
     await _player.setPlaylistMode(repeat ? PlaylistMode.loop : PlaylistMode.none);
     await _player.open(Media(widget.streamUri), play: false);
-    final pos = widget.initialPositionMs;
-    if (pos != null && pos > 0) {
-      await _player.seek(Duration(milliseconds: pos));
-    }
     _ready = true;
     if (_isActive) {
       widget.playerNotifier.value = _player;
       _player.setVolume(widget.muteNotifier.value ? 0 : 100);
-      await _player.play();
+      final pos = widget.initialPositionMs;
+      if (pos != null && pos > 0) {
+        await _seekThenReveal(pos);
+      } else {
+        await _player.play();
+        _waitForFirstFrame();
+      }
     }
+  }
+
+  // Plays, seeks to [posMs], then waits for the position stream to confirm
+  // the seek landed before fading the video in.  Buffering-based detection is
+  // unreliable for HTTP streams, so we watch position directly instead.
+  Future<void> _seekThenReveal(int posMs) async {
+    await _player.play();
+    // Give the player a moment to start streaming before issuing the seek so
+    // it isn't silently dropped on a cold open.
+    await Future.delayed(const Duration(milliseconds: 300));
+    await _player.seek(Duration(milliseconds: posMs));
+    // Accept any position that is at least half-way to the target (avoids
+    // triggering on the initial 0-ms position while still catching early seeks).
+    final thresholdMs = posMs > 2100 ? posMs - 2000 : posMs ~/ 2;
+    try {
+      await _player.stream.position
+          .firstWhere((pos) => pos.inMilliseconds > thresholdMs)
+          .timeout(const Duration(seconds: 8));
+    } catch (_) {
+      // Timeout — reveal anyway so the video is never permanently hidden.
+    }
+    if (mounted) setState(() => _videoVisible = true);
   }
 
   void _onActiveChanged() {
@@ -890,6 +1041,9 @@ class _GalleryVideoPageState extends ConsumerState<_GalleryVideoPage> {
       // Reset zoom/pan when page becomes active
       _resetZoom();
       _player.play();
+      // Ensure video surface is visible if user swiped back before the
+      // initial seek-and-reveal completed.
+      if (!_videoVisible && mounted) setState(() => _videoVisible = true);
     } else {
       if (widget.playerNotifier.value == _player) {
         widget.playerNotifier.value = null;
@@ -1003,8 +1157,12 @@ class _GalleryVideoPageState extends ConsumerState<_GalleryVideoPage> {
           offset: _offset,
           child: Transform.scale(
             scale: _scale,
-            child: Video(
-                controller: _controller, controls: NoVideoControls, fit: fit),
+            child: AnimatedOpacity(
+              duration: const Duration(milliseconds: 300),
+              opacity: _videoVisible ? 1.0 : 0.0,
+              child: Video(
+                  controller: _controller, controls: NoVideoControls, fit: fit),
+            ),
           ),
         ),
         // Raw pointer tracking for pinch-zoom and pan — Listener fires

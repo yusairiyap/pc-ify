@@ -60,6 +60,7 @@ class _AddWidgetSheet extends StatelessWidget {
         WidgetType.cpu => Icons.memory_outlined,
         WidgetType.ram => Icons.storage_outlined,
         WidgetType.screenLock => Icons.lock_outline,
+        WidgetType.serverInfo => Icons.dns_outlined,
       };
 
   String _name(WidgetType t) => switch (t) {
@@ -68,6 +69,7 @@ class _AddWidgetSheet extends StatelessWidget {
         WidgetType.cpu => 'CPU Usage',
         WidgetType.ram => 'RAM Usage',
         WidgetType.screenLock => 'Screen Lock',
+        WidgetType.serverInfo => 'Server Info',
       };
 
   String _desc(WidgetType t) => switch (t) {
@@ -76,5 +78,6 @@ class _AddWidgetSheet extends StatelessWidget {
         WidgetType.cpu => 'Processor utilization',
         WidgetType.ram => 'Memory utilization',
         WidgetType.screenLock => 'Lock or wake the remote screen',
+        WidgetType.serverInfo => 'Platform, server name and connection status',
       };
 }

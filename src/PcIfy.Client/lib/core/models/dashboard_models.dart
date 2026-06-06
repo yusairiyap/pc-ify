@@ -1,4 +1,4 @@
-enum WidgetType { battery, volume, cpu, ram, screenLock }
+enum WidgetType { battery, volume, cpu, ram, screenLock, serverInfo }
 
 enum WidgetSize { halfWidth, fullWidth }
 
@@ -12,7 +12,7 @@ class DashboardItem {
       size ?? _defaultSizeFor(type);
 
   static WidgetSize _defaultSizeFor(WidgetType t) =>
-      (t == WidgetType.screenLock)
+      (t == WidgetType.screenLock || t == WidgetType.serverInfo)
           ? WidgetSize.fullWidth
           : WidgetSize.halfWidth;
 
@@ -95,6 +95,7 @@ class DashboardLayout {
           id: 'system',
           name: 'Server Overview',
           items: [
+            DashboardItem(id: 'server_info', type: WidgetType.serverInfo),
             DashboardItem(id: 'battery', type: WidgetType.battery),
             DashboardItem(id: 'volume', type: WidgetType.volume),
             DashboardItem(id: 'cpu', type: WidgetType.cpu),

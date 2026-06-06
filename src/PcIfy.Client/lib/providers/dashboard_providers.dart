@@ -4,6 +4,7 @@ import '../core/models/bookmarked_folder.dart';
 import '../core/models/control_status.dart';
 import '../core/models/dashboard_models.dart';
 import '../core/models/file_entry.dart';
+import '../core/models/server_info.dart';
 import 'services_providers.dart';
 
 // ── Layout ────────────────────────────────────────────────────────────────────
@@ -68,15 +69,47 @@ class ControlStatusNotifier extends AutoDisposeAsyncNotifier<ControlStatus> {
   @override
   Future<ControlStatus> build() async {
     ref.onDispose(() => _timer?.cancel());
-    final status = await _fetch();
+    // Start polling before the first await so the timer is registered even
+    // if the initial fetch throws (server unreachable on startup).
     _timer = Timer.periodic(const Duration(seconds: 5), (_) => _refresh());
-    return status;
+    return _fetch();
   }
 
   Future<ControlStatus> _fetch() async {
-    return await ref.read(apiServiceProvider).getControlStatus() ??
-        ControlStatus.unavailable();
+    final status = await ref.read(apiServiceProvider).getControlStatus();
+    // Null means the HTTP request failed — propagate as an error so the
+    // Server Info card shows "Disconnected" instead of "Connected".
+    if (status == null) throw Exception('Cannot reach server');
+    return status;
   }
+
+  Future<void> _refresh() async {
+    try {
+      state = AsyncData(await _fetch());
+    } catch (e, st) {
+      state = AsyncError(e, st);
+    }
+  }
+}
+
+// ── Server info (30-second poll) ──────────────────────────────────────────────
+
+final serverInfoProvider = AsyncNotifierProvider.autoDispose<
+    _ServerInfoNotifier, ServerInfo?>(_ServerInfoNotifier.new);
+
+class _ServerInfoNotifier extends AutoDisposeAsyncNotifier<ServerInfo?> {
+  Timer? _timer;
+
+  @override
+  Future<ServerInfo?> build() async {
+    ref.onDispose(() => _timer?.cancel());
+    final info = await _fetch();
+    _timer = Timer.periodic(const Duration(seconds: 30), (_) => _refresh());
+    return info;
+  }
+
+  Future<ServerInfo?> _fetch() =>
+      ref.read(apiServiceProvider).getServerInfo();
 
   Future<void> _refresh() async {
     final fresh = await _fetch();
