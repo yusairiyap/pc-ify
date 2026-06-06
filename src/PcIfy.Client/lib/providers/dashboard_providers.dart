@@ -69,19 +69,26 @@ class ControlStatusNotifier extends AutoDisposeAsyncNotifier<ControlStatus> {
   @override
   Future<ControlStatus> build() async {
     ref.onDispose(() => _timer?.cancel());
-    final status = await _fetch();
+    // Start polling before the first await so the timer is registered even
+    // if the initial fetch throws (server unreachable on startup).
     _timer = Timer.periodic(const Duration(seconds: 5), (_) => _refresh());
-    return status;
+    return _fetch();
   }
 
   Future<ControlStatus> _fetch() async {
-    return await ref.read(apiServiceProvider).getControlStatus() ??
-        ControlStatus.unavailable();
+    final status = await ref.read(apiServiceProvider).getControlStatus();
+    // Null means the HTTP request failed — propagate as an error so the
+    // Server Info card shows "Disconnected" instead of "Connected".
+    if (status == null) throw Exception('Cannot reach server');
+    return status;
   }
 
   Future<void> _refresh() async {
-    final fresh = await _fetch();
-    state = AsyncData(fresh);
+    try {
+      state = AsyncData(await _fetch());
+    } catch (e, st) {
+      state = AsyncError(e, st);
+    }
   }
 }
 

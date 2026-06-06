@@ -932,6 +932,10 @@ class _GalleryVideoPageState extends ConsumerState<_GalleryVideoPage> {
   late final VideoController _controller;
   bool _ready = false;
 
+  // When seeking to a specific position on open, start hidden and fade in
+  // once the stream has buffered at the target position.
+  bool _videoVisible = true;
+
   // Pinch-zoom / pan state (managed via Listener to bypass gesture arena)
   double _scale = 1.0;
   Offset _offset = Offset.zero;
@@ -953,6 +957,10 @@ class _GalleryVideoPageState extends ConsumerState<_GalleryVideoPage> {
     super.initState();
     _player = Player();
     _controller = VideoController(_player);
+    // Hide the video surface until buffering at the seeked position completes,
+    // so the user never sees the start frame before jumping to the target time.
+    final pos = widget.initialPositionMs;
+    if (pos != null && pos > 0) _videoVisible = false;
     widget.activeIndexNotifier.addListener(_onActiveChanged);
     widget.muteNotifier.addListener(_onMuteChanged);
     _initStream();
@@ -970,14 +978,41 @@ class _GalleryVideoPageState extends ConsumerState<_GalleryVideoPage> {
     if (_isActive) {
       widget.playerNotifier.value = _player;
       _player.setVolume(widget.muteNotifier.value ? 0 : 100);
-      await _player.play();
-      // Seek after play() so the HTTP stream has started buffering — seeking
-      // on a paused, not-yet-started stream silently fails for many codecs.
       final pos = widget.initialPositionMs;
       if (pos != null && pos > 0) {
-        await _player.seek(Duration(milliseconds: pos));
+        await _seekThenReveal(pos);
+      } else {
+        await _player.play();
       }
     }
+  }
+
+  // Plays, seeks to [posMs], waits for the stream to buffer at the new
+  // position, then fades the video in.  The video surface starts invisible so
+  // the user never sees the beginning-of-file frame before the seek lands.
+  Future<void> _seekThenReveal(int posMs) async {
+    // Subscribe to buffering events before calling play/seek so we don't miss
+    // the transition.  We wait for: buffering=true → buffering=false.
+    bool seenBuffering = false;
+    final completer = Completer<void>();
+    StreamSubscription<bool>? sub;
+    sub = _player.stream.buffering.listen((buffering) {
+      if (buffering) seenBuffering = true;
+      if (seenBuffering && !buffering && !completer.isCompleted) {
+        completer.complete();
+      }
+    });
+
+    await _player.play();
+    await _player.seek(Duration(milliseconds: posMs));
+
+    try {
+      await completer.future.timeout(const Duration(seconds: 6));
+    } catch (_) {
+      // Timeout — reveal anyway so the video is never permanently hidden.
+    }
+    await sub.cancel();
+    if (mounted) setState(() => _videoVisible = true);
   }
 
   void _onActiveChanged() {
@@ -988,6 +1023,9 @@ class _GalleryVideoPageState extends ConsumerState<_GalleryVideoPage> {
       // Reset zoom/pan when page becomes active
       _resetZoom();
       _player.play();
+      // Ensure video surface is visible if user swiped back before the
+      // initial seek-and-reveal completed.
+      if (!_videoVisible && mounted) setState(() => _videoVisible = true);
     } else {
       if (widget.playerNotifier.value == _player) {
         widget.playerNotifier.value = null;
@@ -1101,8 +1139,12 @@ class _GalleryVideoPageState extends ConsumerState<_GalleryVideoPage> {
           offset: _offset,
           child: Transform.scale(
             scale: _scale,
-            child: Video(
-                controller: _controller, controls: NoVideoControls, fit: fit),
+            child: AnimatedOpacity(
+              duration: const Duration(milliseconds: 300),
+              opacity: _videoVisible ? 1.0 : 0.0,
+              child: Video(
+                  controller: _controller, controls: NoVideoControls, fit: fit),
+            ),
           ),
         ),
         // Raw pointer tracking for pinch-zoom and pan — Listener fires

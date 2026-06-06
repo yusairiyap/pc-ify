@@ -10,6 +10,7 @@ import 'package:open_filex/open_filex.dart';
 import 'package:path/path.dart' as p;
 
 import '../../core/constants/media_types.dart';
+import '../../core/utils/shell_state.dart';
 import '../../core/models/bookmarked_folder.dart';
 import '../../core/models/file_entry.dart';
 import '../../core/models/folder_listing.dart';
@@ -424,20 +425,10 @@ class _BrowserBody extends ConsumerStatefulWidget {
 
 class _BrowserBodyState extends ConsumerState<_BrowserBody>
     with WidgetsBindingObserver {
-  // Cached during didChangeDependencies so it is safe to read from the
-  // async didPopRoute callback without calling GoRouter.of(context) there.
-  GoRouter? _router;
-
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-  }
-
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    _router = GoRouter.of(context);
   }
 
   @override
@@ -449,9 +440,8 @@ class _BrowserBodyState extends ConsumerState<_BrowserBody>
   @override
   Future<bool> didPopRoute() async {
     if (!mounted) return false;
-    // Only intercept when the browse tab is the active route.
-    final uri = _router?.routeInformationProvider.value.uri;
-    if (uri == null || !uri.path.startsWith('/browse')) return false;
+    // Only intercept when the Browse tab (index 1) is the active shell tab.
+    if (ShellState.currentTabIndex != 1) return false;
     final browserState = ref.read(_browserNotifierProvider).valueOrNull;
     if (browserState?.canNavigateBack == true) {
       ref.read(_browserNotifierProvider.notifier).navigateBack();
