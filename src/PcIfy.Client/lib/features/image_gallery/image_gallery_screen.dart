@@ -133,6 +133,11 @@ class _ImageGalleryScreenState extends ConsumerState<ImageGalleryScreen>
   // Picture-in-Picture
   bool _inPipMode = false;
 
+  // Cached overlay heights — updated in build() and used by pointer handlers to
+  // distinguish taps on the empty video area from taps on control widgets.
+  double _controlsTopH = 0;    // AppBar area height (top padding + toolbar)
+  double _controlsBottomH = 0; // Bottom overlay height (seek bar + carousel + timeline)
+
   @override
   void initState() {
     super.initState();
@@ -263,10 +268,18 @@ class _ImageGalleryScreenState extends ConsumerState<ImageGalleryScreen>
       final justShown = _controlsShownAt != null &&
           DateTime.now().difference(_controlsShownAt!).inMilliseconds < 400;
       if (!justShown) {
-        // Single tap while controls were already visible → hide now
-        _hideTimer?.cancel();
-        setState(() => _controlsVisible = false);
-        return;
+        // Only hide immediately when the tap landed on the empty video area,
+        // not on any control widget (AppBar, seek bar, buttons, carousel, timeline).
+        final screenH = MediaQuery.sizeOf(context).height;
+        final tapY = e.localPosition.dy;
+        final inVideoArea =
+            tapY > _controlsTopH && tapY < screenH - _controlsBottomH;
+        if (inVideoArea) {
+          _hideTimer?.cancel();
+          setState(() => _controlsVisible = false);
+          return;
+        }
+        // Tap was on a control — reset the timer so controls stay visible.
       }
     }
 
@@ -700,6 +713,7 @@ class _ImageGalleryScreenState extends ConsumerState<ImageGalleryScreen>
   Widget build(BuildContext context) {
     final asyncItems = ref.watch(_galleryProvider(widget.folderPath));
     final topPad = MediaQuery.of(context).padding.top;
+    _controlsTopH = topPad + kToolbarHeight;
 
     // In PiP mode hide all controls so only the video is visible.
     final controlsVisible = _controlsVisible && !_inPipMode;
@@ -754,11 +768,15 @@ class _ImageGalleryScreenState extends ConsumerState<ImageGalleryScreen>
           }
           // Carousel height used to vertically center nav buttons
           const carouselH = _thumbSize + _thumbMargin * 2 + 8;
-          final seekBarH =
-              items[_currentIndex].isVideo ? 52.0 : 0.0;
+          final isCurrentVideo = items[_currentIndex].isVideo;
+          final seekBarH = isCurrentVideo ? 52.0 : 0.0;
+          // Include the timeline strip (88 px content + 16 px padding) when visible.
+          final timelineStripH = (_showTimelineStrip && isCurrentVideo) ? 104.0 : 0.0;
           final bottomOverlayH = carouselH +
               seekBarH +
               MediaQuery.of(context).padding.bottom;
+          // Wider bound for tap detection — includes timeline strip if open.
+          _controlsBottomH = bottomOverlayH + timelineStripH;
 
           return Stack(
             children: [
