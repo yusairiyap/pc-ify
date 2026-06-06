@@ -11,6 +11,7 @@ import 'widget_cards/server_info_card.dart';
 import 'widget_cards/volume_card.dart';
 
 const _kTallMinHeight = 180.0;
+const _kNormalMinHeight = 112.0;
 
 class DashboardSectionView extends ConsumerWidget {
   const DashboardSectionView(
@@ -213,18 +214,16 @@ class _WidgetGridState extends ConsumerState<_WidgetGrid> {
   Widget _halfRow((int, DashboardItem) a, (int, DashboardItem)? b) =>
       Padding(
         padding: const EdgeInsets.fromLTRB(16, 4, 16, 4),
-        child: IntrinsicHeight(
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Expanded(child: _draggableCard(a.$1, a.$2)),
-              if (b != null) ...[
-                const SizedBox(width: 8),
-                Expanded(child: _draggableCard(b.$1, b.$2)),
-              ] else
-                const Expanded(child: SizedBox.shrink()),
-            ],
-          ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(child: _draggableCard(a.$1, a.$2)),
+            if (b != null) ...[
+              const SizedBox(width: 8),
+              Expanded(child: _draggableCard(b.$1, b.$2)),
+            ] else
+              const Expanded(child: SizedBox.shrink()),
+          ],
         ),
       );
 
@@ -299,39 +298,30 @@ class _WidgetGridState extends ConsumerState<_WidgetGrid> {
     );
   }
 
-  // Wraps the card with a tap-based size badge.
-  // AnimatedSwitcher at the grid level handles cross-fade on layout changes;
-  // we deliberately avoid AnimatedSize here because it doesn't implement
-  // intrinsic-dimension methods and would crash inside _halfRow's IntrinsicHeight.
   Widget _withSizeBadge(DashboardItem item) {
-    return Stack(
-      children: [
-        _buildCard(item),
-        Positioned(
-          right: 8,
-          bottom: 8,
-          child: _SizeBadge(
-            item: item,
-            onResize: (size) => _resizeItem(item, size),
-          ),
-        ),
-      ],
+    final badge = _SizeBadge(
+      item: item,
+      onResize: (size) => _resizeItem(item, size),
     );
+    return _buildCard(item, badge: badge);
   }
 
-  // For tall items, wraps in a fixed-height SizedBox so the card fills the space
-  // and Spacer() widgets inside can distribute content correctly.
-  Widget _buildCard(DashboardItem item) {
+  // Fixed heights ensure all cards of the same size class are consistent.
+  // Tall cards use SizedBox so Column Spacers distribute space correctly.
+  // Non-wide normal cards use a fixed height so paired half-width cards
+  // never stretch each other via IntrinsicHeight.
+  Widget _buildCard(DashboardItem item, {Widget? badge}) {
     final size = item.effectiveSize;
     Widget card = switch (item.type) {
-      WidgetType.battery => BatteryCard(hasBg: widget.hasBg, size: size),
-      WidgetType.cpu => CpuCard(hasBg: widget.hasBg, size: size),
-      WidgetType.ram => RamCard(hasBg: widget.hasBg, size: size),
-      WidgetType.volume => VolumeCard(hasBg: widget.hasBg, size: size),
-      WidgetType.screenLock => ScreenLockCard(hasBg: widget.hasBg, size: size),
-      WidgetType.serverInfo => ServerInfoCard(hasBg: widget.hasBg, size: size),
+      WidgetType.battery => BatteryCard(hasBg: widget.hasBg, size: size, badge: badge),
+      WidgetType.cpu => CpuCard(hasBg: widget.hasBg, size: size, badge: badge),
+      WidgetType.ram => RamCard(hasBg: widget.hasBg, size: size, badge: badge),
+      WidgetType.volume => VolumeCard(hasBg: widget.hasBg, size: size, badge: badge),
+      WidgetType.screenLock => ScreenLockCard(hasBg: widget.hasBg, size: size, badge: badge),
+      WidgetType.serverInfo => ServerInfoCard(hasBg: widget.hasBg, size: size, badge: badge),
     };
     if (size.isTall) return SizedBox(height: _kTallMinHeight, child: card);
+    if (!size.isWide) return SizedBox(height: _kNormalMinHeight, child: card);
     return card;
   }
 }

@@ -4,9 +4,10 @@ import '../../../core/models/dashboard_models.dart';
 import '../../../providers/dashboard_providers.dart';
 
 class RamCard extends ConsumerStatefulWidget {
-  const RamCard({super.key, required this.hasBg, required this.size});
+  const RamCard({super.key, required this.hasBg, required this.size, this.badge});
   final bool hasBg;
   final WidgetSize size;
+  final Widget? badge;
 
   @override
   ConsumerState<RamCard> createState() => _RamCardState();
@@ -32,10 +33,24 @@ class _RamCardState extends ConsumerState<RamCard> {
     final labelColor = widget.hasBg ? Colors.white70 : cs.onSurfaceVariant;
     final valueColor = widget.hasBg ? Colors.white : cs.onSurface;
     final subColor = widget.hasBg ? Colors.white54 : cs.outline;
+    final swapIconColor = widget.hasBg ? Colors.white38 : cs.outline;
     final barColor = !_showAvailable && pct > 0.9
         ? Colors.red
         : (!_showAvailable && pct > 0.7 ? Colors.orange : cs.primary);
     final barValue = (_showAvailable ? (1.0 - pct) : pct).clamp(0.0, 1.0);
+
+    // Header row shared across both layouts: swap icon + badge in trailing
+    Widget headerRow() => Row(children: [
+      Icon(Icons.storage_outlined, color: iconColor, size: 18),
+      const SizedBox(width: 6),
+      Text('RAM', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: labelColor)),
+      const Spacer(),
+      if (available) ...[
+        Icon(Icons.swap_horiz_outlined, size: 14, color: swapIconColor),
+        const SizedBox(width: 4),
+      ],
+      if (widget.badge != null) widget.badge!,
+    ]);
 
     if (widget.size.isTall) {
       return Card(
@@ -48,15 +63,7 @@ class _RamCardState extends ConsumerState<RamCard> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Row(children: [
-                  Icon(Icons.storage_outlined, color: iconColor, size: 18),
-                  const SizedBox(width: 6),
-                  Text('RAM', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: labelColor)),
-                  if (available) ...[
-                    const Spacer(),
-                    Icon(Icons.swap_horiz_outlined, size: 14, color: widget.hasBg ? Colors.white38 : cs.outline),
-                  ],
-                ]),
+                headerRow(),
                 const Spacer(),
                 if (!available)
                   Center(child: Text('—', style: TextStyle(fontSize: 44, fontWeight: FontWeight.bold, color: subColor)))
@@ -111,15 +118,7 @@ class _RamCardState extends ConsumerState<RamCard> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Row(children: [
-                Icon(Icons.storage_outlined, color: iconColor, size: 18),
-                const SizedBox(width: 6),
-                Text('RAM', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: labelColor)),
-                if (available) ...[
-                  const Spacer(),
-                  Icon(Icons.swap_horiz_outlined, size: 14, color: widget.hasBg ? Colors.white38 : cs.outline),
-                ],
-              ]),
+              headerRow(),
               const SizedBox(height: 8),
               if (!available)
                 Text('—', style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: subColor))

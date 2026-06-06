@@ -4,19 +4,20 @@ import '../../../core/models/dashboard_models.dart';
 import '../../../providers/dashboard_providers.dart';
 
 class BatteryCard extends ConsumerWidget {
-  const BatteryCard({super.key, required this.hasBg, required this.size});
+  const BatteryCard({super.key, required this.hasBg, required this.size, this.badge});
   final bool hasBg;
   final WidgetSize size;
+  final Widget? badge;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final cs = Theme.of(context).colorScheme;
     return ref.watch(controlStatusProvider).when(
-      loading: () => _BatteryBody(level: 0, charging: false, available: false, hasBg: hasBg, cs: cs, size: size),
-      error: (_, __) => _BatteryBody(level: 0, charging: false, available: false, hasBg: hasBg, cs: cs, size: size),
+      loading: () => _BatteryBody(level: 0, charging: false, available: false, hasBg: hasBg, cs: cs, size: size, badge: badge),
+      error: (_, __) => _BatteryBody(level: 0, charging: false, available: false, hasBg: hasBg, cs: cs, size: size, badge: badge),
       data: (s) => _BatteryBody(
         level: s.battery.level, charging: s.battery.charging,
-        available: s.battery.available, hasBg: hasBg, cs: cs, size: size,
+        available: s.battery.available, hasBg: hasBg, cs: cs, size: size, badge: badge,
       ),
     );
   }
@@ -25,7 +26,7 @@ class BatteryCard extends ConsumerWidget {
 class _BatteryBody extends StatelessWidget {
   const _BatteryBody({
     required this.level, required this.charging, required this.available,
-    required this.hasBg, required this.cs, required this.size,
+    required this.hasBg, required this.cs, required this.size, this.badge,
   });
   final int level;
   final bool charging;
@@ -33,6 +34,7 @@ class _BatteryBody extends StatelessWidget {
   final bool hasBg;
   final ColorScheme cs;
   final WidgetSize size;
+  final Widget? badge;
 
   Color get _barColor => level < 20 ? Colors.red : (charging ? Colors.green : cs.primary);
 
@@ -64,10 +66,10 @@ class _BatteryBody extends StatelessWidget {
                 Icon(_icon(), color: iconColor, size: 18),
                 const SizedBox(width: 6),
                 Text('Battery', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: labelColor)),
-                if (charging) ...[
-                  const Spacer(),
-                  _ChargingChip(hasBg: hasBg),
-                ],
+                if (charging || badge != null) const Spacer(),
+                if (charging) _ChargingChip(hasBg: hasBg),
+                if (charging && badge != null) const SizedBox(width: 4),
+                if (badge != null) badge!,
               ]),
               const Spacer(),
               Center(
@@ -111,6 +113,7 @@ class _BatteryBody extends StatelessWidget {
               Icon(_icon(), color: iconColor, size: 18),
               const SizedBox(width: 6),
               Text('Battery', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: labelColor)),
+              if (badge != null) ...[const Spacer(), badge!],
             ]),
             const SizedBox(height: 8),
             if (!available)

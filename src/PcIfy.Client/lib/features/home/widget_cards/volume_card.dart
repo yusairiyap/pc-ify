@@ -6,9 +6,10 @@ import '../../../providers/dashboard_providers.dart';
 import '../../../providers/services_providers.dart';
 
 class VolumeCard extends ConsumerStatefulWidget {
-  const VolumeCard({super.key, required this.hasBg, required this.size});
+  const VolumeCard({super.key, required this.hasBg, required this.size, this.badge});
   final bool hasBg;
   final WidgetSize size;
+  final Widget? badge;
 
   @override
   ConsumerState<VolumeCard> createState() => _VolumeCardState();
@@ -96,10 +97,9 @@ class _VolumeCardState extends ConsumerState<VolumeCard> {
                 ),
                 const SizedBox(width: 6),
                 Text('Volume', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: labelColor)),
-                if (available) ...[
-                  const Spacer(),
-                  muteButton,
-                ],
+                const Spacer(),
+                if (available) ...[muteButton, const SizedBox(width: 4)],
+                if (widget.badge != null) widget.badge!,
               ]),
               const Spacer(),
               if (!available)
@@ -144,13 +144,14 @@ class _VolumeCardState extends ConsumerState<VolumeCard> {
               const SizedBox(width: 6),
               Text('Volume', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: labelColor)),
               const Spacer(),
-              if (available)
-                Row(children: [
-                  Text(muted ? 'Muted' : '${displayLevel.round()}%',
-                      style: TextStyle(fontSize: 12, color: subColor)),
-                  const SizedBox(width: 4),
-                  muteButton,
-                ]),
+              if (available) ...[
+                Text(muted ? 'Muted' : '${displayLevel.round()}%',
+                    style: TextStyle(fontSize: 12, color: subColor)),
+                const SizedBox(width: 4),
+                muteButton,
+                const SizedBox(width: 4),
+              ],
+              if (widget.badge != null) widget.badge!,
             ]),
             if (!available)
               Padding(

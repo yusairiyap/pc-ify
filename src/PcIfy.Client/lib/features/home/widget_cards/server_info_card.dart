@@ -4,9 +4,10 @@ import '../../../core/models/dashboard_models.dart';
 import '../../../providers/dashboard_providers.dart';
 
 class ServerInfoCard extends ConsumerWidget {
-  const ServerInfoCard({super.key, required this.hasBg, required this.size});
+  const ServerInfoCard({super.key, required this.hasBg, required this.size, this.badge});
   final bool hasBg;
   final WidgetSize size;
+  final Widget? badge;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -17,14 +18,14 @@ class ServerInfoCard extends ConsumerWidget {
       orElse: () => false,
     );
     return ref.watch(serverInfoProvider).when(
-      loading: () => _ServerInfoBody(serverName: '—', osVersion: '—', platform: 'unknown', isConnected: false, hasBg: hasBg, cs: cs, tt: tt, size: size),
-      error: (_, __) => _ServerInfoBody(serverName: 'Offline', osVersion: '—', platform: 'unknown', isConnected: false, hasBg: hasBg, cs: cs, tt: tt, size: size),
+      loading: () => _ServerInfoBody(serverName: '—', osVersion: '—', platform: 'unknown', isConnected: false, hasBg: hasBg, cs: cs, tt: tt, size: size, badge: badge),
+      error: (_, __) => _ServerInfoBody(serverName: 'Offline', osVersion: '—', platform: 'unknown', isConnected: false, hasBg: hasBg, cs: cs, tt: tt, size: size, badge: badge),
       data: (info) => _ServerInfoBody(
         serverName: info?.serverName ?? '—',
         osVersion: info?.osVersion ?? '—',
         platform: info?.platform ?? 'unknown',
         isConnected: isConnected,
-        hasBg: hasBg, cs: cs, tt: tt, size: size,
+        hasBg: hasBg, cs: cs, tt: tt, size: size, badge: badge,
       ),
     );
   }
@@ -34,7 +35,7 @@ class _ServerInfoBody extends StatelessWidget {
   const _ServerInfoBody({
     required this.serverName, required this.osVersion, required this.platform,
     required this.isConnected, required this.hasBg,
-    required this.cs, required this.tt, required this.size,
+    required this.cs, required this.tt, required this.size, this.badge,
   });
   final String serverName;
   final String osVersion;
@@ -44,6 +45,7 @@ class _ServerInfoBody extends StatelessWidget {
   final ColorScheme cs;
   final TextTheme tt;
   final WidgetSize size;
+  final Widget? badge;
 
   IconData get _platformIcon => switch (platform.toLowerCase()) {
         'android' => Icons.phone_android,
@@ -64,6 +66,17 @@ class _ServerInfoBody extends StatelessWidget {
         ],
       );
 
+  // Badge is overlaid top-right since ServerInfo has no traditional header row.
+  Widget _withBadge(Widget card) {
+    if (badge == null) return card;
+    return Stack(
+      children: [
+        card,
+        Positioned(top: 8, right: 8, child: badge!),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final textColor = hasBg ? Colors.white : cs.onSurface;
@@ -72,7 +85,7 @@ class _ServerInfoBody extends StatelessWidget {
 
     // 2×2: vertical centered layout
     if (size.isTall && !size.isWide) {
-      return Card(
+      return _withBadge(Card(
         elevation: hasBg ? 0 : 1,
         color: cardColor,
         child: Padding(
@@ -101,12 +114,12 @@ class _ServerInfoBody extends StatelessWidget {
             ],
           ),
         ),
-      );
+      ));
     }
 
     // 4×2: horizontal layout with larger elements and extra breathing room
     if (size.isTall && size.isWide) {
-      return Card(
+      return _withBadge(Card(
         elevation: hasBg ? 0 : 1,
         color: cardColor,
         child: Padding(
@@ -139,12 +152,12 @@ class _ServerInfoBody extends StatelessWidget {
             ],
           ),
         ),
-      );
+      ));
     }
 
     // 2×1: compact, icon + name + status
     if (!size.isWide) {
-      return Card(
+      return _withBadge(Card(
         elevation: hasBg ? 0 : 1,
         color: cardColor,
         child: Padding(
@@ -171,11 +184,11 @@ class _ServerInfoBody extends StatelessWidget {
             ],
           ),
         ),
-      );
+      ));
     }
 
     // 4×1 (default): original horizontal layout
-    return Card(
+    return _withBadge(Card(
       elevation: hasBg ? 0 : 1,
       color: cardColor,
       child: Padding(
@@ -209,6 +222,6 @@ class _ServerInfoBody extends StatelessWidget {
           ],
         ),
       ),
-    );
+    ));
   }
 }

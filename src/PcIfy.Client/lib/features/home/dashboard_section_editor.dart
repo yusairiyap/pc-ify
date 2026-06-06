@@ -97,9 +97,6 @@ class DashboardSectionEditor extends StatelessWidget {
                   },
                   itemBuilder: (context, index) {
                     final item = section.items[index];
-                    final sz = item.effectiveSize;
-                    final isWide = sz.isWide;
-                    final isTall = sz.isTall;
                     return ListTile(
                       key: ValueKey(item.id),
                       dense: true,
@@ -110,33 +107,6 @@ class DashboardSectionEditor extends StatelessWidget {
                       trailing: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Tooltip(
-                            message: isWide
-                                ? 'Shrink to half width'
-                                : 'Expand to full width',
-                            child: IconButton(
-                              icon: Icon(
-                                isWide
-                                    ? Icons.close_fullscreen
-                                    : Icons.open_in_full,
-                                size: 16,
-                                color: cs.onSurfaceVariant,
-                              ),
-                              padding: EdgeInsets.zero,
-                              constraints: const BoxConstraints(
-                                  minWidth: 32, minHeight: 32),
-                              onPressed: () => onResizeWidget(
-                                item.id,
-                                isWide
-                                    ? (isTall
-                                        ? WidgetSize.halfWidthTall
-                                        : WidgetSize.halfWidth)
-                                    : (isTall
-                                        ? WidgetSize.fullWidthTall
-                                        : WidgetSize.fullWidth),
-                              ),
-                            ),
-                          ),
                           IconButton(
                             icon: Icon(Icons.remove_circle_outline,
                                 size: 18, color: cs.error),

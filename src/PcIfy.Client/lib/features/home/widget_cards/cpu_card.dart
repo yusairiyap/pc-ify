@@ -4,9 +4,10 @@ import '../../../core/models/dashboard_models.dart';
 import '../../../providers/dashboard_providers.dart';
 
 class CpuCard extends ConsumerWidget {
-  const CpuCard({super.key, required this.hasBg, required this.size});
+  const CpuCard({super.key, required this.hasBg, required this.size, this.badge});
   final bool hasBg;
   final WidgetSize size;
+  final Widget? badge;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -36,6 +37,7 @@ class CpuCard extends ConsumerWidget {
                 Icon(Icons.memory_outlined, color: iconColor, size: 18),
                 const SizedBox(width: 6),
                 Text('CPU', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: labelColor)),
+                if (badge != null) ...[const Spacer(), badge!],
               ]),
               const Spacer(),
               Center(
@@ -79,6 +81,7 @@ class CpuCard extends ConsumerWidget {
               Icon(Icons.memory_outlined, color: iconColor, size: 18),
               const SizedBox(width: 6),
               Text('CPU', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: labelColor)),
+              if (badge != null) ...[const Spacer(), badge!],
             ]),
             const SizedBox(height: 8),
             if (!available)

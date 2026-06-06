@@ -5,9 +5,10 @@ import '../../../providers/dashboard_providers.dart';
 import '../../../providers/services_providers.dart';
 
 class ScreenLockCard extends ConsumerWidget {
-  const ScreenLockCard({super.key, required this.hasBg, required this.size});
+  const ScreenLockCard({super.key, required this.hasBg, required this.size, this.badge});
   final bool hasBg;
   final WidgetSize size;
+  final Widget? badge;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -56,6 +57,7 @@ class ScreenLockCard extends ConsumerWidget {
                 Icon(Icons.lock_outline, color: iconColor, size: 18),
                 const SizedBox(width: 6),
                 Text('Screen', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: labelColor)),
+                if (badge != null) ...[const Spacer(), badge!],
               ]),
               const Spacer(),
               Center(
@@ -92,6 +94,7 @@ class ScreenLockCard extends ConsumerWidget {
               Icon(Icons.lock_outline, color: iconColor, size: 18),
               const SizedBox(width: 6),
               Text('Screen', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: labelColor)),
+              if (badge != null) ...[const Spacer(), badge!],
             ]),
             const SizedBox(height: 12),
             Row(children: [lockBtn, const SizedBox(width: 8), wakeBtn]),
