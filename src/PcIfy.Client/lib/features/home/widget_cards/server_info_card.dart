@@ -83,14 +83,15 @@ class _ServerInfoBody extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final textColor = hasBg ? Colors.white : cs.onSurface;
-    final subColor = hasBg ? Colors.white70 : cs.onSurfaceVariant;
-    final cardColor = hasBg ? Colors.black26 : cs.surfaceContainerLow;
+    final iconColor = hasBg ? Colors.white70 : cs.primary;
+    final labelColor = hasBg ? Colors.white70 : cs.onSurfaceVariant;
+    final subColor = hasBg ? Colors.white54 : cs.outline;
 
     // 2×2: vertical centered layout — badge in header row at top
     if (size.isTall && !size.isWide) {
       return Card(
         elevation: hasBg ? 0 : 1,
-        color: cardColor,
+        color: hasBg ? Colors.black45 : null,
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
           child: Column(
@@ -99,13 +100,13 @@ class _ServerInfoBody extends StatelessWidget {
               // Header row with small label + badge (always shown)
               _headerRow(
                 leading: Row(mainAxisSize: MainAxisSize.min, children: [
-                  Icon(_platformIcon, size: 14, color: subColor),
+                  Icon(_platformIcon, size: 14, color: labelColor),
                   const SizedBox(width: 4),
-                  Text('Server', style: TextStyle(fontSize: 11, color: subColor, fontWeight: FontWeight.w600)),
+                  Text('Server', style: TextStyle(fontSize: 11, color: labelColor, fontWeight: FontWeight.w600)),
                 ]),
               ),
               const Spacer(),
-              Icon(_platformIcon, size: 44, color: cs.primary),
+              Icon(_platformIcon, size: 44, color: iconColor),
               const SizedBox(height: 8),
               Text(
                 serverName,
@@ -132,7 +133,7 @@ class _ServerInfoBody extends StatelessWidget {
     if (size.isTall && size.isWide) {
       return Card(
         elevation: hasBg ? 0 : 1,
-        color: cardColor,
+        color: hasBg ? Colors.black45 : null,
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
           child: Column(
@@ -140,9 +141,9 @@ class _ServerInfoBody extends StatelessWidget {
             children: [
               _headerRow(
                 leading: Row(mainAxisSize: MainAxisSize.min, children: [
-                  Icon(_platformIcon, size: 14, color: subColor),
+                  Icon(_platformIcon, size: 14, color: labelColor),
                   const SizedBox(width: 4),
-                  Text('Server', style: TextStyle(fontSize: 11, color: subColor, fontWeight: FontWeight.w600)),
+                  Text('Server', style: TextStyle(fontSize: 11, color: labelColor, fontWeight: FontWeight.w600)),
                 ]),
               ),
               const SizedBox(height: 8),
@@ -150,7 +151,7 @@ class _ServerInfoBody extends StatelessWidget {
                 child: Row(
                   crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
-                    Icon(_platformIcon, size: 60, color: cs.primary),
+                    Icon(_platformIcon, size: 60, color: iconColor),
                     const SizedBox(width: 20),
                     Expanded(
                       child: Column(
@@ -186,7 +187,7 @@ class _ServerInfoBody extends StatelessWidget {
     if (!size.isWide) {
       return Card(
         elevation: hasBg ? 0 : 1,
-        color: cardColor,
+        color: hasBg ? Colors.black45 : null,
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
           child: Column(
@@ -194,7 +195,7 @@ class _ServerInfoBody extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Row(children: [
-                Icon(_platformIcon, size: 18, color: cs.primary),
+                Icon(_platformIcon, size: 18, color: iconColor),
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
@@ -216,13 +217,13 @@ class _ServerInfoBody extends StatelessWidget {
     // 4×1 (default fullWidth): horizontal layout — badge trailing in the Row
     return Card(
       elevation: hasBg ? 0 : 1,
-      color: cardColor,
+      color: hasBg ? Colors.black45 : null,
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
-            Icon(_platformIcon, size: 44, color: cs.primary),
+            Icon(_platformIcon, size: 44, color: iconColor),
             const SizedBox(width: 16),
             Expanded(
               child: Column(
