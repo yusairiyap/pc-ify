@@ -23,6 +23,7 @@ class MainActivity : FlutterActivity() {
     companion object {
         private const val CHANNEL = "com.pcify.pcify_client/downloads"
         private const val PIP_CHANNEL = "com.pcify.pcify_client/pip"
+        private const val BROWSER_CHANNEL = "com.pcify.pcify_client/browser"
         private const val REQUEST_WRITE_PERMISSION = 1001
     }
 
@@ -151,6 +152,38 @@ class MainActivity : FlutterActivity() {
                 runOnUiThread { result.error("SAVE_ERROR", e.message, null) }
             }
         }.start()
+    }
+
+    // Ask Flutter (BrowserScreen) whether it can handle this back press before
+    // falling back to the default FlutterActivity behaviour (which would pop the
+    // go_router route and exit the Browse tab or the app).
+    @Deprecated("Deprecated in API 33 but required for pre-34 back handling")
+    override fun onBackPressed() {
+        val messenger = flutterEngine?.dartExecutor?.binaryMessenger
+        if (messenger == null) {
+            @Suppress("DEPRECATION")
+            super.onBackPressed()
+            return
+        }
+        MethodChannel(messenger, BROWSER_CHANNEL).invokeMethod(
+            "handleBack", null,
+            object : MethodChannel.Result {
+                override fun success(result: Any?) {
+                    if (result as? Boolean != true) {
+                        @Suppress("DEPRECATION")
+                        super@MainActivity.onBackPressed()
+                    }
+                }
+                override fun error(code: String, message: String?, details: Any?) {
+                    @Suppress("DEPRECATION")
+                    super@MainActivity.onBackPressed()
+                }
+                override fun notImplemented() {
+                    @Suppress("DEPRECATION")
+                    super@MainActivity.onBackPressed()
+                }
+            }
+        )
     }
 
     override fun onPictureInPictureModeChanged(

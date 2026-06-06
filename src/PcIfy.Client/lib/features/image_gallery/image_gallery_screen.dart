@@ -932,9 +932,9 @@ class _GalleryVideoPageState extends ConsumerState<_GalleryVideoPage> {
   late final VideoController _controller;
   bool _ready = false;
 
-  // When seeking to a specific position on open, start hidden and fade in
-  // once the stream has buffered at the target position.
-  bool _videoVisible = true;
+  // Always start hidden and fade in after the first frame is ready, so the
+  // user never sees a flash of the start frame or a seek-landing glitch.
+  bool _videoVisible = false;
 
   // Pinch-zoom / pan state (managed via Listener to bypass gesture arena)
   double _scale = 1.0;
@@ -957,13 +957,18 @@ class _GalleryVideoPageState extends ConsumerState<_GalleryVideoPage> {
     super.initState();
     _player = Player();
     _controller = VideoController(_player);
-    // Hide the video surface until buffering at the seeked position completes,
-    // so the user never sees the start frame before jumping to the target time.
-    final pos = widget.initialPositionMs;
-    if (pos != null && pos > 0) _videoVisible = false;
     widget.activeIndexNotifier.addListener(_onActiveChanged);
     widget.muteNotifier.addListener(_onMuteChanged);
     _initStream();
+  }
+
+  // Fire-and-forget: reveals the video once the position advances from zero.
+  void _waitForFirstFrame() {
+    _player.stream.position
+        .firstWhere((p) => p > Duration.zero)
+        .timeout(const Duration(seconds: 5))
+        .then((_) { if (mounted) setState(() => _videoVisible = true); })
+        .catchError((_) { if (mounted) setState(() => _videoVisible = true); });
   }
 
   void _onMuteChanged() {
@@ -983,35 +988,30 @@ class _GalleryVideoPageState extends ConsumerState<_GalleryVideoPage> {
         await _seekThenReveal(pos);
       } else {
         await _player.play();
+        _waitForFirstFrame();
       }
     }
   }
 
-  // Plays, seeks to [posMs], waits for the stream to buffer at the new
-  // position, then fades the video in.  The video surface starts invisible so
-  // the user never sees the beginning-of-file frame before the seek lands.
+  // Plays, seeks to [posMs], then waits for the position stream to confirm
+  // the seek landed before fading the video in.  Buffering-based detection is
+  // unreliable for HTTP streams, so we watch position directly instead.
   Future<void> _seekThenReveal(int posMs) async {
-    // Subscribe to buffering events before calling play/seek so we don't miss
-    // the transition.  We wait for: buffering=true → buffering=false.
-    bool seenBuffering = false;
-    final completer = Completer<void>();
-    StreamSubscription<bool>? sub;
-    sub = _player.stream.buffering.listen((buffering) {
-      if (buffering) seenBuffering = true;
-      if (seenBuffering && !buffering && !completer.isCompleted) {
-        completer.complete();
-      }
-    });
-
     await _player.play();
+    // Give the player a moment to start streaming before issuing the seek so
+    // it isn't silently dropped on a cold open.
+    await Future.delayed(const Duration(milliseconds: 300));
     await _player.seek(Duration(milliseconds: posMs));
-
+    // Accept any position that is at least half-way to the target (avoids
+    // triggering on the initial 0-ms position while still catching early seeks).
+    final thresholdMs = posMs > 2100 ? posMs - 2000 : posMs ~/ 2;
     try {
-      await completer.future.timeout(const Duration(seconds: 6));
+      await _player.stream.position
+          .firstWhere((pos) => pos.inMilliseconds > thresholdMs)
+          .timeout(const Duration(seconds: 8));
     } catch (_) {
       // Timeout — reveal anyway so the video is never permanently hidden.
     }
-    await sub.cancel();
     if (mounted) setState(() => _videoVisible = true);
   }
 

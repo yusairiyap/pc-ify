@@ -95,6 +95,7 @@ class DashboardLayout {
           id: 'system',
           name: 'Server Overview',
           items: [
+            DashboardItem(id: 'server_info', type: WidgetType.serverInfo),
             DashboardItem(id: 'battery', type: WidgetType.battery),
             DashboardItem(id: 'volume', type: WidgetType.volume),
             DashboardItem(id: 'cpu', type: WidgetType.cpu),

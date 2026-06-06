@@ -4,6 +4,7 @@ import 'dart:io' show Directory, File, Platform;
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:file_picker/file_picker.dart' hide FileType;
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart' show MethodCall, MethodChannel;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:open_filex/open_filex.dart';
@@ -425,22 +426,26 @@ class _BrowserBody extends ConsumerStatefulWidget {
 
 class _BrowserBodyState extends ConsumerState<_BrowserBody>
     with WidgetsBindingObserver {
+  static const _browserChannel = MethodChannel('com.pcify.pcify_client/browser');
+
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    // Primary back intercept: native Android calls handleBack before Flutter's
+    // router sees the event, so we can navigate up a folder instead of popping.
+    _browserChannel.setMethodCallHandler(_handleNativeBack);
   }
 
   @override
   void dispose() {
+    _browserChannel.setMethodCallHandler(null);
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
 
-  @override
-  Future<bool> didPopRoute() async {
+  Future<bool> _tryHandleBack() async {
     if (!mounted) return false;
-    // Only intercept when the Browse tab (index 1) is the active shell tab.
     if (ShellState.currentTabIndex != 1) return false;
     final browserState = ref.read(_browserNotifierProvider).valueOrNull;
     if (browserState?.canNavigateBack == true) {
@@ -449,6 +454,14 @@ class _BrowserBodyState extends ConsumerState<_BrowserBody>
     }
     return false;
   }
+
+  Future<dynamic> _handleNativeBack(MethodCall call) {
+    if (call.method == 'handleBack') return _tryHandleBack();
+    return Future.value(null);
+  }
+
+  @override
+  Future<bool> didPopRoute() => _tryHandleBack();
 
   @override
   Widget build(BuildContext context) {
