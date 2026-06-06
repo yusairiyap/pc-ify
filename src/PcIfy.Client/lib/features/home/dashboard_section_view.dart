@@ -10,7 +10,6 @@ import 'widget_cards/screen_lock_card.dart';
 import 'widget_cards/server_info_card.dart';
 import 'widget_cards/volume_card.dart';
 
-const _kResizeThreshold = 40.0;
 const _kTallMinHeight = 180.0;
 
 class DashboardSectionView extends ConsumerWidget {
@@ -195,8 +194,20 @@ class _WidgetGridState extends ConsumerState<_WidgetGrid> {
     }
     if (pending.isNotEmpty) rows.add(_halfRow(pending[0], null));
 
-    return Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch, children: rows);
+    // AnimatedSwitcher cross-fades between layout configurations so that
+    // row reflows (e.g. halfWidthTall → fullWidthTall) look smooth instead
+    // of teleporting items.
+    final layoutKey = _items
+        .map((i) => '${i.id}:${i.effectiveSize.name}')
+        .join(',');
+    return AnimatedSwitcher(
+      duration: const Duration(milliseconds: 180),
+      child: Column(
+        key: ValueKey(layoutKey),
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: rows,
+      ),
+    );
   }
 
   Widget _halfRow((int, DashboardItem) a, (int, DashboardItem)? b) =>
@@ -281,15 +292,15 @@ class _WidgetGridState extends ConsumerState<_WidgetGrid> {
             ),
             childWhenDragging:
                 Opacity(opacity: 0.3, child: _buildCard(item)),
-            child: _withResizeHandle(item),
+            child: _withSizeBadge(item),
           ),
         ),
       ),
     );
   }
 
-  // Wraps card with corner resize handle and animates size changes.
-  Widget _withResizeHandle(DashboardItem item) {
+  // Wraps the card with a tap-based size badge and animates height changes.
+  Widget _withSizeBadge(DashboardItem item) {
     final targetH = item.effectiveSize.isTall ? _kTallMinHeight : 0.0;
     return TweenAnimationBuilder<double>(
       tween: Tween(end: targetH),
@@ -305,9 +316,9 @@ class _WidgetGridState extends ConsumerState<_WidgetGrid> {
         children: [
           _buildCard(item),
           Positioned(
-            right: 4,
-            bottom: 4,
-            child: _CornerResizeHandle(
+            right: 6,
+            bottom: 6,
+            child: _SizeBadge(
               item: item,
               onResize: (size) => _resizeItem(item, size),
             ),
@@ -327,158 +338,109 @@ class _WidgetGridState extends ConsumerState<_WidgetGrid> {
       };
 }
 
-// ── Corner resize handle (H + V) ─────────────────────────────────────────────
+// ── Tap-based size badge ──────────────────────────────────────────────────────
 
-class _CornerResizeHandle extends StatefulWidget {
-  const _CornerResizeHandle({required this.item, required this.onResize});
+class _SizeBadge extends StatelessWidget {
+  const _SizeBadge({required this.item, required this.onResize});
   final DashboardItem item;
   final void Function(WidgetSize) onResize;
 
-  @override
-  State<_CornerResizeHandle> createState() => _CornerResizeHandleState();
-}
-
-class _CornerResizeHandleState extends State<_CornerResizeHandle>
-    with SingleTickerProviderStateMixin {
-  double _totalDx = 0;
-  double _totalDy = 0;
-  bool _active = false;
-
-  late final AnimationController _ctrl;
-  late final Animation<double> _scale;
-
-  @override
-  void initState() {
-    super.initState();
-    _ctrl = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 250),
-    );
-    _scale = Tween<double>(begin: 1.0, end: 1.6).animate(
-      CurvedAnimation(parent: _ctrl, curve: Curves.easeInOut),
-    );
-  }
-
-  @override
-  void dispose() {
-    _ctrl.dispose();
-    super.dispose();
-  }
-
-  void _onPanStart(DragStartDetails _) {
-    setState(() {
-      _active = true;
-      _totalDx = 0;
-      _totalDy = 0;
-    });
-    _ctrl.repeat(reverse: true);
-  }
-
-  void _onPanUpdate(DragUpdateDetails d) {
-    setState(() {
-      _totalDx += d.delta.dx;
-      _totalDy += d.delta.dy;
-    });
-  }
-
-  void _onPanEnd(DragEndDetails d) {
-    _ctrl.stop();
-    _ctrl.reset();
-    final dx = _totalDx;
-    final dy = _totalDy;
-    final vel = d.velocity.pixelsPerSecond;
-    setState(() {
-      _active = false;
-      _totalDx = 0;
-      _totalDy = 0;
-    });
-    final newSize = _computeNewSize(widget.item.effectiveSize, dx, dy, vel);
-    if (newSize != widget.item.effectiveSize) {
-      widget.onResize(newSize);
-    }
-  }
-
-  void _onPanCancel() {
-    _ctrl.stop();
-    _ctrl.reset();
-    setState(() {
-      _active = false;
-      _totalDx = 0;
-      _totalDy = 0;
-    });
-  }
-
-  WidgetSize _computeNewSize(
-      WidgetSize current, double dx, double dy, Offset velocity) {
-    bool isWide = current.isWide;
-    bool isTall = current.isTall;
-
-    if (dx > _kResizeThreshold || velocity.dx > 300) isWide = true;
-    if (dx < -_kResizeThreshold || velocity.dx < -300) isWide = false;
-    if (dy > _kResizeThreshold || velocity.dy > 300) isTall = true;
-    if (dy < -_kResizeThreshold || velocity.dy < -300) isTall = false;
-
-    return switch ((isWide, isTall)) {
-      (false, false) => WidgetSize.halfWidth,
-      (true, false) => WidgetSize.fullWidth,
-      (false, true) => WidgetSize.halfWidthTall,
-      _ => WidgetSize.fullWidthTall,
-    };
-  }
+  static String _label(WidgetSize s) => switch (s) {
+        WidgetSize.halfWidth => '2×1',
+        WidgetSize.fullWidth => '4×1',
+        WidgetSize.halfWidthTall => '2×2',
+        WidgetSize.fullWidthTall => '4×2',
+      };
 
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
-    final color = _active
-        ? cs.primary.withValues(alpha: 0.9)
-        : cs.onSurfaceVariant.withValues(alpha: 0.45);
+    final current = item.effectiveSize;
 
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
-      onPanStart: _onPanStart,
-      onPanUpdate: _onPanUpdate,
-      onPanEnd: _onPanEnd,
-      onPanCancel: _onPanCancel,
-      child: AnimatedBuilder(
-        animation: _scale,
-        builder: (_, child) => Transform.scale(
-          scale: _active ? _scale.value : 1.0,
-          alignment: Alignment.bottomRight,
-          child: child,
+      onTapUp: (details) => _showPicker(context, cs, current),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+        decoration: BoxDecoration(
+          color: cs.surfaceContainerHighest.withValues(alpha: 0.88),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(
+              color: cs.outline.withValues(alpha: 0.35), width: 0.5),
         ),
-        child: SizedBox(
-          width: 22,
-          height: 22,
-          child: CustomPaint(painter: _CornerGripPainter(color: color)),
+        child: Text(
+          _label(current),
+          style: TextStyle(
+            fontSize: 9,
+            color: cs.onSurfaceVariant,
+            fontWeight: FontWeight.w700,
+            letterSpacing: 0.3,
+          ),
         ),
       ),
     );
   }
-}
 
-// Draws a resize-grip: three short diagonal lines at the bottom-right corner.
-class _CornerGripPainter extends CustomPainter {
-  const _CornerGripPainter({required this.color});
-  final Color color;
+  void _showPicker(BuildContext context, ColorScheme cs, WidgetSize current) {
+    final box = context.findRenderObject() as RenderBox?;
+    if (box == null) return;
+    final offset = box.localToGlobal(Offset.zero);
+    final size = box.size;
 
-  @override
-  void paint(Canvas canvas, Size size) {
-    final paint = Paint()
-      ..color = color
-      ..strokeWidth = 1.5
-      ..strokeCap = StrokeCap.round;
-    const gap = 4.0;
-    const len = 6.0;
-    for (var i = 0; i < 3; i++) {
-      final offset = i * gap;
-      canvas.drawLine(
-        Offset(size.width - offset, size.height - len),
-        Offset(size.width - len, size.height - offset),
-        paint,
-      );
-    }
+    showMenu<WidgetSize>(
+      context: context,
+      // Position the menu above-left of the badge
+      position: RelativeRect.fromLTRB(
+        offset.dx - 96,
+        offset.dy - 152,
+        offset.dx + size.width,
+        offset.dy,
+      ),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      items: WidgetSize.values
+          .map(
+            (s) => PopupMenuItem<WidgetSize>(
+              value: s,
+              height: 40,
+              child: Row(
+                children: [
+                  SizedBox(
+                    width: 32,
+                    child: Text(
+                      _label(s),
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: s == current
+                            ? FontWeight.w700
+                            : FontWeight.normal,
+                        color: s == current ? cs.primary : null,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      _description(s),
+                      style: TextStyle(
+                          fontSize: 11, color: cs.onSurfaceVariant),
+                    ),
+                  ),
+                  if (s == current)
+                    Icon(Icons.check_rounded, size: 16, color: cs.primary),
+                ],
+              ),
+            ),
+          )
+          .toList(),
+    ).then((chosen) {
+      if (chosen != null && chosen != current) onResize(chosen);
+    });
   }
 
-  @override
-  bool shouldRepaint(_CornerGripPainter old) => old.color != color;
+  static String _description(WidgetSize s) => switch (s) {
+        WidgetSize.halfWidth => 'Half width',
+        WidgetSize.fullWidth => 'Full width',
+        WidgetSize.halfWidthTall => 'Half width, tall',
+        WidgetSize.fullWidthTall => 'Full width, tall',
+      };
 }
