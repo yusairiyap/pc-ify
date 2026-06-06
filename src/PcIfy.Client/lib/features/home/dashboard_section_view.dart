@@ -299,25 +299,17 @@ class _WidgetGridState extends ConsumerState<_WidgetGrid> {
     );
   }
 
-  // Wraps the card with a tap-based size badge and animates height changes.
+  // Wraps the card with a tap-based size badge; AnimatedSize handles height transitions.
   Widget _withSizeBadge(DashboardItem item) {
-    final targetH = item.effectiveSize.isTall ? _kTallMinHeight : 0.0;
-    return TweenAnimationBuilder<double>(
-      tween: Tween(end: targetH),
+    return AnimatedSize(
       duration: const Duration(milliseconds: 250),
       curve: Curves.easeInOut,
-      builder: (_, h, child) => h > 0
-          ? ConstrainedBox(
-              constraints: BoxConstraints(minHeight: h),
-              child: child,
-            )
-          : child!,
       child: Stack(
         children: [
           _buildCard(item),
           Positioned(
-            right: 6,
-            bottom: 6,
+            right: 8,
+            bottom: 8,
             child: _SizeBadge(
               item: item,
               onResize: (size) => _resizeItem(item, size),
@@ -328,14 +320,21 @@ class _WidgetGridState extends ConsumerState<_WidgetGrid> {
     );
   }
 
-  Widget _buildCard(DashboardItem item) => switch (item.type) {
-        WidgetType.battery => BatteryCard(hasBg: widget.hasBg),
-        WidgetType.cpu => CpuCard(hasBg: widget.hasBg),
-        WidgetType.ram => RamCard(hasBg: widget.hasBg),
-        WidgetType.volume => VolumeCard(hasBg: widget.hasBg),
-        WidgetType.screenLock => ScreenLockCard(hasBg: widget.hasBg),
-        WidgetType.serverInfo => ServerInfoCard(hasBg: widget.hasBg),
-      };
+  // For tall items, wraps in a fixed-height SizedBox so the card fills the space
+  // and Spacer() widgets inside can distribute content correctly.
+  Widget _buildCard(DashboardItem item) {
+    final size = item.effectiveSize;
+    Widget card = switch (item.type) {
+      WidgetType.battery => BatteryCard(hasBg: widget.hasBg, size: size),
+      WidgetType.cpu => CpuCard(hasBg: widget.hasBg, size: size),
+      WidgetType.ram => RamCard(hasBg: widget.hasBg, size: size),
+      WidgetType.volume => VolumeCard(hasBg: widget.hasBg, size: size),
+      WidgetType.screenLock => ScreenLockCard(hasBg: widget.hasBg, size: size),
+      WidgetType.serverInfo => ServerInfoCard(hasBg: widget.hasBg, size: size),
+    };
+    if (size.isTall) return SizedBox(height: _kTallMinHeight, child: card);
+    return card;
+  }
 }
 
 // ── Tap-based size badge ──────────────────────────────────────────────────────
@@ -361,17 +360,19 @@ class _SizeBadge extends StatelessWidget {
       behavior: HitTestBehavior.opaque,
       onTapUp: (details) => _showPicker(context, cs, current),
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
         decoration: BoxDecoration(
-          color: cs.surfaceContainerHighest.withValues(alpha: 0.88),
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(
-              color: cs.outline.withValues(alpha: 0.35), width: 0.5),
+          color: cs.surfaceContainerHighest.withValues(alpha: 0.92),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: cs.outline.withValues(alpha: 0.4), width: 0.5),
+          boxShadow: const [
+            BoxShadow(color: Colors.black12, blurRadius: 4, offset: Offset(0, 1)),
+          ],
         ),
         child: Text(
           _label(current),
           style: TextStyle(
-            fontSize: 9,
+            fontSize: 10,
             color: cs.onSurfaceVariant,
             fontWeight: FontWeight.w700,
             letterSpacing: 0.3,
