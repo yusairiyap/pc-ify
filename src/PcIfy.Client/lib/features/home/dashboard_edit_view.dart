@@ -4,7 +4,7 @@ import '../../core/models/dashboard_models.dart';
 import '../../providers/dashboard_providers.dart';
 import 'add_section_dialog.dart';
 import 'add_widget_bottom_sheet.dart';
-import 'dashboard_section_editor.dart';
+import 'dashboard_section_view.dart';
 
 class DashboardEditView extends ConsumerStatefulWidget {
   const DashboardEditView(
@@ -38,31 +38,8 @@ class _DashboardEditViewState extends ConsumerState<DashboardEditView> {
     ));
   }
 
-  Future<void> _renameSection(DashboardSection section) async {
-    final controller = TextEditingController(text: section.name);
-    final newName = await showDialog<String>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Rename section'),
-        content: TextField(
-          controller: controller,
-          autofocus: true,
-          decoration: const InputDecoration(labelText: 'Section name'),
-          onSubmitted: (v) => Navigator.pop(ctx, v.trim()),
-        ),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(ctx),
-              child: const Text('Cancel')),
-          FilledButton(
-            onPressed: () => Navigator.pop(ctx, controller.text.trim()),
-            child: const Text('Rename'),
-          ),
-        ],
-      ),
-    );
-    if (!mounted) return;
-    if (newName == null || newName.isEmpty) return;
+  void _renameSection(DashboardSection section, String newName) {
+    if (newName.isEmpty) return;
     final current = _layout;
     final newSections = current.sections
         .map((s) => s.id == section.id ? s.copyWith(name: newName) : s)
@@ -98,29 +75,6 @@ class _DashboardEditViewState extends ConsumerState<DashboardEditView> {
     _save(current.copyWith(sections: newSections));
   }
 
-  void _resizeWidget(
-      DashboardSection section, String itemId, WidgetSize size) {
-    final current = _layout;
-    final newSections = current.sections.map((s) {
-      if (s.id != section.id) return s;
-      return s.copyWith(
-          items: s.items
-              .map((i) => i.id == itemId ? i.copyWith(size: size) : i)
-              .toList());
-    }).toList();
-    _save(current.copyWith(sections: newSections));
-  }
-
-  void _reorderWidgets(
-      DashboardSection section, List<DashboardItem> newItems) {
-    final current = _layout;
-    final newSections = current.sections.map((s) {
-      if (s.id != section.id) return s;
-      return s.copyWith(items: newItems);
-    }).toList();
-    _save(current.copyWith(sections: newSections));
-  }
-
   Future<void> _addSection() async {
     final hasBookmarks = _layout.sections.any((s) => s.isBookmarks);
     final newSection = await showAddSectionDialog(context,
@@ -139,6 +93,7 @@ class _DashboardEditViewState extends ConsumerState<DashboardEditView> {
         Expanded(
           child: ReorderableListView.builder(
             padding: const EdgeInsets.fromLTRB(0, 8, 0, 0),
+            buildDefaultDragHandles: false,
             itemCount: sections.length,
             onReorderItem: (oldIndex, newIndex) {
               final current = _layout;
@@ -150,18 +105,16 @@ class _DashboardEditViewState extends ConsumerState<DashboardEditView> {
             },
             itemBuilder: (context, index) {
               final section = sections[index];
-              return DashboardSectionEditor(
+              return DashboardSectionView(
                 key: ValueKey(section.id),
                 section: section,
                 hasBg: widget.hasBg,
+                editMode: true,
+                sectionIndex: index,
                 onDelete: () => _deleteSection(section),
-                onRename: () => _renameSection(section),
+                onRename: (name) => _renameSection(section, name),
                 onAddWidget: () => _addWidget(section),
                 onRemoveWidget: (itemId) => _removeWidget(section, itemId),
-                onResizeWidget: (itemId, size) =>
-                    _resizeWidget(section, itemId, size),
-                onReorderWidgets: (newItems) =>
-                    _reorderWidgets(section, newItems),
               );
             },
           ),

@@ -59,6 +59,19 @@ class ScreenStatus {
   );
 }
 
+class DiskStatus {
+  const DiskStatus({required this.usedBytes, required this.totalBytes, required this.available});
+  final int usedBytes;
+  final int totalBytes;
+  final bool available;
+  factory DiskStatus.unavailable() => const DiskStatus(usedBytes: 0, totalBytes: 0, available: false);
+  factory DiskStatus.fromJson(Map<String, dynamic> j) => DiskStatus(
+    usedBytes: (j['usedBytes'] as num?)?.toInt() ?? 0,
+    totalBytes: (j['totalBytes'] as num?)?.toInt() ?? 0,
+    available: (j['available'] as bool?) ?? false,
+  );
+}
+
 class ControlStatus {
   const ControlStatus({
     required this.battery,
@@ -66,12 +79,14 @@ class ControlStatus {
     required this.cpu,
     required this.ram,
     required this.screen,
+    required this.disk,
   });
   final BatteryStatus battery;
   final VolumeStatus volume;
   final CpuStatus cpu;
   final RamStatus ram;
   final ScreenStatus screen;
+  final DiskStatus disk;
 
   factory ControlStatus.unavailable() => ControlStatus(
     battery: BatteryStatus.unavailable(),
@@ -79,6 +94,7 @@ class ControlStatus {
     cpu: CpuStatus.unavailable(),
     ram: RamStatus.unavailable(),
     screen: ScreenStatus.unavailable(),
+    disk: DiskStatus.unavailable(),
   );
 
   factory ControlStatus.fromJson(Map<String, dynamic> j) => ControlStatus(
@@ -87,5 +103,6 @@ class ControlStatus {
     cpu: CpuStatus.fromJson(j['cpu'] as Map<String, dynamic>? ?? {}),
     ram: RamStatus.fromJson(j['ram'] as Map<String, dynamic>? ?? {}),
     screen: ScreenStatus.fromJson(j['screen'] as Map<String, dynamic>? ?? {}),
+    disk: DiskStatus.fromJson(j['disk'] as Map<String, dynamic>? ?? {}),
   );
 }

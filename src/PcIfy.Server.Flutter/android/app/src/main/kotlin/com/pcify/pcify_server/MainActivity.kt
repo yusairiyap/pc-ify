@@ -170,12 +170,19 @@ class MainActivity : FlutterActivity() {
         val totalMb = (memInfo.totalMem / (1024 * 1024)).toInt()
         val usedMb = ((memInfo.totalMem - memInfo.availMem) / (1024 * 1024)).toInt()
 
+        // Disk (internal storage)
+        val diskStat = android.os.StatFs(android.os.Environment.getDataDirectory().path)
+        val diskTotal = diskStat.totalBytes
+        val diskFree = diskStat.availableBytes
+        val diskUsed = diskTotal - diskFree
+
         return mapOf(
             "battery" to mapOf("level" to batteryPct, "charging" to charging, "available" to true),
             "volume" to mapOf("level" to volPct, "muted" to muted, "available" to true),
             "cpu" to mapOf("usage" to cachedCpuUsage, "available" to true),
             "ram" to mapOf("usedMb" to usedMb, "totalMb" to totalMb, "available" to true),
-            "screen" to mapOf("locked" to false, "available" to false)
+            "screen" to mapOf("locked" to false, "available" to false),
+            "disk" to mapOf("usedBytes" to diskUsed, "totalBytes" to diskTotal, "available" to true)
         )
     }
 

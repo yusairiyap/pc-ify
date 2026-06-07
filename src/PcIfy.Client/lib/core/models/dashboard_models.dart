@@ -1,4 +1,4 @@
-enum WidgetType { battery, volume, cpu, ram, screenLock, serverInfo }
+enum WidgetType { battery, volume, cpu, ram, screenLock, serverInfo, disk }
 
 enum WidgetSize { halfWidth, fullWidth, halfWidthTall, fullWidthTall }
 

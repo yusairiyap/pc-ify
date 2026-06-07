@@ -53,6 +53,20 @@ class _BatteryBody extends StatelessWidget {
     final labelColor = hasBg ? Colors.white70 : cs.onSurfaceVariant;
     final valueColor = hasBg ? Colors.white : cs.onSurface;
     final subColor = hasBg ? Colors.white54 : cs.outline;
+    final chargingColor = hasBg ? Colors.greenAccent : Colors.green;
+
+    // Shared inline charging/level label used in both layouts
+    Widget subLabel() => Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (charging) ...[
+              Icon(Icons.bolt, size: 11, color: chargingColor),
+              const SizedBox(width: 2),
+              Text('Charging', style: TextStyle(fontSize: 10, color: chargingColor)),
+            ] else
+              Text('Battery level', style: TextStyle(fontSize: 10, color: subColor)),
+          ],
+        );
 
     if (size.isTall) {
       return Card(
@@ -66,10 +80,7 @@ class _BatteryBody extends StatelessWidget {
                 Icon(_icon(), color: iconColor, size: 18),
                 const SizedBox(width: 6),
                 Text('Battery', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: labelColor)),
-                if (charging || badge != null) const Spacer(),
-                if (charging) _ChargingChip(hasBg: hasBg),
-                if (charging && badge != null) const SizedBox(width: 4),
-                if (badge != null) badge!,
+                if (badge != null) ...[const Spacer(), badge!],
               ]),
               const Spacer(),
               Center(
@@ -89,10 +100,7 @@ class _BatteryBody extends StatelessWidget {
                   valueColor: AlwaysStoppedAnimation(_barColor),
                 ),
                 const SizedBox(height: 6),
-                Text(
-                  charging ? 'Charging' : 'Battery level',
-                  style: TextStyle(fontSize: 10, color: subColor),
-                ),
+                subLabel(),
               ] else
                 const SizedBox(height: 12),
             ],
@@ -126,40 +134,12 @@ class _BatteryBody extends StatelessWidget {
                 backgroundColor: cs.surfaceContainerHighest,
                 valueColor: AlwaysStoppedAnimation(_barColor),
               ),
-              if (charging) ...[
-                const SizedBox(height: 4),
-                Text('Charging', style: TextStyle(fontSize: 11, color: hasBg ? Colors.greenAccent : Colors.green)),
-              ],
+              const SizedBox(height: 2),
+              subLabel(),
             ],
           ],
         ),
       ),
-    );
-  }
-}
-
-class _ChargingChip extends StatelessWidget {
-  const _ChargingChip({required this.hasBg});
-  final bool hasBg;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-      decoration: BoxDecoration(
-        color: Colors.green.withValues(alpha: hasBg ? 0.3 : 0.15),
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Row(mainAxisSize: MainAxisSize.min, children: [
-        Icon(Icons.bolt, size: 10, color: hasBg ? Colors.greenAccent : Colors.green),
-        const SizedBox(width: 2),
-        Text('Charging',
-            style: TextStyle(
-              fontSize: 10,
-              fontWeight: FontWeight.w600,
-              color: hasBg ? Colors.greenAccent : Colors.green,
-            )),
-      ]),
     );
   }
 }

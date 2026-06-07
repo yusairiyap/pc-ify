@@ -43,6 +43,15 @@ class ScreenStatus {
   factory ScreenStatus.unavailable() => const ScreenStatus(locked: false, available: false);
 }
 
+class DiskStatus {
+  const DiskStatus({required this.usedBytes, required this.totalBytes, required this.available});
+  final int usedBytes;
+  final int totalBytes;
+  final bool available;
+  Map<String, dynamic> toJson() => {'usedBytes': usedBytes, 'totalBytes': totalBytes, 'available': available};
+  factory DiskStatus.unavailable() => const DiskStatus(usedBytes: 0, totalBytes: 0, available: false);
+}
+
 class ControlStatus {
   const ControlStatus({
     required this.battery,
@@ -50,12 +59,14 @@ class ControlStatus {
     required this.cpu,
     required this.ram,
     required this.screen,
+    required this.disk,
   });
   final BatteryStatus battery;
   final VolumeStatus volume;
   final CpuStatus cpu;
   final RamStatus ram;
   final ScreenStatus screen;
+  final DiskStatus disk;
 
   factory ControlStatus.unavailable() => ControlStatus(
     battery: BatteryStatus.unavailable(),
@@ -63,6 +74,7 @@ class ControlStatus {
     cpu: CpuStatus.unavailable(),
     ram: RamStatus.unavailable(),
     screen: ScreenStatus.unavailable(),
+    disk: DiskStatus.unavailable(),
   );
 
   Map<String, dynamic> toJson() => {
@@ -71,6 +83,7 @@ class ControlStatus {
     'cpu': cpu.toJson(),
     'ram': ram.toJson(),
     'screen': screen.toJson(),
+    'disk': disk.toJson(),
   };
 }
 

@@ -30,7 +30,8 @@ public sealed class WindowsSystemControlService : ISystemControlService, IDispos
         var cpu = new CpuStatusDto((double)Math.Round(_cpuCache, 1), true);
         var ram = GetRam();
         var screen = new ScreenStatusDto(false, false); // Windows can't query lock state publicly
-        return new ControlStatusDto(battery, volume, cpu, ram, screen);
+        var disk = GetDisk();
+        return new ControlStatusDto(battery, volume, cpu, ram, screen, disk);
     }
 
     private static BatteryStatusDto GetBattery()
@@ -78,6 +79,25 @@ public sealed class WindowsSystemControlService : ISystemControlService, IDispos
             return new RamStatusDto(usedMb, totalMb, true);
         }
         catch { return new RamStatusDto(0, 0, false); }
+    }
+
+    [DllImport("kernel32.dll", SetLastError = true, CharSet = CharSet.Auto)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool GetDiskFreeSpaceEx(
+        string lpDirectoryName,
+        out ulong lpFreeBytesAvailableToCaller,
+        out ulong lpTotalNumberOfBytes,
+        out ulong lpTotalNumberOfFreeBytes);
+
+    private static DiskStatusDto GetDisk()
+    {
+        try
+        {
+            if (!GetDiskFreeSpaceEx(@"C:\", out _, out ulong total, out ulong totalFree))
+                return new DiskStatusDto(0, 0, false);
+            return new DiskStatusDto((long)(total - totalFree), (long)total, true);
+        }
+        catch { return new DiskStatusDto(0, 0, false); }
     }
 
     private static VolumeStatusDto GetVolume()

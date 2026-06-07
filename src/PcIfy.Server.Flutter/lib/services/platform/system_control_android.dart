@@ -14,6 +14,7 @@ class SystemControlAndroidImpl implements SystemControlService {
       final c = map['cpu'] as Map? ?? {};
       final r = map['ram'] as Map? ?? {};
       final s = map['screen'] as Map? ?? {};
+      final d = map['disk'] as Map? ?? {};
       return ControlStatus(
         battery: BatteryStatus(
           level: (b['level'] as int?) ?? 0,
@@ -37,6 +38,11 @@ class SystemControlAndroidImpl implements SystemControlService {
         screen: ScreenStatus(
           locked: (s['locked'] as bool?) ?? false,
           available: (s['available'] as bool?) ?? false,
+        ),
+        disk: DiskStatus(
+          usedBytes: (d['usedBytes'] as int?) ?? 0,
+          totalBytes: (d['totalBytes'] as int?) ?? 0,
+          available: (d['available'] as bool?) ?? false,
         ),
       );
     } catch (_) {

@@ -57,8 +57,21 @@ class AppDelegate: FlutterAppDelegate {
             "volume": volumeInfo,
             "cpu": ["usage": cpuRam.cpu, "available": true],
             "ram": ["usedMb": cpuRam.usedMb, "totalMb": cpuRam.totalMb, "available": true],
-            "screen": ["locked": false, "available": false]
+            "screen": ["locked": false, "available": false],
+            "disk": getDisk(),
         ]
+    }
+
+    private func getDisk() -> [String: Any] {
+        do {
+            let attrs = try FileManager.default.attributesOfFileSystem(forPath: "/")
+            let total = (attrs[.systemSize] as? Int) ?? 0
+            let free = (attrs[.systemFreeSize] as? Int) ?? 0
+            let used = total > free ? total - free : 0
+            return ["usedBytes": used, "totalBytes": total, "available": total > 0]
+        } catch {
+            return ["usedBytes": 0, "totalBytes": 0, "available": false]
+        }
     }
 
     private func getBattery() -> [String: Any] {
