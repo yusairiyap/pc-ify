@@ -13,8 +13,8 @@ import 'widget_cards/screen_lock_card.dart';
 import 'widget_cards/server_info_card.dart';
 import 'widget_cards/volume_card.dart';
 
-const _kTallMinHeight = 180.0;
 const _kNormalMinHeight = 112.0;
+const _kTallHeight = 224.0; // 2 × normal row height
 
 class DashboardSectionView extends ConsumerStatefulWidget {
   const DashboardSectionView({
@@ -469,11 +469,11 @@ class _WidgetGridState extends ConsumerState<_WidgetGrid> {
               color: Colors.transparent,
               child: Opacity(
                 opacity: 0.85,
-                child: SizedBox(width: feedbackWidth, child: _buildCard(item)),
+                child: SizedBox(width: feedbackWidth, child: _buildCard(item, editMode: true)),
               ),
             ),
             childWhenDragging:
-                Opacity(opacity: 0.3, child: _buildCard(item)),
+                Opacity(opacity: 0.3, child: _buildCard(item, editMode: true)),
             child: _buildCardWithEditOverlays(item),
           ),
         ),
@@ -487,11 +487,10 @@ class _WidgetGridState extends ConsumerState<_WidgetGrid> {
       onResize: (size) => _resizeItem(item, size),
     );
     final removeBtn = _RemoveIcon(onTap: () => widget.onRemoveItem?.call(item.id));
-    return _buildCard(item, badge: badge, removeIcon: removeBtn);
+    return _buildCard(item, badge: badge, removeIcon: removeBtn, editMode: true);
   }
 
-  // Fixed heights ensure all cards of the same size class are consistent.
-  Widget _buildCard(DashboardItem item, {Widget? badge, Widget? removeIcon}) {
+  Widget _buildCard(DashboardItem item, {Widget? badge, Widget? removeIcon, bool editMode = false}) {
     final size = item.effectiveSize;
     Widget card = switch (item.type) {
       WidgetType.battery => BatteryCard(hasBg: widget.hasBg, size: size, badge: badge),
@@ -514,8 +513,12 @@ class _WidgetGridState extends ConsumerState<_WidgetGrid> {
       );
     }
     if (size.isTall) {
-      return ConstrainedBox(
-        constraints: const BoxConstraints(minHeight: _kTallMinHeight), child: card);
+      // Edit mode: fixed 2-row height so the grid matches the size badge.
+      // View mode: minHeight allows content to expand naturally.
+      return editMode
+          ? SizedBox(height: _kTallHeight, child: card)
+          : ConstrainedBox(
+              constraints: const BoxConstraints(minHeight: _kTallHeight), child: card);
     }
     if (!size.isWide) return SizedBox(height: _kNormalMinHeight, child: card);
     return card;

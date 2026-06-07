@@ -42,7 +42,6 @@ class AppLauncherCard extends ConsumerStatefulWidget {
 }
 
 class _AppLauncherCardState extends ConsumerState<AppLauncherCard> {
-  bool _editMode = false;
 
   Future<void> _showAddDialog() async {
     final nameCtrl = TextEditingController();
@@ -65,12 +64,12 @@ class _AppLauncherCardState extends ConsumerState<AppLauncherCard> {
               TextField(
                 controller: pathCtrl,
                 decoration:
-                    const InputDecoration(labelText: 'Executable path *'),
+                    const InputDecoration(labelText: 'Executable path / Package name *'),
               ),
               TextField(
                 controller: procCtrl,
                 decoration: const InputDecoration(
-                    labelText: 'Process name (optional)'),
+                    labelText: 'Process name (optional, Windows/macOS)'),
               ),
               TextField(
                 controller: iconCtrl,
@@ -106,6 +105,21 @@ class _AppLauncherCardState extends ConsumerState<AppLauncherCard> {
     }
   }
 
+  Future<void> _showManageSheet(List<LauncherAppInfo> apps) async {
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      builder: (ctx) => _ManageAppsSheet(
+        apps: apps,
+        onRemove: (id) async {
+          await ref.read(apiServiceProvider).removeLauncherApp(id);
+          await ref.read(appLauncherProvider.notifier).refresh();
+        },
+        onAdd: _showAddDialog,
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
@@ -135,13 +149,22 @@ class _AppLauncherCardState extends ConsumerState<AppLauncherCard> {
                       fontWeight: FontWeight.w600,
                       color: labelColor)),
               const Spacer(),
-              if (_editMode)
-                TextButton(
-                  onPressed: () => setState(() => _editMode = false),
-                  child:
-                      const Text('Done', style: TextStyle(fontSize: 12)),
+              if (status.available)
+                SizedBox(
+                  width: 32,
+                  height: 32,
+                  child: IconButton(
+                    padding: EdgeInsets.zero,
+                    icon: Icon(Icons.settings_outlined,
+                        size: 16, color: subColor),
+                    tooltip: 'Manage apps',
+                    onPressed: () => _showManageSheet(status.apps),
+                  ),
                 ),
-              if (widget.badge != null) widget.badge!,
+              if (widget.badge != null) ...[
+                const SizedBox(width: 4),
+                widget.badge!,
+              ],
             ]),
             const SizedBox(height: 8),
             if (!status.available)
@@ -149,11 +172,11 @@ class _AppLauncherCardState extends ConsumerState<AppLauncherCard> {
                 'App launcher not available on this server',
                 style: TextStyle(fontSize: 12, color: subColor),
               )
-            else if (status.apps.isEmpty && !_editMode)
+            else if (status.apps.isEmpty)
               GestureDetector(
-                onLongPress: () => setState(() => _editMode = true),
+                onTap: _showAddDialog,
                 child: Text(
-                  'Long-press to add apps',
+                  'Tap  ⚙  to add apps',
                   style: TextStyle(
                       fontSize: 12,
                       color: subColor,
@@ -161,43 +184,21 @@ class _AppLauncherCardState extends ConsumerState<AppLauncherCard> {
                 ),
               )
             else
-              GestureDetector(
-                onLongPress: () =>
-                    setState(() => _editMode = !_editMode),
-                child: Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  children: [
-                    ...status.apps.map((app) => _AppIconButton(
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: status.apps
+                    .map((app) => _AppIconButton(
                           app: app,
                           iconData: _iconFor(app.iconKey),
                           hasBg: widget.hasBg,
-                          editMode: _editMode,
-                          onTap: _editMode
-                              ? null
-                              : () async {
-                                  await ref
-                                      .read(apiServiceProvider)
-                                      .launchApp(app.id);
-                                },
-                          onRemove: _editMode
-                              ? () async {
-                                  await ref
-                                      .read(apiServiceProvider)
-                                      .removeLauncherApp(app.id);
-                                  await ref
-                                      .read(appLauncherProvider.notifier)
-                                      .refresh();
-                                }
-                              : null,
-                        )),
-                    if (_editMode)
-                      _AddButton(
-                        hasBg: widget.hasBg,
-                        onTap: _showAddDialog,
-                      ),
-                  ],
-                ),
+                          onTap: () async {
+                            await ref
+                                .read(apiServiceProvider)
+                                .launchApp(app.id);
+                          },
+                        ))
+                    .toList(),
               ),
           ],
         ),
@@ -206,103 +207,100 @@ class _AppLauncherCardState extends ConsumerState<AppLauncherCard> {
   }
 }
 
+// ── Manage-apps bottom sheet ──────────────────────────────────────────────────
+
+class _ManageAppsSheet extends StatelessWidget {
+  const _ManageAppsSheet({
+    required this.apps,
+    required this.onRemove,
+    required this.onAdd,
+  });
+  final List<LauncherAppInfo> apps;
+  final Future<void> Function(String id) onRemove;
+  final Future<void> Function() onAdd;
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(0, 12, 0, 0),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+              child: Row(
+                children: [
+                  Text('Manage Apps',
+                      style: Theme.of(context).textTheme.titleMedium),
+                  const Spacer(),
+                  IconButton(
+                    icon: const Icon(Icons.close),
+                    onPressed: () => Navigator.pop(context),
+                  ),
+                ],
+              ),
+            ),
+            const Divider(height: 1),
+            if (apps.isEmpty)
+              Padding(
+                padding: const EdgeInsets.all(24),
+                child: Text('No apps configured yet.',
+                    style: TextStyle(color: cs.onSurfaceVariant)),
+              )
+            else
+              ConstrainedBox(
+                constraints: const BoxConstraints(maxHeight: 320),
+                child: ListView.builder(
+                  shrinkWrap: true,
+                  itemCount: apps.length,
+                  itemBuilder: (_, i) {
+                    final app = apps[i];
+                    return ListTile(
+                      leading: Icon(_iconFor(app.iconKey),
+                          color: cs.primary, size: 24),
+                      title: Text(app.name),
+                      trailing: IconButton(
+                        icon: Icon(Icons.delete_outline, color: cs.error),
+                        tooltip: 'Remove',
+                        onPressed: () async {
+                          await onRemove(app.id);
+                          if (context.mounted) Navigator.pop(context);
+                        },
+                      ),
+                    );
+                  },
+                ),
+              ),
+            const Divider(height: 1),
+            ListTile(
+              leading: Icon(Icons.add_circle_outline, color: cs.primary),
+              title: const Text('Add app'),
+              onTap: () async {
+                Navigator.pop(context);
+                await onAdd();
+              },
+            ),
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ── App icon button ───────────────────────────────────────────────────────────
+
 class _AppIconButton extends StatelessWidget {
   const _AppIconButton({
     required this.app,
     required this.iconData,
     required this.hasBg,
-    required this.editMode,
-    this.onTap,
-    this.onRemove,
+    required this.onTap,
   });
   final LauncherAppInfo app;
   final IconData iconData;
-  final bool hasBg;
-  final bool editMode;
-  final VoidCallback? onTap;
-  final VoidCallback? onRemove;
-
-  @override
-  Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
-    return Stack(
-      clipBehavior: Clip.none,
-      children: [
-        GestureDetector(
-          onTap: onTap,
-          child: SizedBox(
-            width: 64,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Container(
-                  width: 48,
-                  height: 48,
-                  decoration: BoxDecoration(
-                    color: hasBg
-                        ? Colors.white.withValues(alpha: 0.15)
-                        : cs.surfaceContainerHighest,
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Stack(
-                    children: [
-                      Center(
-                        child: Icon(iconData,
-                            size: 28,
-                            color: hasBg ? Colors.white70 : cs.primary),
-                      ),
-                      if (app.running)
-                        Positioned(
-                          bottom: 4,
-                          right: 4,
-                          child: Container(
-                            width: 8,
-                            height: 8,
-                            decoration: const BoxDecoration(
-                              color: Colors.green,
-                              shape: BoxShape.circle,
-                            ),
-                          ),
-                        ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  app.name,
-                  style: TextStyle(
-                      fontSize: 10,
-                      color: hasBg ? Colors.white70 : cs.onSurface),
-                  overflow: TextOverflow.ellipsis,
-                  textAlign: TextAlign.center,
-                  maxLines: 1,
-                ),
-              ],
-            ),
-          ),
-        ),
-        if (editMode && onRemove != null)
-          Positioned(
-            top: -4,
-            right: 4,
-            child: GestureDetector(
-              onTap: onRemove,
-              child: Container(
-                width: 18,
-                height: 18,
-                decoration: BoxDecoration(
-                    color: cs.error, shape: BoxShape.circle),
-                child: Icon(Icons.close, size: 11, color: cs.onError),
-              ),
-            ),
-          ),
-      ],
-    );
-  }
-}
-
-class _AddButton extends StatelessWidget {
-  const _AddButton({required this.hasBg, required this.onTap});
   final bool hasBg;
   final VoidCallback onTap;
 
@@ -316,27 +314,48 @@ class _AddButton extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Container(
-              width: 48,
-              height: 48,
-              decoration: BoxDecoration(
-                color: hasBg ? Colors.white12 : cs.primaryContainer,
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(
-                  color: hasBg
-                      ? Colors.white24
-                      : cs.primary.withValues(alpha: 0.3),
+            Stack(
+              children: [
+                Container(
+                  width: 48,
+                  height: 48,
+                  decoration: BoxDecoration(
+                    color: hasBg
+                        ? Colors.white.withValues(alpha: 0.15)
+                        : cs.surfaceContainerHighest,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Center(
+                    child: Icon(iconData,
+                        size: 28,
+                        color: hasBg ? Colors.white70 : cs.primary),
+                  ),
                 ),
-              ),
-              child: Icon(Icons.add,
-                  size: 28,
-                  color: hasBg ? Colors.white54 : cs.primary),
+                if (app.running)
+                  Positioned(
+                    bottom: 4,
+                    right: 4,
+                    child: Container(
+                      width: 8,
+                      height: 8,
+                      decoration: const BoxDecoration(
+                        color: Colors.green,
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+                  ),
+              ],
             ),
             const SizedBox(height: 4),
-            Text('Add',
-                style: TextStyle(
-                    fontSize: 10,
-                    color: hasBg ? Colors.white54 : cs.primary)),
+            Text(
+              app.name,
+              style: TextStyle(
+                  fontSize: 10,
+                  color: hasBg ? Colors.white70 : cs.onSurface),
+              overflow: TextOverflow.ellipsis,
+              textAlign: TextAlign.center,
+              maxLines: 1,
+            ),
           ],
         ),
       ),
