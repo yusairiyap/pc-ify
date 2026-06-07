@@ -362,11 +362,48 @@ class _WidgetGridState extends ConsumerState<_WidgetGrid> {
             const SizedBox(width: 8),
             if (b != null)
               Expanded(child: widget.editMode ? _draggableCard(b.$1, b.$2) : _buildCard(b.$2))
+            else if (widget.editMode)
+              Expanded(child: _emptySlotTarget(a.$1 + 1))
             else
               const Expanded(child: SizedBox.shrink()),
           ],
         ),
       );
+
+  // ── Empty half-row drop target (edit mode only) ───────────────────────────
+
+  Widget _emptySlotTarget(int insertIdx) {
+    return DragTarget<_DragData>(
+      onWillAcceptWithDetails: (d) => !d.data.item.effectiveSize.isWide,
+      onLeave: (_) => setState(() => _hoverIndex = null),
+      onAcceptWithDetails: (d) {
+        if (d.data.sectionId == widget.section.id) {
+          _moveSameSection(d.data.fromIndex, insertIdx.clamp(0, _items.length));
+        } else {
+          _moveCrossSection(d.data, insertIdx.clamp(0, _items.length));
+        }
+        setState(() {
+          _draggingIndex = null;
+          _hoverIndex = null;
+        });
+      },
+      builder: (ctx, candidates, __) {
+        final cs = Theme.of(ctx).colorScheme;
+        final isHovering = candidates.isNotEmpty;
+        return AnimatedContainer(
+          duration: const Duration(milliseconds: 150),
+          height: _kNormalMinHeight,
+          decoration: isHovering
+              ? BoxDecoration(
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: cs.primary, width: 2),
+                  color: cs.primaryContainer.withValues(alpha: 0.2),
+                )
+              : null,
+        );
+      },
+    );
+  }
 
   // ── Draggable card (edit mode only) ──────────────────────────────────────
 
