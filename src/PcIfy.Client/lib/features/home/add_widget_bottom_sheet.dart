@@ -62,6 +62,8 @@ class _AddWidgetSheet extends StatelessWidget {
         WidgetType.screenLock => Icons.lock_outline,
         WidgetType.serverInfo => Icons.dns_outlined,
         WidgetType.disk => Icons.disc_full_outlined,
+        WidgetType.clipboard => Icons.content_paste,
+        WidgetType.appLauncher => Icons.apps,
       };
 
   String _name(WidgetType t) => switch (t) {
@@ -72,6 +74,8 @@ class _AddWidgetSheet extends StatelessWidget {
         WidgetType.screenLock => 'Screen Lock',
         WidgetType.serverInfo => 'Server Info',
         WidgetType.disk => 'Disk Space',
+        WidgetType.clipboard => 'Clipboard',
+        WidgetType.appLauncher => 'App Launcher',
       };
 
   String _desc(WidgetType t) => switch (t) {
@@ -82,5 +86,7 @@ class _AddWidgetSheet extends StatelessWidget {
         WidgetType.screenLock => 'Lock or wake the remote screen',
         WidgetType.serverInfo => 'Platform, server name and connection status',
         WidgetType.disk => 'Storage utilization',
+        WidgetType.clipboard => 'Live clipboard preview with one-tap copy to phone',
+        WidgetType.appLauncher => 'Quick-launch grid for configured PC apps',
       };
 }

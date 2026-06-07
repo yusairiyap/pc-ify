@@ -120,3 +120,65 @@ class _ServerInfoNotifier extends AutoDisposeAsyncNotifier<ServerInfo?> {
 // ── Edit mode ─────────────────────────────────────────────────────────────────
 
 final dashboardEditModeProvider = StateProvider<bool>((ref) => false);
+
+// ── Clipboard status (2-second poll) ─────────────────────────────────────────
+
+final serverClipboardProvider = AsyncNotifierProvider.autoDispose<
+    ServerClipboardNotifier, PcClipboardStatus>(ServerClipboardNotifier.new);
+
+class ServerClipboardNotifier extends AutoDisposeAsyncNotifier<PcClipboardStatus> {
+  Timer? _timer;
+
+  @override
+  Future<PcClipboardStatus> build() async {
+    ref.onDispose(() => _timer?.cancel());
+    _timer = Timer.periodic(const Duration(seconds: 2), (_) => _refresh());
+    return _fetch();
+  }
+
+  Future<PcClipboardStatus> _fetch() async {
+    final status = await ref.read(apiServiceProvider).getClipboard();
+    if (status == null) throw Exception('Cannot reach server');
+    return status;
+  }
+
+  Future<void> _refresh() async {
+    try {
+      state = AsyncData(await _fetch());
+    } catch (e, st) {
+      state = AsyncError(e, st);
+    }
+  }
+}
+
+// ── App launcher status (5-second poll) ──────────────────────────────────────
+
+final appLauncherProvider = AsyncNotifierProvider.autoDispose<
+    AppLauncherNotifier, AppLauncherStatus>(AppLauncherNotifier.new);
+
+class AppLauncherNotifier extends AutoDisposeAsyncNotifier<AppLauncherStatus> {
+  Timer? _timer;
+
+  @override
+  Future<AppLauncherStatus> build() async {
+    ref.onDispose(() => _timer?.cancel());
+    _timer = Timer.periodic(const Duration(seconds: 5), (_) => _refresh());
+    return _fetch();
+  }
+
+  Future<AppLauncherStatus> _fetch() async {
+    final status = await ref.read(apiServiceProvider).getApps();
+    if (status == null) throw Exception('Cannot reach server');
+    return status;
+  }
+
+  Future<void> _refresh() async {
+    try {
+      state = AsyncData(await _fetch());
+    } catch (e, st) {
+      state = AsyncError(e, st);
+    }
+  }
+
+  Future<void> refresh() => _refresh();
+}

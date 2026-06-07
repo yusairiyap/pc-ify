@@ -16,8 +16,12 @@ class BatteryCard extends ConsumerWidget {
       loading: () => _BatteryBody(level: 0, charging: false, available: false, hasBg: hasBg, cs: cs, size: size, badge: badge),
       error: (_, __) => _BatteryBody(level: 0, charging: false, available: false, hasBg: hasBg, cs: cs, size: size, badge: badge),
       data: (s) => _BatteryBody(
-        level: s.battery.level, charging: s.battery.charging,
-        available: s.battery.available, hasBg: hasBg, cs: cs, size: size, badge: badge,
+        level: s.battery.level,
+        charging: s.battery.charging,
+        available: s.battery.available,
+        temperatureCelsius: s.battery.temperatureCelsius,
+        temperatureAvailable: s.battery.temperatureAvailable,
+        hasBg: hasBg, cs: cs, size: size, badge: badge,
       ),
     );
   }
@@ -25,12 +29,21 @@ class BatteryCard extends ConsumerWidget {
 
 class _BatteryBody extends StatelessWidget {
   const _BatteryBody({
-    required this.level, required this.charging, required this.available,
-    required this.hasBg, required this.cs, required this.size, this.badge,
+    required this.level,
+    required this.charging,
+    required this.available,
+    this.temperatureCelsius = 0,
+    this.temperatureAvailable = false,
+    required this.hasBg,
+    required this.cs,
+    required this.size,
+    this.badge,
   });
   final int level;
   final bool charging;
   final bool available;
+  final int temperatureCelsius;
+  final bool temperatureAvailable;
   final bool hasBg;
   final ColorScheme cs;
   final WidgetSize size;
@@ -55,18 +68,22 @@ class _BatteryBody extends StatelessWidget {
     final subColor = hasBg ? Colors.white54 : cs.outline;
     final chargingColor = hasBg ? Colors.greenAccent : Colors.green;
 
-    // Shared inline charging/level label used in both layouts
-    Widget subLabel() => Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            if (charging) ...[
-              Icon(Icons.bolt, size: 11, color: chargingColor),
-              const SizedBox(width: 2),
-              Text('Charging', style: TextStyle(fontSize: 10, color: chargingColor)),
-            ] else
-              Text('Battery level', style: TextStyle(fontSize: 10, color: subColor)),
-          ],
-        );
+    Widget subLabel() {
+      final parts = <InlineSpan>[];
+      if (charging) {
+        parts.add(WidgetSpan(child: Icon(Icons.bolt, size: 11, color: chargingColor)));
+        parts.add(TextSpan(text: ' Charging', style: TextStyle(fontSize: 10, color: chargingColor)));
+      } else {
+        parts.add(TextSpan(text: 'Battery level', style: TextStyle(fontSize: 10, color: subColor)));
+      }
+      if (temperatureAvailable) {
+        parts.add(TextSpan(
+          text: '  ·  $temperatureCelsius°C',
+          style: TextStyle(fontSize: 10, color: subColor),
+        ));
+      }
+      return RichText(text: TextSpan(children: parts));
+    }
 
     if (size.isTall) {
       return Card(

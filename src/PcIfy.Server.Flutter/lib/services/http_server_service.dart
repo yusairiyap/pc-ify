@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
-import 'dart:math' show min;
+import 'dart:math' show Random, min;
 import 'package:flutter/services.dart';
 import 'package:network_info_plus/network_info_plus.dart';
 import 'package:path/path.dart' as p;
@@ -11,10 +11,12 @@ import 'package:shelf_router/shelf_router.dart';
 import '../core/constants/api_routes.dart';
 import '../core/models/app_settings.dart';
 import '../core/models/connection_log_entry.dart';
+import '../core/models/launcher_app.dart';
 import 'auth_service.dart';
 import 'connection_log_service.dart';
 import 'file_service.dart';
 import 'platform/system_control_service.dart';
+import 'settings_service.dart';
 import 'thumbnail_service.dart';
 
 class ServerState {
@@ -34,8 +36,9 @@ class ServerState {
 class HttpServerService {
   final AppSettings settings;
   final ConnectionLogService logService;
+  final SettingsService settingsService;
 
-  HttpServerService(this.settings, this.logService);
+  HttpServerService(this.settings, this.logService, this.settingsService);
 
   HttpServer? _server;
   String? _osDisplayName;
@@ -137,6 +140,18 @@ class HttpServerService {
         _withAuth(authSvc, (_) => _handleLock(ctrl)));
     r.post(ApiRoutes.systemControlWake,
         _withAuth(authSvc, (_) => _handleWake(ctrl)));
+    r.get(ApiRoutes.systemControlClipboard,
+        _withAuth(authSvc, (_) => _handleGetClipboard(ctrl)));
+
+    // App launcher endpoints
+    r.get(ApiRoutes.systemApps,
+        _withAuth(authSvc, (_) => _handleGetApps(ctrl)));
+    r.post(ApiRoutes.systemAppsLaunch,
+        _withAuth(authSvc, (req) => _handleLaunchApp(req, ctrl)));
+    r.post(ApiRoutes.systemAppsAdd,
+        _withAuth(authSvc, (req) => _handleAddApp(req)));
+    r.delete('${ApiRoutes.systemApps}/<id>',
+        _withAuthParam(authSvc, (req, id) => _handleRemoveApp(id)));
 
     r.all('/<ignored|.*>', (_) => Response.notFound('Not found'));
     return r;
@@ -619,6 +634,86 @@ class HttpServerService {
     }
   }
 
+  Future<Response> _handleGetClipboard(SystemControlService ctrl) async {
+    try {
+      final clip = await ctrl.getClipboard();
+      return _json(clip.toJson());
+    } catch (_) {
+      return Response.internalServerError();
+    }
+  }
+
+  Future<Response> _handleGetApps(SystemControlService ctrl) async {
+    try {
+      final apps = settingsService.settings.launcherApps;
+      final status = await ctrl.getApps(apps);
+      return _json(status.toJson());
+    } catch (_) {
+      return Response.internalServerError();
+    }
+  }
+
+  Future<Response> _handleLaunchApp(Request req, SystemControlService ctrl) async {
+    try {
+      final body = jsonDecode(await req.readAsString()) as Map<String, dynamic>;
+      final id = body['id'] as String?;
+      if (id == null) return Response.badRequest(body: 'Missing id');
+      final app = settingsService.settings.launcherApps.firstWhere(
+        (a) => a.id == id,
+        orElse: () => throw Exception('not_found'),
+      );
+      await ctrl.launchApp(app.executablePath);
+      return _json({'ok': true});
+    } on Exception catch (e) {
+      if (e.toString().contains('not_found')) return Response.notFound('App not found');
+      return Response.internalServerError();
+    }
+  }
+
+  Future<Response> _handleAddApp(Request req) async {
+    try {
+      final body = jsonDecode(await req.readAsString()) as Map<String, dynamic>;
+      final name = body['name'] as String?;
+      final path = body['executablePath'] as String?;
+      if (name == null || name.isEmpty || path == null || path.isEmpty) {
+        return Response.badRequest(body: 'name and executablePath are required');
+      }
+      final newApp = LauncherApp(
+        id: _generateShortId(),
+        name: name,
+        executablePath: path,
+        processName: body['processName'] as String?,
+        iconKey: body['iconKey'] as String?,
+      );
+      final updated = settingsService.settings.copyWith(
+        launcherApps: [...settingsService.settings.launcherApps, newApp],
+      );
+      await settingsService.update(updated);
+      return _json(newApp.toJson());
+    } catch (_) {
+      return Response.internalServerError();
+    }
+  }
+
+  Future<Response> _handleRemoveApp(String id) async {
+    try {
+      final current = settingsService.settings.launcherApps;
+      final filtered = current.where((a) => a.id != id).toList();
+      if (filtered.length == current.length) return Response.notFound('App not found');
+      final updated = settingsService.settings.copyWith(launcherApps: filtered);
+      await settingsService.update(updated);
+      return _json({'ok': true});
+    } catch (_) {
+      return Response.internalServerError();
+    }
+  }
+
+  static String _generateShortId() {
+    const chars = 'abcdefghijklmnopqrstuvwxyz0123456789';
+    final rng = Random();
+    return List.generate(8, (_) => chars[rng.nextInt(chars.length)]).join();
+  }
+
   // ── Middleware factories ───────────────────────────────────────────────────
 
   Middleware _corsMiddleware() {
@@ -672,6 +767,20 @@ class HttpServerService {
             headers: {'www-authenticate': 'Bearer'});
       }
       return inner(req);
+    };
+  }
+
+  FutureOr<Response> Function(Request, String) _withAuthParam(
+    AuthService authSvc,
+    FutureOr<Response> Function(Request, String) inner,
+  ) {
+    return (Request req, String param) async {
+      final token = _bearerToken(req);
+      if (token == null || authSvc.verifyToken(token) == null) {
+        return Response.unauthorized('Unauthorized',
+            headers: {'www-authenticate': 'Bearer'});
+      }
+      return inner(req, param);
     };
   }
 

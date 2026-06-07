@@ -10,4 +10,14 @@ public class AppSettings
     public List<UserCredential> Users { get; set; } = [];
     public List<string> SourceDirectories { get; set; } = [];
     public string ColorMode { get; set; } = "System";
+    public List<LauncherApp> LauncherApps { get; set; } = [];
+}
+
+public class LauncherApp
+{
+    public string Id { get; set; } = "";
+    public string Name { get; set; } = "";
+    public string ExecutablePath { get; set; } = "";
+    public string? ProcessName { get; set; }
+    public string? IconKey { get; set; }
 }

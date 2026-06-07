@@ -20,4 +20,9 @@ abstract final class ApiRoutes {
   static const controlMute          = '/api/system/control/mute';
   static const controlLock          = '/api/system/control/lock';
   static const controlWake          = '/api/system/control/wake';
+  static const controlClipboard     = '/api/system/control/clipboard';
+
+  static const systemApps           = '/api/system/apps';
+  static const systemAppsLaunch     = '/api/system/apps/launch';
+  static const systemAppsAdd        = '/api/system/apps/add';
 }

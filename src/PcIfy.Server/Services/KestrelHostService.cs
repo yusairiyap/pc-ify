@@ -14,16 +14,18 @@ public class KestrelHostService : IKestrelHostService
 {
     private readonly AppSettings _settings;
     private readonly IConnectionLogService _logService;
+    private readonly ISettingsService _settingsService;
     private IHost? _host;
 
     public bool IsRunning { get; private set; }
     public int? CurrentPort { get; private set; }
     public event EventHandler<bool>? RunningStateChanged;
 
-    public KestrelHostService(AppSettings settings, IConnectionLogService logService)
+    public KestrelHostService(AppSettings settings, IConnectionLogService logService, ISettingsService settingsService)
     {
         _settings = settings;
         _logService = logService;
+        _settingsService = settingsService;
     }
 
     public async Task StartAsync(int port)
@@ -63,6 +65,7 @@ public class KestrelHostService : IKestrelHostService
             {
                 services.AddSingleton(_settings);
                 services.AddSingleton(_logService);
+                services.AddSingleton<ISettingsService>(_settingsService);
                 services.AddSingleton<IAuthService, AuthService>();
                 services.AddSingleton<IFileService, FileService>();
                 services.AddSingleton<IThumbnailService, ThumbnailService>();

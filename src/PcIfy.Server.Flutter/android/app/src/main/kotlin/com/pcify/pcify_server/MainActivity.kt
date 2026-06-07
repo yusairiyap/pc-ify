@@ -1,5 +1,6 @@
 package com.pcify.pcify_server
 
+import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
@@ -135,6 +136,22 @@ class MainActivity : FlutterActivity() {
                     "getOsDisplayName" -> {
                         result.success("Android ${Build.VERSION.RELEASE}")
                     }
+                    "getClipboard" -> {
+                        try {
+                            val cm = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                            val text = cm.primaryClip?.getItemAt(0)?.coerceToText(applicationContext)?.toString() ?: ""
+                            val truncated = if (text.length > 500) text.substring(0, 500) else text
+                            val format = when {
+                                truncated.startsWith("http://") || truncated.startsWith("https://") -> "url"
+                                truncated.contains('\n') && (truncated.contains("    ") || truncated.contains('\t') ||
+                                    truncated.contains('{') || truncated.contains('[') || truncated.contains(';')) -> "code"
+                                else -> "text"
+                            }
+                            result.success(mapOf("text" to truncated, "format" to format, "available" to true))
+                        } catch (e: Exception) {
+                            result.success(mapOf("text" to "", "format" to "text", "available" to false))
+                        }
+                    }
                     else -> result.notImplemented()
                 }
             }
@@ -153,6 +170,9 @@ class MainActivity : FlutterActivity() {
         val status = batteryIntent?.getIntExtra(BatteryManager.EXTRA_STATUS, -1) ?: -1
         val batteryPct = if (level >= 0 && scale > 0) (level * 100 / scale) else 0
         val charging = status == BatteryManager.BATTERY_STATUS_CHARGING || status == BatteryManager.BATTERY_STATUS_FULL
+        val rawTemp = batteryIntent?.getIntExtra(BatteryManager.EXTRA_TEMPERATURE, Int.MIN_VALUE) ?: Int.MIN_VALUE
+        val tempCelsius = if (rawTemp != Int.MIN_VALUE) rawTemp / 10 else 0
+        val tempAvailable = rawTemp != Int.MIN_VALUE
 
         // Volume
         val audioMgr = getSystemService(Context.AUDIO_SERVICE) as AudioManager
@@ -177,7 +197,7 @@ class MainActivity : FlutterActivity() {
         val diskUsed = diskTotal - diskFree
 
         return mapOf(
-            "battery" to mapOf("level" to batteryPct, "charging" to charging, "available" to true),
+            "battery" to mapOf("level" to batteryPct, "charging" to charging, "available" to true, "temperatureCelsius" to tempCelsius, "temperatureAvailable" to tempAvailable),
             "volume" to mapOf("level" to volPct, "muted" to muted, "available" to true),
             "cpu" to mapOf("usage" to cachedCpuUsage, "available" to true),
             "ram" to mapOf("usedMb" to usedMb, "totalMb" to totalMb, "available" to true),

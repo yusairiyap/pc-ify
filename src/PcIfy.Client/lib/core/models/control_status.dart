@@ -1,13 +1,23 @@
 class BatteryStatus {
-  const BatteryStatus({required this.level, required this.charging, required this.available});
+  const BatteryStatus({
+    required this.level,
+    required this.charging,
+    required this.available,
+    this.temperatureCelsius = 0,
+    this.temperatureAvailable = false,
+  });
   final int level;
   final bool charging;
   final bool available;
+  final int temperatureCelsius;
+  final bool temperatureAvailable;
   factory BatteryStatus.unavailable() => const BatteryStatus(level: 0, charging: false, available: false);
   factory BatteryStatus.fromJson(Map<String, dynamic> j) => BatteryStatus(
     level: (j['level'] as num?)?.toInt() ?? 0,
     charging: (j['charging'] as bool?) ?? false,
     available: (j['available'] as bool?) ?? false,
+    temperatureCelsius: (j['temperatureCelsius'] as num?)?.toInt() ?? 0,
+    temperatureAvailable: (j['temperatureAvailable'] as bool?) ?? false,
   );
 }
 
@@ -104,5 +114,66 @@ class ControlStatus {
     ram: RamStatus.fromJson(j['ram'] as Map<String, dynamic>? ?? {}),
     screen: ScreenStatus.fromJson(j['screen'] as Map<String, dynamic>? ?? {}),
     disk: DiskStatus.fromJson(j['disk'] as Map<String, dynamic>? ?? {}),
+  );
+}
+
+// ── Clipboard ─────────────────────────────────────────────────────────────────
+
+enum ClipboardFormat { clipText, clipUrl, clipCode }
+
+class PcClipboardStatus {
+  const PcClipboardStatus({required this.text, required this.format, required this.available});
+  final String text;
+  final ClipboardFormat format;
+  final bool available;
+
+  factory PcClipboardStatus.unavailable() =>
+      const PcClipboardStatus(text: '', format: ClipboardFormat.clipText, available: false);
+
+  factory PcClipboardStatus.fromJson(Map<String, dynamic> j) {
+    final fmtStr = j['format'] as String? ?? 'text';
+    final fmt = switch (fmtStr) {
+      'url' => ClipboardFormat.clipUrl,
+      'code' => ClipboardFormat.clipCode,
+      _ => ClipboardFormat.clipText,
+    };
+    return PcClipboardStatus(
+      text: (j['text'] as String?) ?? '',
+      format: fmt,
+      available: (j['available'] as bool?) ?? false,
+    );
+  }
+}
+
+// ── App Launcher ──────────────────────────────────────────────────────────────
+
+class LauncherAppInfo {
+  const LauncherAppInfo({required this.id, required this.name, this.iconKey, required this.running});
+  final String id;
+  final String name;
+  final String? iconKey;
+  final bool running;
+
+  factory LauncherAppInfo.fromJson(Map<String, dynamic> j) => LauncherAppInfo(
+    id: (j['id'] as String?) ?? '',
+    name: (j['name'] as String?) ?? '',
+    iconKey: j['iconKey'] as String?,
+    running: (j['running'] as bool?) ?? false,
+  );
+}
+
+class AppLauncherStatus {
+  const AppLauncherStatus({required this.apps, required this.available});
+  final List<LauncherAppInfo> apps;
+  final bool available;
+
+  factory AppLauncherStatus.unavailable() =>
+      const AppLauncherStatus(apps: [], available: false);
+
+  factory AppLauncherStatus.fromJson(Map<String, dynamic> j) => AppLauncherStatus(
+    apps: (j['apps'] as List<dynamic>? ?? [])
+        .map((e) => LauncherAppInfo.fromJson(e as Map<String, dynamic>))
+        .toList(),
+    available: (j['available'] as bool?) ?? false,
   );
 }

@@ -1,12 +1,62 @@
+import '../../core/models/launcher_app.dart';
+
 // ── DTOs ─────────────────────────────────────────────────────────────────────
 
 class BatteryStatus {
-  const BatteryStatus({required this.level, required this.charging, required this.available});
+  const BatteryStatus({
+    required this.level,
+    required this.charging,
+    required this.available,
+    this.temperatureCelsius = 0,
+    this.temperatureAvailable = false,
+  });
   final int level;
   final bool charging;
   final bool available;
-  Map<String, dynamic> toJson() => {'level': level, 'charging': charging, 'available': available};
+  final int temperatureCelsius;
+  final bool temperatureAvailable;
+  Map<String, dynamic> toJson() => {
+    'level': level,
+    'charging': charging,
+    'available': available,
+    'temperatureCelsius': temperatureCelsius,
+    'temperatureAvailable': temperatureAvailable,
+  };
   factory BatteryStatus.unavailable() => const BatteryStatus(level: 0, charging: false, available: false);
+}
+
+class ClipboardStatus {
+  const ClipboardStatus({required this.text, required this.format, required this.available});
+  final String text;
+  final String format; // 'text' | 'url' | 'code'
+  final bool available;
+  Map<String, dynamic> toJson() => {'text': text, 'format': format, 'available': available};
+  factory ClipboardStatus.unavailable() => const ClipboardStatus(text: '', format: 'text', available: false);
+}
+
+class LauncherAppInfo {
+  const LauncherAppInfo({required this.id, required this.name, this.iconKey, required this.running});
+  final String id;
+  final String name;
+  final String? iconKey;
+  final bool running;
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'name': name,
+    if (iconKey != null) 'iconKey': iconKey,
+    'running': running,
+  };
+}
+
+class AppLauncherStatus {
+  const AppLauncherStatus({required this.apps, required this.available});
+  final List<LauncherAppInfo> apps;
+  final bool available;
+  Map<String, dynamic> toJson() => {
+    'apps': apps.map((a) => a.toJson()).toList(),
+    'available': available,
+  };
+  factory AppLauncherStatus.unavailable() => const AppLauncherStatus(apps: [], available: false);
 }
 
 class VolumeStatus {
@@ -95,6 +145,9 @@ abstract class SystemControlService {
   Future<void> setMute(bool muted);
   Future<void> lockScreen();
   Future<void> wakeScreen();
+  Future<ClipboardStatus> getClipboard();
+  Future<AppLauncherStatus> getApps(List<LauncherApp> configured);
+  Future<void> launchApp(String executablePath);
 }
 
 // ── No-op fallback ────────────────────────────────────────────────────────────
@@ -105,6 +158,9 @@ class _NoOpSystemControlService implements SystemControlService {
   @override Future<void> setMute(bool muted) async {}
   @override Future<void> lockScreen() async {}
   @override Future<void> wakeScreen() async {}
+  @override Future<ClipboardStatus> getClipboard() async => ClipboardStatus.unavailable();
+  @override Future<AppLauncherStatus> getApps(List<LauncherApp> configured) async => AppLauncherStatus.unavailable();
+  @override Future<void> launchApp(String executablePath) async {}
 }
 
 // ── Helper singleton ──────────────────────────────────────────────────────────

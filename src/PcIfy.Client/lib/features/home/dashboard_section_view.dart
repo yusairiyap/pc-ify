@@ -2,8 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/models/dashboard_models.dart';
 import '../../providers/dashboard_providers.dart';
+import 'widget_cards/app_launcher_card.dart';
 import 'widget_cards/battery_card.dart';
 import 'widget_cards/bookmark_section_body.dart';
+import 'widget_cards/clipboard_card.dart';
 import 'widget_cards/cpu_card.dart';
 import 'widget_cards/disk_card.dart';
 import 'widget_cards/ram_card.dart';
@@ -499,6 +501,8 @@ class _WidgetGridState extends ConsumerState<_WidgetGrid> {
       WidgetType.screenLock => ScreenLockCard(hasBg: widget.hasBg, size: size, badge: badge),
       WidgetType.serverInfo => ServerInfoCard(hasBg: widget.hasBg, size: size, badge: badge),
       WidgetType.disk => DiskCard(hasBg: widget.hasBg, size: size, badge: badge),
+      WidgetType.clipboard => ClipboardCard(hasBg: widget.hasBg, size: size, badge: badge),
+      WidgetType.appLauncher => AppLauncherCard(hasBg: widget.hasBg, size: size, badge: badge),
     };
     if (removeIcon != null) {
       card = Stack(

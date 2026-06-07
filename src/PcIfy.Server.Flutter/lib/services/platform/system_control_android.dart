@@ -1,4 +1,5 @@
 import 'package:flutter/services.dart';
+import '../../core/models/launcher_app.dart';
 import 'system_control_service.dart';
 
 class SystemControlAndroidImpl implements SystemControlService {
@@ -20,6 +21,8 @@ class SystemControlAndroidImpl implements SystemControlService {
           level: (b['level'] as int?) ?? 0,
           charging: (b['charging'] as bool?) ?? false,
           available: (b['available'] as bool?) ?? false,
+          temperatureCelsius: (b['temperatureCelsius'] as int?) ?? 0,
+          temperatureAvailable: (b['temperatureAvailable'] as bool?) ?? false,
         ),
         volume: VolumeStatus(
           level: (v['level'] as int?) ?? 50,
@@ -69,4 +72,28 @@ class SystemControlAndroidImpl implements SystemControlService {
   Future<void> wakeScreen() async {
     try { await _channel.invokeMethod('wakeScreen'); } catch (_) {}
   }
+
+  @override
+  Future<ClipboardStatus> getClipboard() async {
+    try {
+      final map = await _channel.invokeMethod<Map>('getClipboard');
+      if (map == null) return ClipboardStatus.unavailable();
+      return ClipboardStatus(
+        text: (map['text'] as String?) ?? '',
+        format: (map['format'] as String?) ?? 'text',
+        available: (map['available'] as bool?) ?? false,
+      );
+    } catch (_) {
+      return ClipboardStatus.unavailable();
+    }
+  }
+
+  @override
+  Future<AppLauncherStatus> getApps(List<LauncherApp> configured) async {
+    // App launching is not supported on the Android server
+    return AppLauncherStatus.unavailable();
+  }
+
+  @override
+  Future<void> launchApp(String executablePath) async {}
 }

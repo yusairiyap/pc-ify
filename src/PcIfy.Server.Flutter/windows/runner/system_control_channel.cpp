@@ -1,7 +1,11 @@
 #include "system_control_channel.h"
 #include <windows.h>
+#include <shellapi.h>
+#include <tlhelp32.h>
 #include <mmdeviceapi.h>
 #include <endpointvolume.h>
+#include <wbemidl.h>
+#include <comdef.h>
 #include <flutter/method_channel.h>
 #include <flutter/plugin_registrar_windows.h>
 #include <flutter/standard_method_codec.h>
@@ -12,6 +16,7 @@
 
 #pragma comment(lib, "pdh.lib")
 #pragma comment(lib, "ole32.lib")
+#pragma comment(lib, "wbemuuid.lib")
 
 // PDH query for CPU
 static PDH_HQUERY cpuQuery = nullptr;
@@ -32,20 +37,72 @@ static double GetCpuUsage() {
     return val.doubleValue;
 }
 
+static std::pair<int, bool> GetBatteryTemperatureWmi() {
+    HRESULT hr = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
+    bool needUninit = hr == S_OK || hr == S_FALSE;
+
+    IWbemLocator* pLoc = nullptr;
+    hr = CoCreateInstance(CLSID_WbemLocator, nullptr, CLSCTX_INPROC_SERVER,
+                          IID_IWbemLocator, (LPVOID*)&pLoc);
+    if (FAILED(hr)) { if (needUninit) CoUninitialize(); return {0, false}; }
+
+    IWbemServices* pSvc = nullptr;
+    hr = pLoc->ConnectServer(_bstr_t(L"ROOT\\CIMV2"), nullptr, nullptr, nullptr,
+                             0, nullptr, nullptr, &pSvc);
+    pLoc->Release();
+    if (FAILED(hr)) { if (needUninit) CoUninitialize(); return {0, false}; }
+
+    CoSetProxyBlanket(pSvc, RPC_C_AUTHN_WINNT, RPC_C_AUTHZ_NONE, nullptr,
+                      RPC_C_AUTHN_LEVEL_CALL, RPC_C_IMP_LEVEL_IMPERSONATE,
+                      nullptr, EOAC_NONE);
+
+    IEnumWbemClassObject* pEnum = nullptr;
+    hr = pSvc->ExecQuery(_bstr_t(L"WQL"),
+                         _bstr_t(L"SELECT CurrentTemperature FROM Win32_Battery"),
+                         WBEM_FLAG_FORWARD_ONLY | WBEM_FLAG_RETURN_IMMEDIATELY,
+                         nullptr, &pEnum);
+    pSvc->Release();
+    if (FAILED(hr)) { if (needUninit) CoUninitialize(); return {0, false}; }
+
+    IWbemClassObject* pObj = nullptr;
+    ULONG ret = 0;
+    int tempC = 0;
+    bool found = false;
+    if (pEnum->Next(WBEM_INFINITE, 1, &pObj, &ret) == WBEM_S_NO_ERROR && ret > 0) {
+        VARIANT vtProp;
+        hr = pObj->Get(L"CurrentTemperature", 0, &vtProp, nullptr, nullptr);
+        if (SUCCEEDED(hr) && vtProp.vt == VT_I4 && vtProp.intVal > 0) {
+            // Win32_Battery.CurrentTemperature is in tenths of Kelvin
+            tempC = (vtProp.intVal - 2731) / 10;
+            found = true;
+        }
+        VariantClear(&vtProp);
+        pObj->Release();
+    }
+    pEnum->Release();
+    if (needUninit) CoUninitialize();
+    return {tempC, found};
+}
+
 static flutter::EncodableMap GetBattery() {
     SYSTEM_POWER_STATUS ps;
     if (!GetSystemPowerStatus(&ps) || ps.BatteryLifePercent == 255) {
         return {
-            {flutter::EncodableValue("level"), flutter::EncodableValue(0)},
-            {flutter::EncodableValue("charging"), flutter::EncodableValue(false)},
-            {flutter::EncodableValue("available"), flutter::EncodableValue(false)},
+            {flutter::EncodableValue("level"),                flutter::EncodableValue(0)},
+            {flutter::EncodableValue("charging"),             flutter::EncodableValue(false)},
+            {flutter::EncodableValue("available"),            flutter::EncodableValue(false)},
+            {flutter::EncodableValue("temperatureCelsius"),   flutter::EncodableValue(0)},
+            {flutter::EncodableValue("temperatureAvailable"), flutter::EncodableValue(false)},
         };
     }
     bool charging = ps.ACLineStatus == 1;
+    auto [tempC, tempAvail] = GetBatteryTemperatureWmi();
     return {
-        {flutter::EncodableValue("level"), flutter::EncodableValue((int)ps.BatteryLifePercent)},
-        {flutter::EncodableValue("charging"), flutter::EncodableValue(charging)},
-        {flutter::EncodableValue("available"), flutter::EncodableValue(true)},
+        {flutter::EncodableValue("level"),                flutter::EncodableValue((int)ps.BatteryLifePercent)},
+        {flutter::EncodableValue("charging"),             flutter::EncodableValue(charging)},
+        {flutter::EncodableValue("available"),            flutter::EncodableValue(true)},
+        {flutter::EncodableValue("temperatureCelsius"),   flutter::EncodableValue(tempC)},
+        {flutter::EncodableValue("temperatureAvailable"), flutter::EncodableValue(tempAvail)},
     };
 }
 
@@ -54,16 +111,16 @@ static flutter::EncodableMap GetRam() {
     ms.dwLength = sizeof(ms);
     if (!GlobalMemoryStatusEx(&ms)) {
         return {
-            {flutter::EncodableValue("usedMb"), flutter::EncodableValue(0)},
-            {flutter::EncodableValue("totalMb"), flutter::EncodableValue(0)},
+            {flutter::EncodableValue("usedMb"),    flutter::EncodableValue(0)},
+            {flutter::EncodableValue("totalMb"),   flutter::EncodableValue(0)},
             {flutter::EncodableValue("available"), flutter::EncodableValue(false)},
         };
     }
     int usedMb = (int)((ms.ullTotalPhys - ms.ullAvailPhys) / (1024 * 1024));
     int totalMb = (int)(ms.ullTotalPhys / (1024 * 1024));
     return {
-        {flutter::EncodableValue("usedMb"), flutter::EncodableValue(usedMb)},
-        {flutter::EncodableValue("totalMb"), flutter::EncodableValue(totalMb)},
+        {flutter::EncodableValue("usedMb"),    flutter::EncodableValue(usedMb)},
+        {flutter::EncodableValue("totalMb"),   flutter::EncodableValue(totalMb)},
         {flutter::EncodableValue("available"), flutter::EncodableValue(true)},
     };
 }
@@ -106,8 +163,8 @@ static flutter::EncodableMap GetVolume() {
     auto* vol = GetAudioVolume();
     if (!vol) {
         return {
-            {flutter::EncodableValue("level"), flutter::EncodableValue(50)},
-            {flutter::EncodableValue("muted"), flutter::EncodableValue(false)},
+            {flutter::EncodableValue("level"),     flutter::EncodableValue(50)},
+            {flutter::EncodableValue("muted"),     flutter::EncodableValue(false)},
             {flutter::EncodableValue("available"), flutter::EncodableValue(false)},
         };
     }
@@ -117,8 +174,8 @@ static flutter::EncodableMap GetVolume() {
     vol->GetMute(&muted);
     vol->Release();
     return {
-        {flutter::EncodableValue("level"), flutter::EncodableValue((int)(scalar * 100))},
-        {flutter::EncodableValue("muted"), flutter::EncodableValue((bool)muted)},
+        {flutter::EncodableValue("level"),     flutter::EncodableValue((int)(scalar * 100))},
+        {flutter::EncodableValue("muted"),     flutter::EncodableValue((bool)muted)},
         {flutter::EncodableValue("available"), flutter::EncodableValue(true)},
     };
 }
@@ -140,6 +197,116 @@ static void SetMuteState(bool muted) {
     vol->Release();
 }
 
+static flutter::EncodableMap GetClipboard() {
+    std::string text;
+    bool available = false;
+    if (OpenClipboard(nullptr)) {
+        HANDLE hData = GetClipboardData(CF_UNICODETEXT);
+        if (hData) {
+            wchar_t* pwstr = (wchar_t*)GlobalLock(hData);
+            if (pwstr) {
+                int len = WideCharToMultiByte(CP_UTF8, 0, pwstr, -1, nullptr, 0, nullptr, nullptr);
+                if (len > 1) {
+                    text.resize(len - 1);
+                    WideCharToMultiByte(CP_UTF8, 0, pwstr, -1, &text[0], len, nullptr, nullptr);
+                }
+                GlobalUnlock(hData);
+            }
+        }
+        CloseClipboard();
+        available = true;
+    }
+    if (text.length() > 500) text = text.substr(0, 500);
+
+    std::string format = "text";
+    if (text.substr(0, 7) == "http://" || text.substr(0, 8) == "https://") {
+        format = "url";
+    } else if (text.find('\n') != std::string::npos &&
+               (text.find("    ") != std::string::npos ||
+                text.find('\t') != std::string::npos ||
+                text.find('{') != std::string::npos ||
+                text.find('[') != std::string::npos ||
+                text.find(';') != std::string::npos)) {
+        format = "code";
+    }
+    return {
+        {flutter::EncodableValue("text"),      flutter::EncodableValue(text)},
+        {flutter::EncodableValue("format"),    flutter::EncodableValue(format)},
+        {flutter::EncodableValue("available"), flutter::EncodableValue(available)},
+    };
+}
+
+static bool IsProcessRunning(const std::wstring& processName) {
+    HANDLE snap = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+    if (snap == INVALID_HANDLE_VALUE) return false;
+    PROCESSENTRY32W pe;
+    pe.dwSize = sizeof(pe);
+    bool found = false;
+    if (Process32FirstW(snap, &pe)) {
+        do {
+            std::wstring exeName(pe.szExeFile);
+            // Strip extension for comparison
+            size_t dot = exeName.rfind(L'.');
+            if (dot != std::wstring::npos) exeName = exeName.substr(0, dot);
+            if (_wcsicmp(exeName.c_str(), processName.c_str()) == 0) {
+                found = true;
+                break;
+            }
+        } while (Process32NextW(snap, &pe));
+    }
+    CloseHandle(snap);
+    return found;
+}
+
+static flutter::EncodableMap GetApps(const flutter::EncodableList& apps) {
+    flutter::EncodableList infos;
+    for (const auto& appVal : apps) {
+        const auto* app = std::get_if<flutter::EncodableMap>(&appVal);
+        if (!app) continue;
+
+        std::string id, name;
+        bool running = false;
+        flutter::EncodableValue iconKeyVal;
+
+        auto idIt = app->find(flutter::EncodableValue("id"));
+        if (idIt != app->end()) {
+            if (auto* s = std::get_if<std::string>(&idIt->second)) id = *s;
+        }
+        auto nameIt = app->find(flutter::EncodableValue("name"));
+        if (nameIt != app->end()) {
+            if (auto* s = std::get_if<std::string>(&nameIt->second)) name = *s;
+        }
+        auto iconIt = app->find(flutter::EncodableValue("iconKey"));
+        if (iconIt != app->end()) iconKeyVal = iconIt->second;
+
+        auto procIt = app->find(flutter::EncodableValue("processName"));
+        if (procIt != app->end()) {
+            if (auto* procStr = std::get_if<std::string>(&procIt->second)) {
+                if (!procStr->empty()) {
+                    int len = MultiByteToWideChar(CP_UTF8, 0, procStr->c_str(), -1, nullptr, 0);
+                    std::wstring wname(len - 1, L'\0');
+                    MultiByteToWideChar(CP_UTF8, 0, procStr->c_str(), -1, &wname[0], len);
+                    running = IsProcessRunning(wname);
+                }
+            }
+        }
+
+        flutter::EncodableMap info = {
+            {flutter::EncodableValue("id"),      flutter::EncodableValue(id)},
+            {flutter::EncodableValue("name"),    flutter::EncodableValue(name)},
+            {flutter::EncodableValue("running"), flutter::EncodableValue(running)},
+        };
+        if (std::holds_alternative<std::string>(iconKeyVal)) {
+            info[flutter::EncodableValue("iconKey")] = iconKeyVal;
+        }
+        infos.push_back(flutter::EncodableValue(info));
+    }
+    return {
+        {flutter::EncodableValue("apps"),      flutter::EncodableValue(infos)},
+        {flutter::EncodableValue("available"), flutter::EncodableValue(true)},
+    };
+}
+
 void RegisterSystemControlChannel(flutter::FlutterEngine* engine) {
     InitCpu();
     auto channel = std::make_unique<flutter::MethodChannel<flutter::EncodableValue>>(
@@ -159,12 +326,12 @@ void RegisterSystemControlChannel(flutter::FlutterEngine* engine) {
                     {flutter::EncodableValue("battery"), flutter::EncodableValue(GetBattery())},
                     {flutter::EncodableValue("volume"),  flutter::EncodableValue(GetVolume())},
                     {flutter::EncodableValue("cpu"), flutter::EncodableValue(flutter::EncodableMap{
-                        {flutter::EncodableValue("usage"), flutter::EncodableValue(cpu)},
+                        {flutter::EncodableValue("usage"),     flutter::EncodableValue(cpu)},
                         {flutter::EncodableValue("available"), flutter::EncodableValue(true)},
                     })},
                     {flutter::EncodableValue("ram"), flutter::EncodableValue(GetRam())},
                     {flutter::EncodableValue("screen"), flutter::EncodableValue(flutter::EncodableMap{
-                        {flutter::EncodableValue("locked"), flutter::EncodableValue(false)},
+                        {flutter::EncodableValue("locked"),    flutter::EncodableValue(false)},
                         {flutter::EncodableValue("available"), flutter::EncodableValue(false)},
                     })},
                     {flutter::EncodableValue("disk"), flutter::EncodableValue(GetDisk())},
@@ -193,6 +360,34 @@ void RegisterSystemControlChannel(flutter::FlutterEngine* engine) {
                 result->Success();
             } else if (method == "wakeScreen") {
                 mouse_event(MOUSEEVENTF_MOVE, 0, 0, 0, 0);
+                result->Success();
+            } else if (method == "getClipboard") {
+                result->Success(flutter::EncodableValue(GetClipboard()));
+            } else if (method == "getApps") {
+                const auto* args = std::get_if<flutter::EncodableMap>(call.arguments());
+                flutter::EncodableList appsList;
+                if (args) {
+                    auto it = args->find(flutter::EncodableValue("apps"));
+                    if (it != args->end()) {
+                        if (auto* list = std::get_if<flutter::EncodableList>(&it->second)) {
+                            appsList = *list;
+                        }
+                    }
+                }
+                result->Success(flutter::EncodableValue(GetApps(appsList)));
+            } else if (method == "launchApp") {
+                const auto* args = std::get_if<flutter::EncodableMap>(call.arguments());
+                if (args) {
+                    auto it = args->find(flutter::EncodableValue("path"));
+                    if (it != args->end()) {
+                        if (auto* pathStr = std::get_if<std::string>(&it->second)) {
+                            int len = MultiByteToWideChar(CP_UTF8, 0, pathStr->c_str(), -1, nullptr, 0);
+                            std::wstring wpath(len - 1, L'\0');
+                            MultiByteToWideChar(CP_UTF8, 0, pathStr->c_str(), -1, &wpath[0], len);
+                            ShellExecuteW(nullptr, L"open", wpath.c_str(), nullptr, nullptr, SW_SHOW);
+                        }
+                    }
+                }
                 result->Success();
             } else {
                 result->NotImplemented();

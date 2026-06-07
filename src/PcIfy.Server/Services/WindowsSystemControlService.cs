@@ -1,5 +1,7 @@
+using System.Management;
 using System.Runtime.InteropServices;
 using PcIfy.Server.DTOs.System;
+using PcIfy.Server.Models;
 using PcIfy.Server.Services.Interfaces;
 using Timer = System.Threading.Timer;
 
@@ -40,13 +42,90 @@ public sealed class WindowsSystemControlService : ISystemControlService, IDispos
         {
             var ps = System.Windows.Forms.SystemInformation.PowerStatus;
             var pct = ps.BatteryLifePercent;
-            if (pct > 1f) return new BatteryStatusDto(0, false, false); // no battery (desktop)
-            return new BatteryStatusDto(
-                (int)(pct * 100),
-                ps.PowerLineStatus == System.Windows.Forms.PowerLineStatus.Online,
-                true);
+            if (pct > 1f) return new BatteryStatusDto(0, false, false, 0, false); // no battery (desktop)
+            bool charging = ps.PowerLineStatus == System.Windows.Forms.PowerLineStatus.Online;
+            var (tempC, tempAvail) = GetBatteryTemperatureWmi();
+            return new BatteryStatusDto((int)(pct * 100), charging, true, tempC, tempAvail);
         }
-        catch { return new BatteryStatusDto(0, false, false); }
+        catch { return new BatteryStatusDto(0, false, false, 0, false); }
+    }
+
+    private static (int TempCelsius, bool Available) GetBatteryTemperatureWmi()
+    {
+        try
+        {
+            using var searcher = new ManagementObjectSearcher("SELECT CurrentTemperature FROM Win32_Battery");
+            foreach (ManagementObject obj in searcher.Get())
+            {
+                var raw = obj["CurrentTemperature"];
+                if (raw is uint value && value > 0)
+                    return ((int)((value - 2731) / 10), true);
+            }
+            return (0, false);
+        }
+        catch { return (0, false); }
+    }
+
+    public ClipboardStatusDto GetClipboard()
+    {
+        try
+        {
+            string text = "";
+            var form = Application.OpenForms.Count > 0 ? Application.OpenForms[0] : null;
+            if (form != null && form.InvokeRequired)
+                form.Invoke(() => { text = Clipboard.GetText(); });
+            else
+                text = Clipboard.GetText();
+
+            if (string.IsNullOrEmpty(text))
+                return new ClipboardStatusDto("", "text", false);
+
+            var truncated = text.Length > 500 ? text[..500] : text;
+            string format;
+            if (truncated.StartsWith("http://") || truncated.StartsWith("https://"))
+                format = "url";
+            else if (truncated.Contains('\n') &&
+                     (truncated.Contains("    ") || truncated.Contains('\t') ||
+                      truncated.Contains('{') || truncated.Contains('[') ||
+                      truncated.Contains(';')))
+                format = "code";
+            else
+                format = "text";
+            return new ClipboardStatusDto(truncated, format, true);
+        }
+        catch { return new ClipboardStatusDto("", "text", false); }
+    }
+
+    public AppLauncherStatusDto GetApps(List<LauncherApp> apps)
+    {
+        try
+        {
+            var dtos = apps.Select(app =>
+            {
+                bool running = false;
+                if (!string.IsNullOrEmpty(app.ProcessName))
+                {
+                    try { running = System.Diagnostics.Process.GetProcessesByName(app.ProcessName).Length > 0; }
+                    catch { /* ignore */ }
+                }
+                return new AppInfoDto(app.Id, app.Name, app.IconKey, running);
+            }).ToList();
+            return new AppLauncherStatusDto(dtos, true);
+        }
+        catch { return new AppLauncherStatusDto([], false); }
+    }
+
+    public void LaunchApp(string executablePath)
+    {
+        try
+        {
+            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+            {
+                FileName = executablePath,
+                UseShellExecute = true,
+            });
+        }
+        catch { /* ignore */ }
     }
 
     // RAM via P/Invoke

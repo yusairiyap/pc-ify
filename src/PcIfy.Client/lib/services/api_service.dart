@@ -261,4 +261,59 @@ class ApiService {
     }
   }
 
+  Future<PcClipboardStatus?> getClipboard() async {
+    try {
+      final resp = await _dio.get('$_base${ApiRoutes.controlClipboard}');
+      return PcClipboardStatus.fromJson(resp.data as Map<String, dynamic>);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<AppLauncherStatus?> getApps() async {
+    try {
+      final resp = await _dio.get('$_base${ApiRoutes.systemApps}');
+      return AppLauncherStatus.fromJson(resp.data as Map<String, dynamic>);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<bool> launchApp(String id) async {
+    try {
+      await _dio.post('$_base${ApiRoutes.systemAppsLaunch}', data: {'id': id});
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  Future<LauncherAppInfo?> addLauncherApp({
+    required String name,
+    required String executablePath,
+    String? processName,
+    String? iconKey,
+  }) async {
+    try {
+      final resp = await _dio.post('$_base${ApiRoutes.systemAppsAdd}', data: {
+        'name': name,
+        'executablePath': executablePath,
+        if (processName != null && processName.isNotEmpty) 'processName': processName,
+        if (iconKey != null && iconKey.isNotEmpty) 'iconKey': iconKey,
+      });
+      return LauncherAppInfo.fromJson(resp.data as Map<String, dynamic>);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<bool> removeLauncherApp(String id) async {
+    try {
+      await _dio.delete('$_base${ApiRoutes.systemApps}/$id');
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
 }

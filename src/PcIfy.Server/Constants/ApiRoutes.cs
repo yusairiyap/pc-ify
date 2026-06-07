@@ -26,4 +26,9 @@ public static class ApiRoutes
     public const string SystemControlMute          = "/api/system/control/mute";
     public const string SystemControlLock          = "/api/system/control/lock";
     public const string SystemControlWake          = "/api/system/control/wake";
+    public const string SystemControlClipboard     = "/api/system/control/clipboard";
+
+    public const string SystemApps                 = "/api/system/apps";
+    public const string SystemAppsLaunch           = "/api/system/apps/launch";
+    public const string SystemAppsAdd              = "/api/system/apps/add";
 }

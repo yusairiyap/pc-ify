@@ -1,4 +1,5 @@
 import 'package:flutter/services.dart';
+import '../../core/models/launcher_app.dart';
 import 'system_control_service.dart';
 
 class SystemControlDesktopImpl implements SystemControlService {
@@ -20,6 +21,8 @@ class SystemControlDesktopImpl implements SystemControlService {
           level: (b['level'] as int?) ?? 0,
           charging: (b['charging'] as bool?) ?? false,
           available: (b['available'] as bool?) ?? false,
+          temperatureCelsius: (b['temperatureCelsius'] as int?) ?? 0,
+          temperatureAvailable: (b['temperatureAvailable'] as bool?) ?? false,
         ),
         volume: VolumeStatus(
           level: (v['level'] as int?) ?? 50,
@@ -68,5 +71,52 @@ class SystemControlDesktopImpl implements SystemControlService {
   @override
   Future<void> wakeScreen() async {
     try { await _channel.invokeMethod('wakeScreen'); } catch (_) {}
+  }
+
+  @override
+  Future<ClipboardStatus> getClipboard() async {
+    try {
+      final map = await _channel.invokeMethod<Map>('getClipboard');
+      if (map == null) return ClipboardStatus.unavailable();
+      return ClipboardStatus(
+        text: (map['text'] as String?) ?? '',
+        format: (map['format'] as String?) ?? 'text',
+        available: (map['available'] as bool?) ?? false,
+      );
+    } catch (_) {
+      return ClipboardStatus.unavailable();
+    }
+  }
+
+  @override
+  Future<AppLauncherStatus> getApps(List<LauncherApp> configured) async {
+    try {
+      final appsJson = configured.map((a) => a.toJson()).toList();
+      final map = await _channel.invokeMethod<Map>('getApps', {'apps': appsJson});
+      if (map == null) return AppLauncherStatus.unavailable();
+      final rawApps = map['apps'] as List? ?? [];
+      final apps = rawApps.map((e) {
+        final m = e as Map;
+        return LauncherAppInfo(
+          id: (m['id'] as String?) ?? '',
+          name: (m['name'] as String?) ?? '',
+          iconKey: m['iconKey'] as String?,
+          running: (m['running'] as bool?) ?? false,
+        );
+      }).toList();
+      return AppLauncherStatus(
+        apps: apps,
+        available: (map['available'] as bool?) ?? true,
+      );
+    } catch (_) {
+      return AppLauncherStatus.unavailable();
+    }
+  }
+
+  @override
+  Future<void> launchApp(String executablePath) async {
+    try {
+      await _channel.invokeMethod('launchApp', {'path': executablePath});
+    } catch (_) {}
   }
 }

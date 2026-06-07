@@ -8,7 +8,8 @@ import 'log_providers.dart';
 final httpServerServiceProvider = Provider<HttpServerService>((ref) {
   final settings = ref.watch(settingsProvider);
   final logSvc = ref.watch(connectionLogServiceProvider);
-  final svc = HttpServerService(settings, logSvc);
+  final settingsSvc = ref.watch(settingsServiceProvider);
+  final svc = HttpServerService(settings, logSvc, settingsSvc);
   ref.onDispose(() async {
     await svc.dispose();
     // If settings change while the server is running, Riverpod disposes this

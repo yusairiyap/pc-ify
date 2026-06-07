@@ -40,6 +40,21 @@ class AppDelegate: FlutterAppDelegate {
                 result(["available": false, "items": []])
             case "clearNotifications":
                 result(nil)
+            case "getClipboard":
+                result(self.getClipboard())
+            case "getApps":
+                if let args = call.arguments as? [String: Any],
+                   let apps = args["apps"] as? [[String: Any]] {
+                    result(self.getApps(apps))
+                } else {
+                    result(["apps": [], "available": true])
+                }
+            case "launchApp":
+                if let args = call.arguments as? [String: Any],
+                   let path = args["path"] as? String {
+                    self.launchApp(path)
+                }
+                result(nil)
             default:
                 result(FlutterMethodNotImplemented)
             }
@@ -78,14 +93,54 @@ class AppDelegate: FlutterAppDelegate {
         let snapshot = IOPSCopyPowerSourcesInfo().takeRetainedValue()
         let sources = IOPSCopyPowerSourcesList(snapshot).takeRetainedValue() as [CFTypeRef]
         guard let source = sources.first else {
-            return ["level": 0, "charging": false, "available": false]
+            return ["level": 0, "charging": false, "available": false, "temperatureCelsius": 0, "temperatureAvailable": false]
         }
         let desc = IOPSGetPowerSourceDescription(snapshot, source).takeUnretainedValue() as! [String: Any]
         let capacity = desc[kIOPSCurrentCapacityKey] as? Int ?? 0
         let maxCapacity = desc[kIOPSMaxCapacityKey] as? Int ?? 100
         let level = maxCapacity > 0 ? (capacity * 100 / maxCapacity) : 0
         let charging = (desc[kIOPSPowerSourceStateKey] as? String) != kIOPSBatteryPowerValue
-        return ["level": level, "charging": charging, "available": true]
+        let tempRaw = desc["Temperature"] as? Double
+        let tempCelsius = tempRaw.map { Int($0) } ?? 0
+        let tempAvailable = tempRaw != nil
+        return ["level": level, "charging": charging, "available": true, "temperatureCelsius": tempCelsius, "temperatureAvailable": tempAvailable]
+    }
+
+    private func getClipboard() -> [String: Any] {
+        let text = NSPasteboard.general.string(forType: .string) ?? ""
+        let truncated = text.count > 500 ? String(text.prefix(500)) : text
+        let format: String
+        if truncated.hasPrefix("http://") || truncated.hasPrefix("https://") {
+            format = "url"
+        } else if truncated.contains("\n") && (truncated.contains("    ") || truncated.contains("\t") ||
+                  truncated.contains("{") || truncated.contains("[") || truncated.contains(";")) {
+            format = "code"
+        } else {
+            format = "text"
+        }
+        return ["text": truncated, "format": format, "available": true]
+    }
+
+    private func getApps(_ apps: [[String: Any]]) -> [String: Any] {
+        let runningApps = NSWorkspace.shared.runningApplications
+        let runningNames = Set(runningApps.compactMap { $0.localizedName?.lowercased() }
+            + runningApps.compactMap { $0.bundleIdentifier?.lowercased() })
+        let infos: [[String: Any]] = apps.map { app in
+            let id = app["id"] as? String ?? ""
+            let name = app["name"] as? String ?? ""
+            let iconKey = app["iconKey"] as? String
+            let processName = (app["processName"] as? String)?.lowercased() ?? ""
+            let running = !processName.isEmpty && runningNames.contains(where: { $0.contains(processName) })
+            var info: [String: Any] = ["id": id, "name": name, "running": running]
+            if let key = iconKey { info["iconKey"] = key }
+            return info
+        }
+        return ["apps": infos, "available": true]
+    }
+
+    private func launchApp(_ path: String) {
+        let url = URL(fileURLWithPath: path)
+        NSWorkspace.shared.open(url)
     }
 
     private func getVolumeInfo() -> [String: Any] {

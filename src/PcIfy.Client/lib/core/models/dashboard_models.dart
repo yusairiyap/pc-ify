@@ -1,4 +1,4 @@
-enum WidgetType { battery, volume, cpu, ram, screenLock, serverInfo, disk }
+enum WidgetType { battery, volume, cpu, ram, screenLock, serverInfo, disk, clipboard, appLauncher }
 
 enum WidgetSize { halfWidth, fullWidth, halfWidthTall, fullWidthTall }
 
@@ -17,7 +17,8 @@ class DashboardItem {
       size ?? _defaultSizeFor(type);
 
   static WidgetSize _defaultSizeFor(WidgetType t) =>
-      (t == WidgetType.screenLock || t == WidgetType.serverInfo)
+      (t == WidgetType.screenLock || t == WidgetType.serverInfo ||
+       t == WidgetType.clipboard || t == WidgetType.appLauncher)
           ? WidgetSize.fullWidth
           : WidgetSize.halfWidth;
 

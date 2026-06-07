@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'dart:math';
+import 'launcher_app.dart';
 import 'user_credential.dart';
 
 class AppSettings {
@@ -12,6 +13,7 @@ class AppSettings {
   final List<String> sourceDirectories;
   final String colorMode;
   final bool onboardingCompleted;
+  final List<LauncherApp> launcherApps;
 
   const AppSettings({
     this.port = 8080,
@@ -23,6 +25,7 @@ class AppSettings {
     this.sourceDirectories = const [],
     this.colorMode = 'System',
     this.onboardingCompleted = false,
+    this.launcherApps = const [],
   });
 
   factory AppSettings.defaults() => AppSettings(
@@ -44,6 +47,9 @@ class AppSettings {
             .toList(),
         colorMode: (json['colorMode'] as String?) ?? 'System',
         onboardingCompleted: (json['onboardingCompleted'] as bool?) ?? false,
+        launcherApps: (json['launcherApps'] as List<dynamic>? ?? [])
+            .map((e) => LauncherApp.fromJson(e as Map<String, dynamic>))
+            .toList(),
       );
 
   Map<String, dynamic> toJson() => {
@@ -56,6 +62,7 @@ class AppSettings {
         'sourceDirectories': sourceDirectories,
         'colorMode': colorMode,
         'onboardingCompleted': onboardingCompleted,
+        'launcherApps': launcherApps.map((a) => a.toJson()).toList(),
       };
 
   AppSettings copyWith({
@@ -68,6 +75,7 @@ class AppSettings {
     List<String>? sourceDirectories,
     String? colorMode,
     bool? onboardingCompleted,
+    List<LauncherApp>? launcherApps,
   }) =>
       AppSettings(
         port: port ?? this.port,
@@ -79,6 +87,7 @@ class AppSettings {
         sourceDirectories: sourceDirectories ?? this.sourceDirectories,
         colorMode: colorMode ?? this.colorMode,
         onboardingCompleted: onboardingCompleted ?? this.onboardingCompleted,
+        launcherApps: launcherApps ?? this.launcherApps,
       );
 
   static String _defaultServerName() {
