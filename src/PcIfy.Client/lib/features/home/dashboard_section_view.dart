@@ -237,9 +237,11 @@ class _WidgetGridState extends ConsumerState<_WidgetGrid> {
     if (from == to) return;
     setState(() {
       final item = _items.removeAt(from);
-      _items.insert(to, item);
-      _draggingIndex = to;
-      _hoverIndex = to;
+      // Clamp AFTER remove: list is now 1 shorter, so valid range is 0.._items.length
+      final insertAt = to.clamp(0, _items.length);
+      _items.insert(insertAt, item);
+      _draggingIndex = insertAt;
+      _hoverIndex = insertAt;
     });
     _commitReorder();
   }
