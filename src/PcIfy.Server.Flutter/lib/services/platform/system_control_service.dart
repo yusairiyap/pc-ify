@@ -46,6 +46,12 @@ class LauncherAppInfo {
     if (iconKey != null) 'iconKey': iconKey,
     'running': running,
   };
+  factory LauncherAppInfo.fromJson(Map<String, dynamic> j) => LauncherAppInfo(
+    id: (j['id'] as String?) ?? '',
+    name: (j['name'] as String?) ?? '',
+    iconKey: j['iconKey'] as String?,
+    running: (j['running'] as bool?) ?? false,
+  );
 }
 
 class AppLauncherStatus {

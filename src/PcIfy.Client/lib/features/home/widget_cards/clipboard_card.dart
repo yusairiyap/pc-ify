@@ -92,7 +92,12 @@ class _ClipboardBody extends StatelessWidget {
               if (badge != null) badge!,
             ]),
             const SizedBox(height: 8),
-            if (!hasContent)
+            if (!status.available)
+              Text(
+                'Not available on this platform',
+                style: TextStyle(fontSize: 13, color: subColor, fontStyle: FontStyle.italic),
+              )
+            else if (!hasContent)
               Text(
                 'Nothing in clipboard',
                 style: TextStyle(fontSize: 13, color: subColor, fontStyle: FontStyle.italic),

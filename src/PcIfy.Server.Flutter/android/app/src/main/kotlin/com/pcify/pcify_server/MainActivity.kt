@@ -139,17 +139,64 @@ class MainActivity : FlutterActivity() {
                     "getClipboard" -> {
                         try {
                             val cm = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                            val text = cm.primaryClip?.getItemAt(0)?.coerceToText(applicationContext)?.toString() ?: ""
-                            val truncated = if (text.length > 500) text.substring(0, 500) else text
-                            val format = when {
-                                truncated.startsWith("http://") || truncated.startsWith("https://") -> "url"
-                                truncated.contains('\n') && (truncated.contains("    ") || truncated.contains('\t') ||
-                                    truncated.contains('{') || truncated.contains('[') || truncated.contains(';')) -> "code"
-                                else -> "text"
+                            val clip = cm.primaryClip
+                            if (clip == null || clip.itemCount == 0) {
+                                // Android 10+ restricts clipboard access when the app is in the background
+                                result.success(mapOf("text" to "", "format" to "text", "available" to false))
+                            } else {
+                                val text = clip.getItemAt(0)?.coerceToText(applicationContext)?.toString() ?: ""
+                                val truncated = if (text.length > 500) text.substring(0, 500) else text
+                                val format = when {
+                                    truncated.startsWith("http://") || truncated.startsWith("https://") -> "url"
+                                    truncated.contains('\n') && (truncated.contains("    ") || truncated.contains('\t') ||
+                                        truncated.contains('{') || truncated.contains('[') || truncated.contains(';')) -> "code"
+                                    else -> "text"
+                                }
+                                result.success(mapOf("text" to truncated, "format" to format, "available" to true))
                             }
-                            result.success(mapOf("text" to truncated, "format" to format, "available" to true))
                         } catch (e: Exception) {
                             result.success(mapOf("text" to "", "format" to "text", "available" to false))
+                        }
+                    }
+                    "getApps" -> {
+                        try {
+                            val rawApps = call.argument<List<*>>("apps") ?: emptyList<Any?>()
+                            val am = getSystemService(Context.ACTIVITY_SERVICE) as android.app.ActivityManager
+                            val runningProcesses = am.runningAppProcesses
+                                ?.flatMap { p -> listOf(p.processName) + p.pkgList.toList() }
+                                ?.toHashSet() ?: hashSetOf()
+                            val resultApps = rawApps.mapNotNull { item ->
+                                @Suppress("UNCHECKED_CAST")
+                                val app = item as? Map<String, Any?> ?: return@mapNotNull null
+                                val packageName = (app["executablePath"] as? String) ?: ""
+                                val processName = (app["processName"] as? String)?.takeIf { it.isNotEmpty() } ?: packageName
+                                val running = runningProcesses.contains(processName) ||
+                                    runningProcesses.any { it.startsWith(packageName) }
+                                mapOf(
+                                    "id" to (app["id"] as? String ?: ""),
+                                    "name" to (app["name"] as? String ?: ""),
+                                    "iconKey" to (app["iconKey"] as? String),
+                                    "running" to running
+                                )
+                            }
+                            result.success(mapOf("apps" to resultApps, "available" to true))
+                        } catch (e: Exception) {
+                            result.success(mapOf("apps" to emptyList<Any>(), "available" to false))
+                        }
+                    }
+                    "launchApp" -> {
+                        try {
+                            val packageName = call.argument<String>("path") ?: ""
+                            val intent = packageManager.getLaunchIntentForPackage(packageName)
+                            if (intent != null) {
+                                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                startActivity(intent)
+                                result.success(null)
+                            } else {
+                                result.error("not_found", "No launch intent for: $packageName", null)
+                            }
+                        } catch (e: Exception) {
+                            result.error("error", e.message, null)
                         }
                     }
                     else -> result.notImplemented()

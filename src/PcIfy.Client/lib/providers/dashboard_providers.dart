@@ -58,7 +58,7 @@ final bookmarkThumbnailsProvider =
   },
 );
 
-// ── Control status (5-second poll) ────────────────────────────────────────────
+// ── Control status (configurable poll) ────────────────────────────────────────
 
 final controlStatusProvider = AsyncNotifierProvider.autoDispose<
     ControlStatusNotifier, ControlStatus>(ControlStatusNotifier.new);
@@ -68,10 +68,11 @@ class ControlStatusNotifier extends AutoDisposeAsyncNotifier<ControlStatus> {
 
   @override
   Future<ControlStatus> build() async {
+    final intervalSecs = ref.watch(dashboardPollIntervalProvider);
     ref.onDispose(() => _timer?.cancel());
     // Start polling before the first await so the timer is registered even
     // if the initial fetch throws (server unreachable on startup).
-    _timer = Timer.periodic(const Duration(seconds: 5), (_) => _refresh());
+    _timer = Timer.periodic(Duration(seconds: intervalSecs), (_) => _refresh());
     return _fetch();
   }
 
@@ -121,7 +122,7 @@ class _ServerInfoNotifier extends AutoDisposeAsyncNotifier<ServerInfo?> {
 
 final dashboardEditModeProvider = StateProvider<bool>((ref) => false);
 
-// ── Clipboard status (2-second poll) ─────────────────────────────────────────
+// ── Clipboard status (configurable poll) ─────────────────────────────────────
 
 final serverClipboardProvider = AsyncNotifierProvider.autoDispose<
     ServerClipboardNotifier, PcClipboardStatus>(ServerClipboardNotifier.new);
@@ -131,8 +132,9 @@ class ServerClipboardNotifier extends AutoDisposeAsyncNotifier<PcClipboardStatus
 
   @override
   Future<PcClipboardStatus> build() async {
+    final intervalSecs = ref.watch(dashboardPollIntervalProvider);
     ref.onDispose(() => _timer?.cancel());
-    _timer = Timer.periodic(const Duration(seconds: 2), (_) => _refresh());
+    _timer = Timer.periodic(Duration(seconds: intervalSecs), (_) => _refresh());
     return _fetch();
   }
 
@@ -151,7 +153,7 @@ class ServerClipboardNotifier extends AutoDisposeAsyncNotifier<PcClipboardStatus
   }
 }
 
-// ── App launcher status (5-second poll) ──────────────────────────────────────
+// ── App launcher status (configurable poll) ──────────────────────────────────
 
 final appLauncherProvider = AsyncNotifierProvider.autoDispose<
     AppLauncherNotifier, AppLauncherStatus>(AppLauncherNotifier.new);
@@ -161,8 +163,9 @@ class AppLauncherNotifier extends AutoDisposeAsyncNotifier<AppLauncherStatus> {
 
   @override
   Future<AppLauncherStatus> build() async {
+    final intervalSecs = ref.watch(dashboardPollIntervalProvider);
     ref.onDispose(() => _timer?.cancel());
-    _timer = Timer.periodic(const Duration(seconds: 5), (_) => _refresh());
+    _timer = Timer.periodic(Duration(seconds: intervalSecs), (_) => _refresh());
     return _fetch();
   }
 

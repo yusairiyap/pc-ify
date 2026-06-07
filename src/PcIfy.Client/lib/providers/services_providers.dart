@@ -91,3 +91,8 @@ final videoRepeatProvider = StateProvider<bool>((ref) {
 final dashboardLayoutServiceProvider = Provider<DashboardLayoutService>((ref) {
   return DashboardLayoutService(ref.watch(sharedPrefsProvider));
 });
+
+/// Dashboard widget poll interval in seconds. Default: 5. Persisted to SharedPreferences.
+final dashboardPollIntervalProvider = StateProvider<int>((ref) {
+  return ref.watch(sharedPrefsProvider).getInt('dashboard_poll_interval') ?? 5;
+});

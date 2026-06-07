@@ -90,10 +90,25 @@ class SystemControlAndroidImpl implements SystemControlService {
 
   @override
   Future<AppLauncherStatus> getApps(List<LauncherApp> configured) async {
-    // App launching is not supported on the Android server
-    return AppLauncherStatus.unavailable();
+    try {
+      final apps = configured.map((a) => a.toJson()).toList();
+      final map = await _channel.invokeMethod<Map>('getApps', {'apps': apps});
+      if (map == null) return AppLauncherStatus.unavailable();
+      final appsList = (map['apps'] as List?)
+          ?.map((e) => LauncherAppInfo.fromJson(
+              Map<String, dynamic>.from(e as Map)))
+          .toList() ?? [];
+      return AppLauncherStatus(
+        apps: appsList,
+        available: (map['available'] as bool?) ?? false,
+      );
+    } catch (_) {
+      return AppLauncherStatus.unavailable();
+    }
   }
 
   @override
-  Future<void> launchApp(String executablePath) async {}
+  Future<void> launchApp(String executablePath) async {
+    try { await _channel.invokeMethod('launchApp', {'path': executablePath}); } catch (_) {}
+  }
 }

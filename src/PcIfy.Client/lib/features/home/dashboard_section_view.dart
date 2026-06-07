@@ -513,7 +513,10 @@ class _WidgetGridState extends ConsumerState<_WidgetGrid> {
         ],
       );
     }
-    if (size.isTall) return SizedBox(height: _kTallMinHeight, child: card);
+    if (size.isTall) {
+      return ConstrainedBox(
+        constraints: const BoxConstraints(minHeight: _kTallMinHeight), child: card);
+    }
     if (!size.isWide) return SizedBox(height: _kNormalMinHeight, child: card);
     return card;
   }
