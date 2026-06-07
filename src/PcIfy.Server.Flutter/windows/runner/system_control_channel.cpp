@@ -68,6 +68,24 @@ static flutter::EncodableMap GetRam() {
     };
 }
 
+static flutter::EncodableMap GetDisk() {
+    ULARGE_INTEGER freeBytesAvailableToCaller, totalBytes, totalFreeBytes;
+    if (!GetDiskFreeSpaceExW(L"C:\\", &freeBytesAvailableToCaller, &totalBytes, &totalFreeBytes)) {
+        return {
+            {flutter::EncodableValue("usedBytes"),  flutter::EncodableValue((int64_t)0)},
+            {flutter::EncodableValue("totalBytes"), flutter::EncodableValue((int64_t)0)},
+            {flutter::EncodableValue("available"),  flutter::EncodableValue(false)},
+        };
+    }
+    int64_t total = (int64_t)totalBytes.QuadPart;
+    int64_t free_ = (int64_t)totalFreeBytes.QuadPart;
+    return {
+        {flutter::EncodableValue("usedBytes"),  flutter::EncodableValue(total - free_)},
+        {flutter::EncodableValue("totalBytes"), flutter::EncodableValue(total)},
+        {flutter::EncodableValue("available"),  flutter::EncodableValue(true)},
+    };
+}
+
 static IAudioEndpointVolume* GetAudioVolume() {
     IMMDeviceEnumerator* enumerator = nullptr;
     CoCreateInstance(__uuidof(MMDeviceEnumerator), nullptr, CLSCTX_ALL,
@@ -149,6 +167,7 @@ void RegisterSystemControlChannel(flutter::FlutterEngine* engine) {
                         {flutter::EncodableValue("locked"), flutter::EncodableValue(false)},
                         {flutter::EncodableValue("available"), flutter::EncodableValue(false)},
                     })},
+                    {flutter::EncodableValue("disk"), flutter::EncodableValue(GetDisk())},
                 };
                 result->Success(flutter::EncodableValue(response));
             } else if (method == "setVolume") {

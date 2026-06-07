@@ -5,6 +5,7 @@ import '../../providers/dashboard_providers.dart';
 import 'widget_cards/battery_card.dart';
 import 'widget_cards/bookmark_section_body.dart';
 import 'widget_cards/cpu_card.dart';
+import 'widget_cards/disk_card.dart';
 import 'widget_cards/ram_card.dart';
 import 'widget_cards/screen_lock_card.dart';
 import 'widget_cards/server_info_card.dart';
@@ -13,35 +14,171 @@ import 'widget_cards/volume_card.dart';
 const _kTallMinHeight = 180.0;
 const _kNormalMinHeight = 112.0;
 
-class DashboardSectionView extends ConsumerWidget {
-  const DashboardSectionView(
-      {super.key, required this.section, required this.hasBg});
+class DashboardSectionView extends ConsumerStatefulWidget {
+  const DashboardSectionView({
+    super.key,
+    required this.section,
+    required this.hasBg,
+    this.editMode = false,
+    this.sectionIndex,
+    this.onDelete,
+    this.onRename,
+    this.onAddWidget,
+    this.onRemoveWidget,
+  });
   final DashboardSection section;
   final bool hasBg;
+  final bool editMode;
+  final int? sectionIndex;
+  final VoidCallback? onDelete;
+  final void Function(String newName)? onRename;
+  final VoidCallback? onAddWidget;
+  final void Function(String itemId)? onRemoveWidget;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<DashboardSectionView> createState() => _DashboardSectionViewState();
+}
+
+class _DashboardSectionViewState extends ConsumerState<DashboardSectionView> {
+  late TextEditingController _nameCtrl;
+
+  @override
+  void initState() {
+    super.initState();
+    _nameCtrl = TextEditingController(text: widget.section.name);
+  }
+
+  @override
+  void didUpdateWidget(DashboardSectionView old) {
+    super.didUpdateWidget(old);
+    if (old.section.name != widget.section.name) {
+      _nameCtrl.text = widget.section.name;
+    }
+  }
+
+  @override
+  void dispose() {
+    _nameCtrl.dispose();
+    super.dispose();
+  }
+
+  void _commitRename() {
+    final trimmed = _nameCtrl.text.trim();
+    if (trimmed.isNotEmpty && trimmed != widget.section.name) {
+      widget.onRename?.call(trimmed);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final tt = Theme.of(context).textTheme;
     final cs = Theme.of(context).colorScheme;
+    final section = widget.section;
+    final hasBg = widget.hasBg;
 
+    if (!widget.editMode) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 20, 16, 8),
+            child: Text(
+              section.name,
+              style: tt.labelMedium?.copyWith(
+                color: hasBg ? Colors.white70 : cs.onSurfaceVariant,
+                fontWeight: FontWeight.w700,
+                letterSpacing: 0.8,
+              ),
+            ),
+          ),
+          if (section.isBookmarks)
+            BookmarkSectionBody(hasBg: hasBg)
+          else
+            _WidgetGrid(section: section, hasBg: hasBg, editMode: false),
+        ],
+      );
+    }
+
+    // Edit mode
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
+        // Section header: drag handle + inline rename + delete + add widget
         Padding(
-          padding: const EdgeInsets.fromLTRB(16, 20, 16, 8),
-          child: Text(
-            section.name,
-            style: tt.labelMedium?.copyWith(
-              color: hasBg ? Colors.white70 : cs.onSurfaceVariant,
-              fontWeight: FontWeight.w700,
-              letterSpacing: 0.8,
-            ),
+          padding: const EdgeInsets.fromLTRB(8, 12, 8, 4),
+          child: Row(
+            children: [
+              if (widget.sectionIndex != null)
+                ReorderableDelayedDragStartListener(
+                  index: widget.sectionIndex!,
+                  child: const Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 4),
+                    child: Icon(Icons.drag_handle, size: 22, color: Colors.grey),
+                  ),
+                )
+              else
+                const Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 4),
+                  child: Icon(Icons.drag_handle, size: 22, color: Colors.grey),
+                ),
+              const SizedBox(width: 4),
+              Expanded(
+                child: TextField(
+                  controller: _nameCtrl,
+                  style: tt.labelLarge?.copyWith(fontWeight: FontWeight.w700),
+                  decoration: InputDecoration(
+                    isDense: true,
+                    contentPadding: const EdgeInsets.symmetric(vertical: 6, horizontal: 4),
+                    border: InputBorder.none,
+                    focusedBorder: UnderlineInputBorder(
+                      borderSide: BorderSide(color: cs.primary, width: 1.5),
+                    ),
+                    hintText: 'Section name',
+                    hintStyle: TextStyle(color: cs.outline),
+                  ),
+                  onSubmitted: (_) => _commitRename(),
+                  onEditingComplete: _commitRename,
+                ),
+              ),
+              if (!section.isBookmarks)
+                Tooltip(
+                  message: 'Add widget',
+                  child: IconButton(
+                    icon: Icon(Icons.add_circle_outline, size: 18, color: cs.primary),
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                    onPressed: widget.onAddWidget,
+                  ),
+                ),
+              Tooltip(
+                message: section.isBookmarks ? 'Remove bookmarks section' : 'Delete section',
+                child: IconButton(
+                  icon: Icon(Icons.delete_outline, size: 18, color: cs.error),
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
+                  onPressed: widget.onDelete,
+                ),
+              ),
+            ],
           ),
         ),
+        const Divider(height: 8, indent: 16, endIndent: 16),
         if (section.isBookmarks)
-          BookmarkSectionBody(hasBg: hasBg)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
+            child: Text(
+              'Bookmark folders (manage from Browse tab)',
+              style: TextStyle(fontSize: 12, color: cs.onSurfaceVariant),
+            ),
+          )
         else
-          _WidgetGrid(section: section, hasBg: hasBg),
+          _WidgetGrid(
+            section: section,
+            hasBg: hasBg,
+            editMode: true,
+            onRemoveItem: widget.onRemoveWidget,
+          ),
+        const SizedBox(height: 8),
       ],
     );
   }
@@ -62,9 +199,16 @@ class _DragData {
 // ── Draggable widget grid ─────────────────────────────────────────────────────
 
 class _WidgetGrid extends ConsumerStatefulWidget {
-  const _WidgetGrid({required this.section, required this.hasBg});
+  const _WidgetGrid({
+    required this.section,
+    required this.hasBg,
+    required this.editMode,
+    this.onRemoveItem,
+  });
   final DashboardSection section;
   final bool hasBg;
+  final bool editMode;
+  final void Function(String itemId)? onRemoveItem;
 
   @override
   ConsumerState<_WidgetGrid> createState() => _WidgetGridState();
@@ -168,7 +312,10 @@ class _WidgetGridState extends ConsumerState<_WidgetGrid> {
 
   @override
   Widget build(BuildContext context) {
-    if (_items.isEmpty) return const SizedBox.shrink();
+    if (_items.isEmpty) {
+      if (widget.editMode) return _appendDropZone(context, isEmpty: true);
+      return const SizedBox.shrink();
+    }
 
     final rows = <Widget>[];
     final pending = <(int, DashboardItem)>[];
@@ -189,15 +336,14 @@ class _WidgetGridState extends ConsumerState<_WidgetGrid> {
         }
         rows.add(Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-          child: _draggableCard(i, item),
+          child: widget.editMode ? _draggableCard(i, item) : _buildCard(item),
         ));
       }
     }
     if (pending.isNotEmpty) rows.add(_halfRow(pending[0], null));
 
-    // AnimatedSwitcher cross-fades between layout configurations so that
-    // row reflows (e.g. halfWidthTall → fullWidthTall) look smooth instead
-    // of teleporting items.
+    if (widget.editMode) rows.add(_appendDropZone(context));
+
     final layoutKey = _items
         .map((i) => '${i.id}:${i.effectiveSize.name}')
         .join(',');
@@ -217,15 +363,115 @@ class _WidgetGridState extends ConsumerState<_WidgetGrid> {
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Expanded(child: _draggableCard(a.$1, a.$2)),
-            if (b != null) ...[
-              const SizedBox(width: 8),
-              Expanded(child: _draggableCard(b.$1, b.$2)),
-            ] else
+            Expanded(child: widget.editMode ? _draggableCard(a.$1, a.$2) : _buildCard(a.$2)),
+            const SizedBox(width: 8),
+            if (b != null)
+              Expanded(child: widget.editMode ? _draggableCard(b.$1, b.$2) : _buildCard(b.$2))
+            else if (widget.editMode)
+              Expanded(child: _emptySlotTarget(a.$1 + 1))
+            else
               const Expanded(child: SizedBox.shrink()),
           ],
         ),
       );
+
+  // ── Empty drop zones ──────────────────────────────────────────────────────
+
+  Widget _emptySlotTarget(int insertIdx) {
+    return DragTarget<_DragData>(
+      onWillAcceptWithDetails: (d) => !d.data.item.effectiveSize.isWide,
+      onLeave: (_) => setState(() => _hoverIndex = null),
+      onAcceptWithDetails: (d) {
+        if (d.data.sectionId == widget.section.id) {
+          _moveSameSection(d.data.fromIndex, insertIdx.clamp(0, _items.length));
+        } else {
+          _moveCrossSection(d.data, insertIdx.clamp(0, _items.length));
+        }
+        setState(() {
+          _draggingIndex = null;
+          _hoverIndex = null;
+        });
+      },
+      builder: (ctx, candidates, __) {
+        final cs = Theme.of(ctx).colorScheme;
+        final isHovering = candidates.isNotEmpty;
+        return AnimatedContainer(
+          duration: const Duration(milliseconds: 150),
+          height: _kNormalMinHeight,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: isHovering
+                  ? cs.primary
+                  : cs.outline.withValues(alpha: 0.25),
+              width: isHovering ? 2 : 1,
+            ),
+            color: isHovering
+                ? cs.primaryContainer.withValues(alpha: 0.2)
+                : Colors.transparent,
+          ),
+          child: Center(
+            child: Icon(
+              Icons.add,
+              color: isHovering ? cs.primary : cs.outline.withValues(alpha: 0.4),
+              size: 20,
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _appendDropZone(BuildContext context, {bool isEmpty = false}) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 4, 16, 4),
+      child: DragTarget<_DragData>(
+        onWillAcceptWithDetails: (_) => true,
+        onAcceptWithDetails: (d) {
+          if (d.data.sectionId == widget.section.id) {
+            _moveSameSection(d.data.fromIndex, _items.length - (isEmpty ? 0 : 1));
+          } else {
+            _moveCrossSection(d.data, _items.length);
+          }
+          setState(() {
+            _draggingIndex = null;
+            _hoverIndex = null;
+          });
+        },
+        builder: (ctx, candidates, __) {
+          final cs = Theme.of(ctx).colorScheme;
+          final isHovering = candidates.isNotEmpty;
+          return AnimatedContainer(
+            duration: const Duration(milliseconds: 150),
+            height: isEmpty ? 64 : 40,
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: isHovering
+                    ? cs.primary
+                    : cs.outline.withValues(alpha: 0.25),
+                width: isHovering ? 2 : 1,
+              ),
+              color: isHovering
+                  ? cs.primaryContainer.withValues(alpha: 0.2)
+                  : Colors.transparent,
+            ),
+            child: Center(
+              child: Text(
+                isHovering ? 'Drop here' : 'Drop widget here',
+                style: TextStyle(
+                  fontSize: 11,
+                  color: isHovering ? cs.primary : cs.outline.withValues(alpha: 0.5),
+                ),
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  // ── Draggable card (edit mode only) ──────────────────────────────────────
 
   Widget _draggableCard(int idx, DashboardItem item) {
     final isHovered = _hoverIndex == idx && _draggingIndex != idx;
@@ -235,7 +481,6 @@ class _WidgetGridState extends ConsumerState<_WidgetGrid> {
         ? screenWidth - 32
         : (screenWidth - 40) / 2;
 
-    // Displacement: hovered widget slides aside to signal "I'll move here"
     final slideOffset = isHovered
         ? (item.effectiveSize.isWide
             ? const Offset(0, 0.04)
@@ -291,26 +536,24 @@ class _WidgetGridState extends ConsumerState<_WidgetGrid> {
             ),
             childWhenDragging:
                 Opacity(opacity: 0.3, child: _buildCard(item)),
-            child: _withSizeBadge(item),
+            child: _buildCardWithEditOverlays(item),
           ),
         ),
       ),
     );
   }
 
-  Widget _withSizeBadge(DashboardItem item) {
+  Widget _buildCardWithEditOverlays(DashboardItem item) {
     final badge = _SizeBadge(
       item: item,
       onResize: (size) => _resizeItem(item, size),
     );
-    return _buildCard(item, badge: badge);
+    final removeBtn = _RemoveIcon(onTap: () => widget.onRemoveItem?.call(item.id));
+    return _buildCard(item, badge: badge, removeIcon: removeBtn);
   }
 
   // Fixed heights ensure all cards of the same size class are consistent.
-  // Tall cards use SizedBox so Column Spacers distribute space correctly.
-  // Non-wide normal cards use a fixed height so paired half-width cards
-  // never stretch each other via IntrinsicHeight.
-  Widget _buildCard(DashboardItem item, {Widget? badge}) {
+  Widget _buildCard(DashboardItem item, {Widget? badge, Widget? removeIcon}) {
     final size = item.effectiveSize;
     Widget card = switch (item.type) {
       WidgetType.battery => BatteryCard(hasBg: widget.hasBg, size: size, badge: badge),
@@ -319,10 +562,45 @@ class _WidgetGridState extends ConsumerState<_WidgetGrid> {
       WidgetType.volume => VolumeCard(hasBg: widget.hasBg, size: size, badge: badge),
       WidgetType.screenLock => ScreenLockCard(hasBg: widget.hasBg, size: size, badge: badge),
       WidgetType.serverInfo => ServerInfoCard(hasBg: widget.hasBg, size: size, badge: badge),
+      WidgetType.disk => DiskCard(hasBg: widget.hasBg, size: size, badge: badge),
     };
+    if (removeIcon != null) {
+      card = Stack(
+        clipBehavior: Clip.none,
+        children: [
+          card,
+          Positioned(top: -8, left: -8, child: removeIcon),
+        ],
+      );
+    }
     if (size.isTall) return SizedBox(height: _kTallMinHeight, child: card);
     if (!size.isWide) return SizedBox(height: _kNormalMinHeight, child: card);
     return card;
+  }
+}
+
+// ── Remove icon overlay ───────────────────────────────────────────────────────
+
+class _RemoveIcon extends StatelessWidget {
+  const _RemoveIcon({required this.onTap});
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: 22,
+        height: 22,
+        decoration: BoxDecoration(
+          color: cs.error,
+          shape: BoxShape.circle,
+          boxShadow: const [BoxShadow(color: Colors.black26, blurRadius: 4, offset: Offset(0, 1))],
+        ),
+        child: Icon(Icons.close, size: 13, color: cs.onError),
+      ),
+    );
   }
 }
 
@@ -379,7 +657,6 @@ class _SizeBadge extends StatelessWidget {
 
     showMenu<WidgetSize>(
       context: context,
-      // Position the menu above-left of the badge
       position: RelativeRect.fromLTRB(
         offset.dx - 96,
         offset.dy - 152,
