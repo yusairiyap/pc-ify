@@ -137,10 +137,10 @@ The client polls `/api/system/control/status` every 5 seconds. The server expose
 
 | Platform | Implementation | Notes |
 |---|---|---|
-| Android | `MainActivity.kt` | CPU via `/proc/stat` diff, fallback to `/sys/cpufreq`; screen lock not available (Play Protect flags `BIND_ACCESSIBILITY_SERVICE` + `INTERNET` + `MANAGE_EXTERNAL_STORAGE` as RAT) |
-| Windows (Flutter) | `windows/runner/system_control_channel.cpp` | CPU via PDH; volume via `IAudioEndpointVolume` COM; lock via `LockWorkStation()`; wake via `mouse_event()` |
-| macOS (Flutter) | `macos/Runner/AppDelegate.swift` | Battery via IOKit; volume via `osascript`; CPU/RAM via `top`/`vm_stat`; lock via `⌃⌘Q` keypress |
-| Windows (C#) | `Services/WindowsSystemControlService.cs` | Same capabilities as Flutter Windows channel |
+| Android | `MainActivity.kt` | CPU via `/proc/stat` diff, fallback to `/sys/cpufreq`; battery temperature via `BatteryManager.EXTRA_TEMPERATURE`; clipboard via `ClipboardManager`; screen lock not available (Play Protect flags) |
+| Windows (Flutter) | `windows/runner/system_control_channel.cpp` | CPU via PDH; volume via `IAudioEndpointVolume` COM; lock via `LockWorkStation()`; wake via `mouse_event()`; battery temperature via WMI `Win32_Battery`; clipboard via `OpenClipboard`/`CF_UNICODETEXT`; app launch via `ShellExecuteW`; running-process check via `CreateToolhelp32Snapshot` |
+| macOS (Flutter) | `macos/Runner/AppDelegate.swift` | Battery + temperature via IOKit; volume via `osascript`; CPU/RAM via `top`/`vm_stat`; lock via `⌃⌘Q` keypress; clipboard via `NSPasteboard`; app launch via `NSWorkspace.open`; running-app check via `NSWorkspace.runningApplications` |
+| Windows (C#) | `Services/WindowsSystemControlService.cs` | Same capabilities as Flutter Windows channel; clipboard uses dedicated STA thread; temperature via `System.Management` WMI |
 
 **Android screen lock:** Not supported. Declaring `BIND_ACCESSIBILITY_SERVICE` alongside `INTERNET` + `MANAGE_EXTERNAL_STORAGE` triggers Google Play Protect's RAT heuristic and hard-blocks installation. `screen.available` is always `false` on Android; the client card shows "not available on this platform".
 
@@ -159,9 +159,9 @@ DashboardLayout
             └─ id, WidgetType, WidgetSize?
 ```
 
-**Widget types:** `battery`, `volume`, `cpu`, `ram`, `screenLock`
+**Widget types:** `battery`, `volume`, `cpu`, `ram`, `screenLock`, `serverInfo`, `disk`, `clipboard`, `appLauncher`
 
-**Widget sizes:** `halfWidth` (two per row) · `fullWidth` (spans row). Battery, CPU, RAM default to half; Volume and ScreenLock default to full. Size can be overridden per item.
+**Widget sizes:** `halfWidth` (two per row) · `fullWidth` (spans row). Battery, CPU, RAM, and Disk default to half; Volume, ScreenLock, ServerInfo, Clipboard, and AppLauncher default to full. Size can be overridden per item.
 
 **Default layout on first launch:**
 1. "Server Overview" → [battery, volume, cpu, ram, screenLock]
@@ -252,11 +252,16 @@ All protected (requires `Authorization: Bearer`):
 
 | Method | Route | Body / Response |
 |---|---|---|
-| `GET` | `/api/system/control/status` | `ControlStatusDto` — battery, volume, cpu, ram, screen each with `available: bool` |
+| `GET` | `/api/system/control/status` | `ControlStatusDto` — battery (with `temperatureCelsius`/`temperatureAvailable`), volume, cpu, ram, screen each with `available: bool` |
 | `POST` | `/api/system/control/volume` | `{level: 0-100}` |
 | `POST` | `/api/system/control/mute` | `{muted: bool}` |
 | `POST` | `/api/system/control/lock` | — |
 | `POST` | `/api/system/control/wake` | — |
+| `GET` | `/api/system/control/clipboard` | `ClipboardStatusDto` — `{text, format ("text"\|"url"\|"code"), available}` |
+| `GET` | `/api/system/apps` | `AppLauncherStatusDto` — `{apps: [{id, name, iconKey?, running}], available}` |
+| `POST` | `/api/system/apps/launch` | `{id}` — launch a configured app by id |
+| `POST` | `/api/system/apps/add` | `{name, executablePath, processName?, iconKey?}` → returns new `AppInfoDto` |
+| `DELETE` | `/api/system/apps/{id}` | Remove app from launcher; persists to settings |
 
 ## Adding New API Endpoints (Flutter Server)
 
@@ -268,11 +273,10 @@ All protected (requires `Authorization: Bearer`):
 ## Adding a New Dashboard Widget Type
 
 1. Add the value to `WidgetType` enum in `lib/core/models/dashboard_models.dart`
-2. Update `_defaultSizeFor()` if it should be half-width by default
+2. Update `_defaultSizeFor()` if it should be full-width by default
 3. Create the card widget in `lib/features/home/widget_cards/`
 4. Add the case to `_buildCard()` in `dashboard_section_view.dart`
 5. Add icon, name, and description to `add_widget_bottom_sheet.dart`
-6. Add icon and name to `dashboard_section_editor.dart`
 
 ## Adding New Client Screens
 
@@ -299,8 +303,9 @@ All protected (requires `Authorization: Bearer`):
 | `lib/services/thumbnail_service.dart` | Image / video thumbnail generation + cache; `getOrCreate(path, roots, {quality, atSeconds})`; `getVideoDurationMs(path, roots)` |
 | `lib/services/ffmpeg_setup_service.dart` | FFmpeg binary download (Windows/macOS) |
 | `lib/services/settings_service.dart` | Settings load/save, Windows legacy path migration |
+| `lib/core/models/launcher_app.dart` | `LauncherApp` model (id, name, executablePath, processName?, iconKey?) — persisted in `AppSettings.launcherApps` |
 | `lib/core/utils/path_sanitizer.dart` | Security — path traversal prevention |
-| `lib/services/platform/system_control_service.dart` | Abstract `SystemControlService` + DTOs + `SystemControlServiceHelper` singleton |
+| `lib/services/platform/system_control_service.dart` | Abstract `SystemControlService` + DTOs (`BatteryStatus`, `ClipboardStatus`, `AppLauncherStatus`, `LauncherAppInfo`) + `SystemControlServiceHelper` singleton |
 | `lib/services/platform/system_control_android.dart` | Android MethodChannel implementation |
 | `lib/services/platform/system_control_desktop.dart` | Windows/macOS MethodChannel implementation |
 | `lib/services/platform/tray_service_desktop.dart` | Windows/macOS tray icon |
@@ -323,10 +328,11 @@ All protected (requires `Authorization: Bearer`):
 | `Constants/ApiRoutes.cs` | All API route strings |
 | `Program.cs` | Entry point, DI root, colour mode |
 | `Services/KestrelHostService.cs` | Embeds Kestrel in WinForms process |
-| `Services/WindowsSystemControlService.cs` | Battery/CPU/RAM/Volume/Lock via Win32 APIs |
+| `Services/WindowsSystemControlService.cs` | Battery/CPU/RAM/Volume/Lock/Clipboard/AppLauncher/Launch via Win32 APIs + WMI |
 | `Services/Interfaces/ISystemControlService.cs` | System control interface |
-| `DTOs/System/ControlStatusDto.cs` | Status response DTOs |
-| `Api/Controllers/SystemControlController.cs` | System control HTTP endpoints |
+| `DTOs/System/ControlStatusDto.cs` | Status + Clipboard + AppLauncher response DTOs |
+| `Models/AppSettings.cs` | App settings including `List<LauncherApp> LauncherApps` |
+| `Api/Controllers/SystemControlController.cs` | System control HTTP endpoints including clipboard and app launcher CRUD |
 | `Helpers/PathSanitizer.cs` | Security — path traversal prevention |
 | `Helpers/JwtHelper.cs` | JWT generation + query-param support |
 
@@ -338,7 +344,7 @@ All protected (requires `Authorization: Bearer`):
 | `lib/router.dart` | go_router navigation config; page-transition helpers: `_fadeZoomPage` (fade+scale, used for `/welcome` and home shell), `_slideRightPage` (slide from right + fade, used for `/setup`), `_slideUpPage` (modal sheets) |
 | `lib/features/onboarding/welcome_screen.dart` | 4-step first-run wizard; writes `client_onboarding_completed` to SharedPreferences |
 | `lib/core/models/dashboard_models.dart` | `DashboardLayout`, `DashboardSection`, `DashboardItem`, `WidgetType`, `WidgetSize` |
-| `lib/core/models/control_status.dart` | `ControlStatus`, `BatteryStatus`, `VolumeStatus`, `CpuStatus`, `RamStatus`, `ScreenStatus` DTOs |
+| `lib/core/models/control_status.dart` | `ControlStatus`, `BatteryStatus` (+ temperature), `VolumeStatus`, `CpuStatus`, `RamStatus`, `ScreenStatus`, `PcClipboardStatus`, `ClipboardFormat`, `LauncherAppInfo`, `AppLauncherStatus` DTOs |
 | `lib/features/home/home_screen.dart` | Home screen — background image/video logic, AppBar with edit toggle |
 | `lib/features/home/dashboard_body.dart` | Switches between view and edit mode |
 | `lib/features/home/dashboard_section_view.dart` | Section renderer — widget grid, drag-and-drop, resize handle |
@@ -346,18 +352,20 @@ All protected (requires `Authorization: Bearer`):
 | `lib/features/home/dashboard_section_editor.dart` | Per-section widget list with resize/remove/reorder |
 | `lib/features/home/add_widget_bottom_sheet.dart` | Widget type picker bottom sheet |
 | `lib/features/home/add_section_dialog.dart` | New section dialog (custom name or My Bookmarks) |
-| `lib/features/home/widget_cards/battery_card.dart` | Battery level + charging state |
+| `lib/features/home/widget_cards/battery_card.dart` | Battery level + charging state + temperature (°C when available) |
 | `lib/features/home/widget_cards/cpu_card.dart` | CPU usage percentage bar |
 | `lib/features/home/widget_cards/ram_card.dart` | RAM used/total bar |
 | `lib/features/home/widget_cards/volume_card.dart` | Volume slider + mute toggle |
 | `lib/features/home/widget_cards/screen_lock_card.dart` | Lock / Wake buttons |
+| `lib/features/home/widget_cards/clipboard_card.dart` | Live PC clipboard preview; format icon (URL/code/text); one-tap copy to phone |
+| `lib/features/home/widget_cards/app_launcher_card.dart` | App launcher grid; running-process dots; long-press edit mode for add/remove |
 | `lib/features/home/widget_cards/bookmark_section_body.dart` | Bookmarked folders grid (extracted from home_screen) |
 | `lib/services/api_service.dart` | All HTTP calls to server; `buildThumbnailUriWithToken({quality, atSeconds})`; `getVideoDurationMs(path)` |
 | `lib/services/dashboard_layout_service.dart` | Dashboard layout persistence (`dashboard_layout_v1`) |
 | `lib/services/backup_restore_service.dart` | Backup/restore including dashboard layout |
 | `lib/services/auth_token_service.dart` | JWT storage and retrieval |
 | `lib/services/theme_service.dart` | Dark/light + accent colour |
-| `lib/providers/dashboard_providers.dart` | `dashboardLayoutProvider`, `controlStatusProvider` (5s poll), `dashboardEditModeProvider` |
+| `lib/providers/dashboard_providers.dart` | `dashboardLayoutProvider`, `controlStatusProvider` (5s poll), `dashboardEditModeProvider`, `serverClipboardProvider` (2s poll), `appLauncherProvider` (5s poll, exposes `refresh()`) |
 | `lib/providers/services_providers.dart` | All service providers including `dashboardLayoutServiceProvider` |
 | `lib/features/browser/split_browser_screen.dart` | Two-pane file browser; `SplitBrowserScreen`, `_BrowserPaneWidget`, draggable divider |
 | `lib/features/browser/video_timeline_strip.dart` | `VideoTimelineStrip` — 5 thumbnail strip at fixed fractions; `VideoTimelinePlaceholder` |

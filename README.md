@@ -20,7 +20,7 @@ A local-network home entertainment app. Run the server on Windows, Android, or m
 - Dark / Light / System colour mode
 - Video thumbnail generation via `video_thumbnail` (Android) or FFmpeg download (Windows/macOS)
 - Image thumbnail generation
-- **System telemetry:** Exposes live battery, CPU, RAM, volume, and screen-lock state to the client over the local network
+- **System telemetry:** Exposes live battery (with temperature), CPU, RAM, volume, screen-lock state, clipboard content, and app-launcher status to the client over the local network
 - Settings import / export
 
 > **Legacy server (recommended for Windows):** The original `PcIfy.Server` WinForms project (C# / .NET 10) is the stable option for Windows users while the Flutter server is in preview. It can be built and run independently from `src/PcIfy.Server`.
@@ -29,7 +29,7 @@ A local-network home entertainment app. Run the server on Windows, Android, or m
 - Clean file/folder browser with thumbnail grid
 - Resizable grid density (Compact / Normal / Large)
 - **Customizable home dashboard** — add, remove, rename, and reorder sections; drag widgets between sections; resize cards between half-width and full-width with an animated edge handle
-- **System widget cards:** Battery level, CPU usage, RAM usage, Volume slider + mute toggle, Screen Lock / Wake
+- **System widget cards:** Battery level + temperature, CPU usage, RAM usage, Volume slider + mute toggle, Screen Lock / Wake, **Clipboard** (live PC clipboard with one-tap copy to phone), **App Launcher** (grid of configured PC apps with running-process indicators)
 - Per-folder background image or video with crop/zoom customisation
 - In-app video streaming (seek/fast-forward without full download)
 - Split-pane video player with pinch zoom/pan and mute
@@ -84,7 +84,7 @@ A local-network home entertainment app. Run the server on Windows, Android, or m
 
 ### Customising the Home Dashboard
 
-The home screen starts with a "Server Overview" section (battery, volume, CPU, RAM, screen lock) and a "My Bookmarks" section.
+The home screen starts with a "Server Overview" section (battery, volume, CPU, RAM, screen lock) and a "My Bookmarks" section. Additional widgets — Clipboard, App Launcher, Disk Space, and Server Info — can be added from the widget picker.
 
 - Tap the **pencil icon** in the top bar to enter edit mode
 - **Reorder sections** by dragging the handle on the left
@@ -150,21 +150,29 @@ The client polls the server every 5 seconds for live device status. All endpoint
 
 | Method | Route | Description |
 |---|---|---|
-| `GET` | `/api/system/control/status` | Battery, CPU, RAM, volume, screen — each with `available: bool` |
+| `GET` | `/api/system/control/status` | Battery (+ temperature), CPU, RAM, volume, screen — each with `available: bool` |
 | `POST` | `/api/system/control/volume` | `{level: 0-100}` |
 | `POST` | `/api/system/control/mute` | `{muted: bool}` |
 | `POST` | `/api/system/control/lock` | Lock screen |
 | `POST` | `/api/system/control/wake` | Wake screen |
+| `GET` | `/api/system/control/clipboard` | PC clipboard text with format hint (`text`/`url`/`code`) |
+| `GET` | `/api/system/apps` | List of configured launcher apps with running-process state |
+| `POST` | `/api/system/apps/launch` | `{id}` — launch app by id |
+| `POST` | `/api/system/apps/add` | `{name, executablePath, processName?, iconKey?}` — add app to launcher |
+| `DELETE` | `/api/system/apps/{id}` | Remove app from launcher |
 
 Platform coverage:
 
 | Capability | Android | Windows | macOS |
 |---|---|---|---|
 | Battery | ✓ | ✓ (desktop = no battery) | ✓ |
+| Battery temperature | ✓ (`BatteryManager`) | ✓ (WMI `Win32_Battery`) | ✓ (IOKit) |
 | Volume / Mute | ✓ | ✓ | ✓ |
 | CPU usage | ✓ | ✓ | ✓ |
 | RAM usage | ✓ | ✓ | ✓ |
 | Screen lock | — | ✓ | ✓ |
 | Screen wake | ✓ | ✓ | ✓ |
+| Clipboard read | ✓ | ✓ | ✓ |
+| App launcher | — | ✓ | ✓ |
 
 See [CLAUDE.md](CLAUDE.md) for detailed developer documentation.
