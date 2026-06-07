@@ -40,6 +40,22 @@ class HttpServerService {
 
   HttpServerService(this.settings, this.logService, this.settingsService);
 
+  // Serialises concurrent add/remove launcher-app requests so a rapid sequence
+  // of mutations can't lose an update via the async read-modify-write pattern.
+  Future<void> _settingsMutex = Future.value();
+
+  Future<void> _mutateSettings(AppSettings Function(AppSettings) transform) async {
+    final prev = _settingsMutex;
+    final completer = Completer<void>();
+    _settingsMutex = completer.future;
+    try {
+      await prev;
+      await settingsService.update(transform(settingsService.settings));
+    } finally {
+      completer.complete();
+    }
+  }
+
   HttpServer? _server;
   String? _osDisplayName;
   final _stateController = StreamController<ServerState>.broadcast();
@@ -685,10 +701,9 @@ class HttpServerService {
         processName: body['processName'] as String?,
         iconKey: body['iconKey'] as String?,
       );
-      final updated = settingsService.settings.copyWith(
-        launcherApps: [...settingsService.settings.launcherApps, newApp],
+      await _mutateSettings(
+        (s) => s.copyWith(launcherApps: [...s.launcherApps, newApp]),
       );
-      await settingsService.update(updated);
       return _json(newApp.toJson());
     } catch (_) {
       return Response.internalServerError();
@@ -697,11 +712,14 @@ class HttpServerService {
 
   Future<Response> _handleRemoveApp(String id) async {
     try {
+      // Read current list before acquiring the lock so the 404 check is fast.
       final current = settingsService.settings.launcherApps;
-      final filtered = current.where((a) => a.id != id).toList();
-      if (filtered.length == current.length) return Response.notFound('App not found');
-      final updated = settingsService.settings.copyWith(launcherApps: filtered);
-      await settingsService.update(updated);
+      if (!current.any((a) => a.id == id)) return Response.notFound('App not found');
+      await _mutateSettings(
+        (s) => s.copyWith(
+          launcherApps: s.launcherApps.where((a) => a.id != id).toList(),
+        ),
+      );
       return _json({'ok': true});
     } catch (_) {
       return Response.internalServerError();

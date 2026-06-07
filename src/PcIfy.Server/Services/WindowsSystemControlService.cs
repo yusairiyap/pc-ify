@@ -1,5 +1,6 @@
 using System.Management;
 using System.Runtime.InteropServices;
+using System.Threading;
 using PcIfy.Server.DTOs.System;
 using PcIfy.Server.Models;
 using PcIfy.Server.Services.Interfaces;
@@ -71,11 +72,24 @@ public sealed class WindowsSystemControlService : ISystemControlService, IDispos
         try
         {
             string text = "";
-            var form = Application.OpenForms.Count > 0 ? Application.OpenForms[0] : null;
-            if (form != null && form.InvokeRequired)
-                form.Invoke(() => { text = Clipboard.GetText(); });
-            else
+            if (Thread.CurrentThread.GetApartmentState() == ApartmentState.STA)
+            {
                 text = Clipboard.GetText();
+            }
+            else
+            {
+                // Kestrel threads are MTA; clipboard requires STA.
+                // This also handles the minimize-to-tray case where OpenForms is empty.
+                using var ready = new ManualResetEventSlim(false);
+                var sta = new Thread(() =>
+                {
+                    try { text = Clipboard.GetText(); } catch { }
+                    finally { ready.Set(); }
+                });
+                sta.SetApartmentState(ApartmentState.STA);
+                sta.Start();
+                ready.Wait(TimeSpan.FromSeconds(2));
+            }
 
             if (string.IsNullOrEmpty(text))
                 return new ClipboardStatusDto("", "text", false);

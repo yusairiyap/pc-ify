@@ -11,8 +11,10 @@
 #include <flutter/standard_method_codec.h>
 #include <flutter/encodable_value.h>
 #include <pdh.h>
+#include <cwctype>
 #include <memory>
 #include <string>
+#include <unordered_set>
 
 #pragma comment(lib, "pdh.lib")
 #pragma comment(lib, "ole32.lib")
@@ -38,19 +40,19 @@ static double GetCpuUsage() {
 }
 
 static std::pair<int, bool> GetBatteryTemperatureWmi() {
-    HRESULT hr = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
-    bool needUninit = hr == S_OK || hr == S_FALSE;
-
+    // COM is already initialised (STA) by the Flutter engine on this thread.
+    // Do NOT call CoInitializeEx here — doing so with COINIT_MULTITHREADED on an
+    // STA thread returns RPC_E_CHANGED_MODE and leaves COM in an inconsistent state.
     IWbemLocator* pLoc = nullptr;
-    hr = CoCreateInstance(CLSID_WbemLocator, nullptr, CLSCTX_INPROC_SERVER,
-                          IID_IWbemLocator, (LPVOID*)&pLoc);
-    if (FAILED(hr)) { if (needUninit) CoUninitialize(); return {0, false}; }
+    HRESULT hr = CoCreateInstance(CLSID_WbemLocator, nullptr, CLSCTX_INPROC_SERVER,
+                                  IID_IWbemLocator, (LPVOID*)&pLoc);
+    if (FAILED(hr)) return {0, false};
 
     IWbemServices* pSvc = nullptr;
     hr = pLoc->ConnectServer(_bstr_t(L"ROOT\\CIMV2"), nullptr, nullptr, nullptr,
                              0, nullptr, nullptr, &pSvc);
     pLoc->Release();
-    if (FAILED(hr)) { if (needUninit) CoUninitialize(); return {0, false}; }
+    if (FAILED(hr)) return {0, false};
 
     CoSetProxyBlanket(pSvc, RPC_C_AUTHN_WINNT, RPC_C_AUTHZ_NONE, nullptr,
                       RPC_C_AUTHN_LEVEL_CALL, RPC_C_IMP_LEVEL_IMPERSONATE,
@@ -62,13 +64,15 @@ static std::pair<int, bool> GetBatteryTemperatureWmi() {
                          WBEM_FLAG_FORWARD_ONLY | WBEM_FLAG_RETURN_IMMEDIATELY,
                          nullptr, &pEnum);
     pSvc->Release();
-    if (FAILED(hr)) { if (needUninit) CoUninitialize(); return {0, false}; }
+    if (FAILED(hr)) return {0, false};
 
     IWbemClassObject* pObj = nullptr;
     ULONG ret = 0;
     int tempC = 0;
     bool found = false;
-    if (pEnum->Next(WBEM_INFINITE, 1, &pObj, &ret) == WBEM_S_NO_ERROR && ret > 0) {
+    // Use a 2-second timeout to avoid blocking the platform thread indefinitely
+    // if the WMI provider is slow or unavailable (e.g. no battery on desktop).
+    if (pEnum->Next(2000, 1, &pObj, &ret) == WBEM_S_NO_ERROR && ret > 0) {
         VARIANT vtProp;
         hr = pObj->Get(L"CurrentTemperature", 0, &vtProp, nullptr, nullptr);
         if (SUCCEEDED(hr) && vtProp.vt == VT_I4 && vtProp.intVal > 0) {
@@ -80,7 +84,6 @@ static std::pair<int, bool> GetBatteryTemperatureWmi() {
         pObj->Release();
     }
     pEnum->Release();
-    if (needUninit) CoUninitialize();
     return {tempC, found};
 }
 
@@ -236,36 +239,38 @@ static flutter::EncodableMap GetClipboard() {
     };
 }
 
-static bool IsProcessRunning(const std::wstring& processName) {
+// Build a set of running exe names (without extension, lowercased) from one snapshot.
+static std::unordered_set<std::wstring> GetRunningProcessNames() {
+    std::unordered_set<std::wstring> names;
     HANDLE snap = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
-    if (snap == INVALID_HANDLE_VALUE) return false;
+    if (snap == INVALID_HANDLE_VALUE) return names;
     PROCESSENTRY32W pe;
     pe.dwSize = sizeof(pe);
-    bool found = false;
     if (Process32FirstW(snap, &pe)) {
         do {
-            std::wstring exeName(pe.szExeFile);
-            // Strip extension for comparison
-            size_t dot = exeName.rfind(L'.');
-            if (dot != std::wstring::npos) exeName = exeName.substr(0, dot);
-            if (_wcsicmp(exeName.c_str(), processName.c_str()) == 0) {
-                found = true;
-                break;
-            }
+            std::wstring exe(pe.szExeFile);
+            size_t dot = exe.rfind(L'.');
+            if (dot != std::wstring::npos) exe = exe.substr(0, dot);
+            // Lowercase for case-insensitive lookup
+            for (auto& c : exe) c = towlower(c);
+            names.insert(std::move(exe));
         } while (Process32NextW(snap, &pe));
     }
     CloseHandle(snap);
-    return found;
+    return names;
 }
 
 static flutter::EncodableMap GetApps(const flutter::EncodableList& apps) {
+    // Take a single process snapshot for all apps rather than one per app.
+    const auto running = GetRunningProcessNames();
+
     flutter::EncodableList infos;
     for (const auto& appVal : apps) {
         const auto* app = std::get_if<flutter::EncodableMap>(&appVal);
         if (!app) continue;
 
         std::string id, name;
-        bool running = false;
+        bool isRunning = false;
         flutter::EncodableValue iconKeyVal;
 
         auto idIt = app->find(flutter::EncodableValue("id"));
@@ -286,7 +291,8 @@ static flutter::EncodableMap GetApps(const flutter::EncodableList& apps) {
                     int len = MultiByteToWideChar(CP_UTF8, 0, procStr->c_str(), -1, nullptr, 0);
                     std::wstring wname(len - 1, L'\0');
                     MultiByteToWideChar(CP_UTF8, 0, procStr->c_str(), -1, &wname[0], len);
-                    running = IsProcessRunning(wname);
+                    for (auto& c : wname) c = towlower(c);
+                    isRunning = running.count(wname) > 0;
                 }
             }
         }
@@ -294,7 +300,7 @@ static flutter::EncodableMap GetApps(const flutter::EncodableList& apps) {
         flutter::EncodableMap info = {
             {flutter::EncodableValue("id"),      flutter::EncodableValue(id)},
             {flutter::EncodableValue("name"),    flutter::EncodableValue(name)},
-            {flutter::EncodableValue("running"), flutter::EncodableValue(running)},
+            {flutter::EncodableValue("running"), flutter::EncodableValue(isRunning)},
         };
         if (std::holds_alternative<std::string>(iconKeyVal)) {
             info[flutter::EncodableValue("iconKey")] = iconKeyVal;

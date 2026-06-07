@@ -87,7 +87,7 @@ public class SystemControlController : ControllerBase
         return Ok(newApp);
     }
 
-    [HttpDelete("/api/system/apps/{id}")]
+    [HttpDelete(ApiRoutes.SystemAppsDelete)]
     public IActionResult RemoveApp(string id)
     {
         var removed = _settings.LauncherApps.RemoveAll(a => a.Id == id);

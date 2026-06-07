@@ -31,4 +31,5 @@ public static class ApiRoutes
     public const string SystemApps                 = "/api/system/apps";
     public const string SystemAppsLaunch           = "/api/system/apps/launch";
     public const string SystemAppsAdd              = "/api/system/apps/add";
+    public const string SystemAppsDelete           = "/api/system/apps/{id}";
 }

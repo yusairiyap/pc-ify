@@ -8,7 +8,7 @@ import 'log_providers.dart';
 final httpServerServiceProvider = Provider<HttpServerService>((ref) {
   final settings = ref.watch(settingsProvider);
   final logSvc = ref.watch(connectionLogServiceProvider);
-  final settingsSvc = ref.watch(settingsServiceProvider);
+  final settingsSvc = ref.read(settingsServiceProvider);
   final svc = HttpServerService(settings, logSvc, settingsSvc);
   ref.onDispose(() async {
     await svc.dispose();
