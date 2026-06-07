@@ -312,10 +312,7 @@ class _WidgetGridState extends ConsumerState<_WidgetGrid> {
 
   @override
   Widget build(BuildContext context) {
-    if (_items.isEmpty) {
-      if (widget.editMode) return _appendDropZone(context, isEmpty: true);
-      return const SizedBox.shrink();
-    }
+    if (_items.isEmpty) return const SizedBox.shrink();
 
     final rows = <Widget>[];
     final pending = <(int, DashboardItem)>[];
@@ -342,8 +339,6 @@ class _WidgetGridState extends ConsumerState<_WidgetGrid> {
     }
     if (pending.isNotEmpty) rows.add(_halfRow(pending[0], null));
 
-    if (widget.editMode) rows.add(_appendDropZone(context));
-
     final layoutKey = _items
         .map((i) => '${i.id}:${i.effectiveSize.name}')
         .join(',');
@@ -367,109 +362,11 @@ class _WidgetGridState extends ConsumerState<_WidgetGrid> {
             const SizedBox(width: 8),
             if (b != null)
               Expanded(child: widget.editMode ? _draggableCard(b.$1, b.$2) : _buildCard(b.$2))
-            else if (widget.editMode)
-              Expanded(child: _emptySlotTarget(a.$1 + 1))
             else
               const Expanded(child: SizedBox.shrink()),
           ],
         ),
       );
-
-  // ── Empty drop zones ──────────────────────────────────────────────────────
-
-  Widget _emptySlotTarget(int insertIdx) {
-    return DragTarget<_DragData>(
-      onWillAcceptWithDetails: (d) => !d.data.item.effectiveSize.isWide,
-      onLeave: (_) => setState(() => _hoverIndex = null),
-      onAcceptWithDetails: (d) {
-        if (d.data.sectionId == widget.section.id) {
-          _moveSameSection(d.data.fromIndex, insertIdx.clamp(0, _items.length));
-        } else {
-          _moveCrossSection(d.data, insertIdx.clamp(0, _items.length));
-        }
-        setState(() {
-          _draggingIndex = null;
-          _hoverIndex = null;
-        });
-      },
-      builder: (ctx, candidates, __) {
-        final cs = Theme.of(ctx).colorScheme;
-        final isHovering = candidates.isNotEmpty;
-        return AnimatedContainer(
-          duration: const Duration(milliseconds: 150),
-          height: _kNormalMinHeight,
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(
-              color: isHovering
-                  ? cs.primary
-                  : cs.outline.withValues(alpha: 0.25),
-              width: isHovering ? 2 : 1,
-            ),
-            color: isHovering
-                ? cs.primaryContainer.withValues(alpha: 0.2)
-                : Colors.transparent,
-          ),
-          child: Center(
-            child: Icon(
-              Icons.add,
-              color: isHovering ? cs.primary : cs.outline.withValues(alpha: 0.4),
-              size: 20,
-            ),
-          ),
-        );
-      },
-    );
-  }
-
-  Widget _appendDropZone(BuildContext context, {bool isEmpty = false}) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 4, 16, 4),
-      child: DragTarget<_DragData>(
-        onWillAcceptWithDetails: (_) => true,
-        onAcceptWithDetails: (d) {
-          if (d.data.sectionId == widget.section.id) {
-            _moveSameSection(d.data.fromIndex, _items.length - (isEmpty ? 0 : 1));
-          } else {
-            _moveCrossSection(d.data, _items.length);
-          }
-          setState(() {
-            _draggingIndex = null;
-            _hoverIndex = null;
-          });
-        },
-        builder: (ctx, candidates, __) {
-          final cs = Theme.of(ctx).colorScheme;
-          final isHovering = candidates.isNotEmpty;
-          return AnimatedContainer(
-            duration: const Duration(milliseconds: 150),
-            height: isEmpty ? 64 : 40,
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(
-                color: isHovering
-                    ? cs.primary
-                    : cs.outline.withValues(alpha: 0.25),
-                width: isHovering ? 2 : 1,
-              ),
-              color: isHovering
-                  ? cs.primaryContainer.withValues(alpha: 0.2)
-                  : Colors.transparent,
-            ),
-            child: Center(
-              child: Text(
-                isHovering ? 'Drop here' : 'Drop widget here',
-                style: TextStyle(
-                  fontSize: 11,
-                  color: isHovering ? cs.primary : cs.outline.withValues(alpha: 0.5),
-                ),
-              ),
-            ),
-          );
-        },
-      ),
-    );
-  }
 
   // ── Draggable card (edit mode only) ──────────────────────────────────────
 
