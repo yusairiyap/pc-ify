@@ -21,7 +21,8 @@ public class SettingsService : ISettingsService
         {
             if (!File.Exists(SettingsFilePath)) return CreateDefault();
             var json = File.ReadAllText(SettingsFilePath);
-            return JsonSerializer.Deserialize<AppSettings>(json) ?? CreateDefault();
+            var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
+            return JsonSerializer.Deserialize<AppSettings>(json, options) ?? CreateDefault();
         }
         catch
         {

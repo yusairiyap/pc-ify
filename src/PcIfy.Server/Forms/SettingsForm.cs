@@ -17,6 +17,7 @@ public partial class SettingsForm : Form
     private string? _currentUsername;
     // Suppress SelectedIndexChanged handler re-entrancy while loading.
     private bool _loadingUserDirs;
+    private bool _savedExplicitly;
 
     public SettingsForm(AppSettings settings, ISettingsService settingsService, IKestrelHostService kestrel)
     {
@@ -63,6 +64,7 @@ public partial class SettingsForm : Form
         _settings.AutoStart = chkAutoStart.Checked;
         _settings.ServerName = txtServerName.Text.Trim();
         _settings.ColorMode = cmbColorMode.SelectedItem?.ToString() ?? "System";
+        _savedExplicitly = true;
         _settingsService.Save(_settings);
 
         Program.ApplyColorMode(_settings.ColorMode);
@@ -73,6 +75,16 @@ public partial class SettingsForm : Form
 
         DialogResult = DialogResult.OK;
         Close();
+    }
+
+    protected override void OnFormClosing(FormClosingEventArgs e)
+    {
+        base.OnFormClosing(e);
+        if (!_savedExplicitly)
+        {
+            SaveCurrentUserDirs();
+            _settingsService.Save(_settings);
+        }
     }
 
     // ── Directories ───────────────────────────────────────────────────────────
