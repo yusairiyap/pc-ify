@@ -88,6 +88,21 @@ final videoRepeatProvider = StateProvider<bool>((ref) {
   return ref.watch(sharedPrefsProvider).getBool('video_auto_repeat') ?? false;
 });
 
+// Persisted timeline thumbnail count (3–8). Default: 5.
+final timelineThumbnailCountProvider = StateProvider<int>((ref) {
+  return ref.watch(sharedPrefsProvider).getInt('timeline_thumbnail_count') ?? 5;
+});
+
+// Persisted timeline thumbnail height in logical pixels. Default: 88.
+final timelineThumbnailHeightProvider = StateProvider<double>((ref) {
+  return (ref.watch(sharedPrefsProvider).getInt('timeline_thumbnail_height') ?? 88).toDouble();
+});
+
+// Persisted timeline strip visibility toggle. Default: false.
+final timelineStripVisibleProvider = StateProvider<bool>((ref) {
+  return ref.watch(sharedPrefsProvider).getBool('timeline_strip_visible') ?? false;
+});
+
 final dashboardLayoutServiceProvider = Provider<DashboardLayoutService>((ref) {
   return DashboardLayoutService(ref.watch(sharedPrefsProvider));
 });

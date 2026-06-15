@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' show atan2;
 
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
@@ -8,6 +9,8 @@ import 'package:media_kit_video/media_kit_video.dart';
 
 import '../../core/models/file_entry.dart';
 import '../../providers/services_providers.dart';
+import '../browser/video_timeline_strip.dart'
+    show VideoPlayerTimelineStrip;
 
 // ─── Data ────────────────────────────────────────────────────────────────────
 
@@ -114,7 +117,6 @@ class _SplitViewScreenState extends ConsumerState<SplitViewScreen> {
         if (match != null) {
           paneItems.add(match);
         } else {
-          // Fallback: use pre-built URI if available, otherwise fetch
           final uri = sel.streamUri ?? await api.buildStreamUriWithToken(sel.filePath);
           final thumb = sel.thumbnailUri ??
               (sel.filePath.isNotEmpty
@@ -149,7 +151,7 @@ class _SplitViewScreenState extends ConsumerState<SplitViewScreen> {
 
   void _onDrag(int dividerIndex, double delta, double totalSize) {
     setState(() {
-      const minWeight = 8.0; // ~80dp equivalent in flex units
+      const minWeight = 8.0;
       final totalWeight = _weights.reduce((a, b) => a + b);
       final deltaWeight = (delta / totalSize) * totalWeight;
       final left = _weights[dividerIndex] + deltaWeight;
@@ -203,17 +205,14 @@ class _SplitViewScreenState extends ConsumerState<SplitViewScreen> {
           ),
         ),
       ),
-      body: Listener(
-        behavior: HitTestBehavior.translucent,
-        onPointerDown: (_) => _resetAppBarTimer(),
-        child: !_loaded
-            ? Center(
-                child: _error != null
-                    ? Text(_error!, style: const TextStyle(color: Colors.white))
-                    : const CircularProgressIndicator(color: Colors.white),
-              )
-            : _buildPanes(context, isHorizontal),
-      ),
+      // No outer Listener needed — each pane propagates to _resetAppBarTimer
+      body: !_loaded
+          ? Center(
+              child: _error != null
+                  ? Text(_error!, style: const TextStyle(color: Colors.white))
+                  : const CircularProgressIndicator(color: Colors.white),
+            )
+          : _buildPanes(context, isHorizontal),
     );
   }
 
@@ -227,12 +226,12 @@ class _SplitViewScreenState extends ConsumerState<SplitViewScreen> {
           startItem: _paneItems[i],
           allMedia: _allMedia,
           paneIndex: i,
+          onInteract: _resetAppBarTimer,
         ),
     ];
 
     if (count == 1) return panes.first;
 
-    // Build panes interleaved with draggable dividers
     return LayoutBuilder(builder: (context, constraints) {
       final totalSize = !isHorizontal ? constraints.maxHeight : constraints.maxWidth;
       final children = <Widget>[];
@@ -295,10 +294,13 @@ class _SplitPane extends ConsumerStatefulWidget {
     required this.startItem,
     required this.allMedia,
     required this.paneIndex,
+    required this.onInteract,
   });
   final _PaneItem startItem;
   final List<_PaneItem> allMedia;
   final int paneIndex;
+  /// Called on any pointer-down so the outer screen's AppBar timer resets too.
+  final VoidCallback onInteract;
 
   @override
   ConsumerState<_SplitPane> createState() => _SplitPaneState();
@@ -316,6 +318,7 @@ class _SplitPaneState extends ConsumerState<_SplitPane>
   final _zoomedNotifier = ValueNotifier(false);
   bool _isVideoSeeking = false;
   bool _controlsVisible = true;
+  bool _showTimelineStrip = false; // initialized from pref in initState
   Timer? _hideTimer;
   DateTime? _controlsShownAt;
   Offset? _tapStart;
@@ -336,6 +339,7 @@ class _SplitPaneState extends ConsumerState<_SplitPane>
   @override
   void initState() {
     super.initState();
+    _showTimelineStrip = ref.read(timelineStripVisibleProvider);
     final startIdx = widget.allMedia.indexWhere(
         (m) => m.streamUri == widget.startItem.streamUri);
     _currentIndex = startIdx < 0 ? 0 : startIdx;
@@ -389,6 +393,8 @@ class _SplitPaneState extends ConsumerState<_SplitPane>
       setState(() => _controlsVisible = true);
       _controlsShownAt = DateTime.now();
     }
+    // Propagate to outer screen so the "N items" AppBar timer also resets
+    widget.onInteract();
   }
 
   void _onPointerMove(PointerMoveEvent e) {
@@ -439,7 +445,6 @@ class _SplitPaneState extends ConsumerState<_SplitPane>
       c.value = Matrix4.identity();
     }
     _resetHideTimer();
-    // Scroll carousel to keep selected thumb visible
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!_carouselCtrl.hasClients) return;
       const itemW = _thumbSize + _thumbMargin * 2;
@@ -562,48 +567,96 @@ class _SplitPaneState extends ConsumerState<_SplitPane>
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          // Video seek bar + play/pause
           if (item.isVideo)
             ValueListenableBuilder<Player?>(
               valueListenable: _currentPlayerNotifier,
               builder: (_, player, __) {
                 if (player == null) return const SizedBox(height: 36);
-                return Row(
+                final durationMs = player.state.duration.inMilliseconds;
+                final api = ref.read(apiServiceProvider);
+                final quality = ref.read(sharedPrefsProvider).getInt('thumbnail_quality') ?? 50;
+                final tlCount = ref.read(timelineThumbnailCountProvider);
+                final tlHeight = ref.read(timelineThumbnailHeightProvider);
+                return Column(
+                  mainAxisSize: MainAxisSize.min,
                   children: [
-                    StreamBuilder<bool>(
-                      stream: player.stream.playing,
-                      initialData: player.state.playing,
-                      builder: (_, snap) => IconButton(
-                        icon: Icon(
-                          snap.data == true
-                              ? Icons.pause_rounded
-                              : Icons.play_arrow_rounded,
-                          color: Colors.white,
-                          size: 20,
-                        ),
-                        onPressed: () => snap.data == true
-                            ? player.pause()
-                            : player.play(),
-                      ),
+                    // Collapsible timeline strip
+                    AnimatedSize(
+                      duration: const Duration(milliseconds: 220),
+                      curve: Curves.easeInOut,
+                      child: _showTimelineStrip && durationMs > 0
+                          ? Padding(
+                              padding: const EdgeInsets.fromLTRB(8, 8, 8, 0),
+                              child: VideoPlayerTimelineStrip(
+                                player: player,
+                                durationMs: durationMs,
+                                filePath: items[_currentIndex].streamUri,
+                                api: api,
+                                quality: quality,
+                                count: tlCount,
+                                height: tlHeight,
+                                onInteract: () {
+                                  _resetHideTimer();
+                                  widget.onInteract();
+                                },
+                              ),
+                            )
+                          : const SizedBox.shrink(),
                     ),
-                    Expanded(
-                      child: LayoutBuilder(
-                        builder: (_, c) => _buildSeekBar(player, c.maxWidth - 60),
-                      ),
-                    ),
-                    ValueListenableBuilder<bool>(
-                      valueListenable: _muteNotifier,
-                      builder: (_, isMuted, __) => IconButton(
-                        icon: Icon(
-                          isMuted
-                              ? Icons.volume_off_rounded
-                              : Icons.volume_up_rounded,
-                          color: Colors.white,
-                          size: 20,
+                    // Controls row
+                    Row(
+                      children: [
+                        StreamBuilder<bool>(
+                          stream: player.stream.playing,
+                          initialData: player.state.playing,
+                          builder: (_, snap) => IconButton(
+                            icon: Icon(
+                              snap.data == true
+                                  ? Icons.pause_rounded
+                                  : Icons.play_arrow_rounded,
+                              color: Colors.white,
+                              size: 20,
+                            ),
+                            onPressed: () => snap.data == true
+                                ? player.pause()
+                                : player.play(),
+                          ),
                         ),
-                        onPressed: () =>
-                            _muteNotifier.value = !_muteNotifier.value,
-                      ),
+                        Expanded(
+                          child: LayoutBuilder(
+                            builder: (_, c) => _buildSeekBar(player, c.maxWidth - 80),
+                          ),
+                        ),
+                        // Timeline toggle
+                        IconButton(
+                          tooltip: _showTimelineStrip ? 'Hide timeline' : 'Show timeline',
+                          icon: Icon(
+                            Icons.view_timeline_outlined,
+                            color: _showTimelineStrip ? Colors.white : Colors.white38,
+                            size: 20,
+                          ),
+                          onPressed: () {
+                            final next = !_showTimelineStrip;
+                            setState(() => _showTimelineStrip = next);
+                            ref.read(timelineStripVisibleProvider.notifier).state = next;
+                            ref.read(sharedPrefsProvider).setBool('timeline_strip_visible', next);
+                          },
+                        ),
+                        ValueListenableBuilder<bool>(
+                          valueListenable: _muteNotifier,
+                          builder: (_, isMuted, __) => IconButton(
+                            icon: Icon(
+                              isMuted
+                                  ? Icons.volume_off_rounded
+                                  : Icons.volume_up_rounded,
+                              color: Colors.white,
+                              size: 20,
+                            ),
+                            onPressed: () =>
+                                _muteNotifier.value = !_muteNotifier.value,
+                          ),
+                        ),
+                      ],
                     ),
                   ],
                 );
@@ -691,24 +744,12 @@ class _SplitPaneState extends ConsumerState<_SplitPane>
                     muteNotifier: _muteNotifier,
                   );
                 }
-                return GestureDetector(
+                return _PaneImagePage(
+                  key: ValueKey('pane${widget.paneIndex}_image_$i'),
+                  streamUri: item.streamUri,
+                  transformationController: _tfControllerFor(i),
                   onDoubleTapDown: (d) => _doubleTapPos = d.localPosition,
                   onDoubleTap: () => _handleDoubleTap(i),
-                  child: InteractiveViewer(
-                    transformationController: _tfControllerFor(i),
-                    minScale: 1.0,
-                    maxScale: 5.0,
-                    child: Center(
-                      child: CachedNetworkImage(
-                        imageUrl: item.streamUri,
-                        fit: BoxFit.contain,
-                        placeholder: (_, __) => const Center(
-                            child: CircularProgressIndicator(color: Colors.white)),
-                        errorWidget: (_, __, ___) =>
-                            const Icon(Icons.broken_image, color: Colors.white54, size: 48),
-                      ),
-                    ),
-                  ),
                 );
               },
             ),
@@ -736,6 +777,89 @@ class _SplitPaneState extends ConsumerState<_SplitPane>
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+// ─── Pane image page (supports rotation) ──────────────────────────────────────
+
+class _PaneImagePage extends StatefulWidget {
+  const _PaneImagePage({
+    super.key,
+    required this.streamUri,
+    required this.transformationController,
+    required this.onDoubleTapDown,
+    required this.onDoubleTap,
+  });
+  final String streamUri;
+  final TransformationController transformationController;
+  final void Function(TapDownDetails) onDoubleTapDown;
+  final VoidCallback onDoubleTap;
+
+  @override
+  State<_PaneImagePage> createState() => _PaneImagePageState();
+}
+
+class _PaneImagePageState extends State<_PaneImagePage> {
+  double _rotation = 0.0;
+  double _baseRotation = 0.0;
+  double? _pinchStartAngle;
+  final Map<int, Offset> _activePointers = {};
+
+  void _handlePointerDown(PointerDownEvent e) {
+    _activePointers[e.pointer] = e.localPosition;
+  }
+
+  void _handlePointerMove(PointerMoveEvent e) {
+    _activePointers[e.pointer] = e.localPosition;
+    if (_activePointers.length >= 2) {
+      final pts = _activePointers.values.toList();
+      final diff = pts[0] - pts[1];
+      final currentAngle = atan2(diff.dy, diff.dx);
+      _pinchStartAngle ??= currentAngle;
+      final newRotation = _baseRotation + (currentAngle - _pinchStartAngle!);
+      if (newRotation != _rotation) setState(() => _rotation = newRotation);
+    }
+  }
+
+  void _handlePointerEnd(int pointer) {
+    _activePointers.remove(pointer);
+    if (_activePointers.length < 2) {
+      _baseRotation = _rotation;
+      _pinchStartAngle = null;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Listener(
+      behavior: HitTestBehavior.translucent,
+      onPointerDown: _handlePointerDown,
+      onPointerMove: _handlePointerMove,
+      onPointerUp: (e) => _handlePointerEnd(e.pointer),
+      onPointerCancel: (e) => _handlePointerEnd(e.pointer),
+      child: Transform.rotate(
+        angle: _rotation,
+        child: GestureDetector(
+          onDoubleTapDown: widget.onDoubleTapDown,
+          onDoubleTap: widget.onDoubleTap,
+          child: InteractiveViewer(
+            transformationController: widget.transformationController,
+            minScale: 1.0,
+            maxScale: 5.0,
+            child: Center(
+              child: CachedNetworkImage(
+                imageUrl: widget.streamUri,
+                fit: BoxFit.contain,
+                placeholder: (_, __) => const Center(
+                    child: CircularProgressIndicator(color: Colors.white)),
+                errorWidget: (_, __, ___) =>
+                    const Icon(Icons.broken_image, color: Colors.white54, size: 48),
+              ),
+            ),
+          ),
+        ),
       ),
     );
   }
@@ -769,9 +893,12 @@ class _PaneVideoPageState extends State<_PaneVideoPage> {
   late final VideoController _controller;
   bool _ready = false;
 
-  // Pinch zoom / pan state
+  // Pinch zoom / pan / rotate state
   double _scale = 1.0;
   Offset _offset = Offset.zero;
+  double _rotation = 0.0;
+  double _baseRotation = 0.0;
+  double? _pinchStartAngle;
   final _activePointers = <int, Offset>{};
   double? _pinchStartDist;
   double? _pinchStartScale;
@@ -827,7 +954,10 @@ class _PaneVideoPageState extends State<_PaneVideoPage> {
     setState(() {
       _scale = 1.0;
       _offset = Offset.zero;
+      _rotation = 0.0;
+      _baseRotation = 0.0;
     });
+    _pinchStartAngle = null;
     widget.zoomedNotifier.value = false;
   }
 
@@ -839,15 +969,19 @@ class _PaneVideoPageState extends State<_PaneVideoPage> {
     _activePointers[e.pointer] = e.localPosition;
     if (_activePointers.length == 2) {
       final pts = _activePointers.values.toList();
-      final dist = (pts[0] - pts[1]).distance;
+      final diff = pts[0] - pts[1];
+      final dist = diff.distance;
       if (_pinchStartDist == null) {
         _pinchStartDist = dist;
         _pinchStartScale = _scale;
       } else {
         final newScale =
             (_pinchStartScale! * dist / _pinchStartDist!).clamp(1.0, 5.0);
+        final currentAngle = atan2(diff.dy, diff.dx);
+        _pinchStartAngle ??= currentAngle;
         setState(() {
           _scale = newScale;
+          _rotation = _baseRotation + (currentAngle - _pinchStartAngle!);
           if (newScale <= 1.0) _offset = Offset.zero;
         });
         widget.zoomedNotifier.value = newScale > 1.01;
@@ -862,6 +996,8 @@ class _PaneVideoPageState extends State<_PaneVideoPage> {
     if (_activePointers.length < 2) {
       _pinchStartDist = null;
       _pinchStartScale = null;
+      _baseRotation = _rotation;
+      _pinchStartAngle = null;
     }
     if (_scale <= 1.01) _resetZoom();
   }
@@ -904,50 +1040,51 @@ class _PaneVideoPageState extends State<_PaneVideoPage> {
 
   @override
   Widget build(BuildContext context) {
-    return LayoutBuilder(builder: (context, constraints) {
-      final w = constraints.maxWidth;
-      return Stack(
-        children: [
-          Transform.translate(
-            offset: _offset,
+    final w = MediaQuery.sizeOf(context).width;
+    return Stack(
+      children: [
+        Transform.translate(
+          offset: _offset,
+          child: Transform.rotate(
+            angle: _rotation,
             child: Transform.scale(
               scale: _scale,
               child: Video(controller: _controller, controls: NoVideoControls),
             ),
           ),
-          Listener(
-            behavior: HitTestBehavior.translucent,
-            onPointerDown: _handlePointerDown,
-            onPointerMove: _handlePointerMove,
-            onPointerUp: (e) => _handlePointerEnd(e.pointer),
-            onPointerCancel: (e) => _handlePointerEnd(e.pointer),
-            child: const SizedBox.expand(),
+        ),
+        Listener(
+          behavior: HitTestBehavior.translucent,
+          onPointerDown: _handlePointerDown,
+          onPointerMove: _handlePointerMove,
+          onPointerUp: (e) => _handlePointerEnd(e.pointer),
+          onPointerCancel: (e) => _handlePointerEnd(e.pointer),
+          child: const SizedBox.expand(),
+        ),
+        GestureDetector(
+          behavior: HitTestBehavior.translucent,
+          onDoubleTapDown: (d) => _doubleTapPos = d.localPosition,
+          onDoubleTap: () {
+            final pos = _doubleTapPos;
+            if (pos == null) return;
+            _doubleTapSeek(pos.dx < w / 2);
+          },
+          child: const SizedBox.expand(),
+        ),
+        if (_seekLeft)
+          Positioned(
+            left: 0, top: 0, bottom: 0,
+            width: w / 2,
+            child: const _SeekIndicator(left: true),
           ),
-          GestureDetector(
-            behavior: HitTestBehavior.translucent,
-            onDoubleTapDown: (d) => _doubleTapPos = d.localPosition,
-            onDoubleTap: () {
-              final pos = _doubleTapPos;
-              if (pos == null) return;
-              _doubleTapSeek(pos.dx < w / 2);
-            },
-            child: const SizedBox.expand(),
+        if (_seekRight)
+          Positioned(
+            right: 0, top: 0, bottom: 0,
+            width: w / 2,
+            child: const _SeekIndicator(left: false),
           ),
-          if (_seekLeft)
-            Positioned(
-              left: 0, top: 0, bottom: 0,
-              width: w / 2,
-              child: const _SeekIndicator(left: true),
-            ),
-          if (_seekRight)
-            Positioned(
-              right: 0, top: 0, bottom: 0,
-              width: w / 2,
-              child: const _SeekIndicator(left: false),
-            ),
-        ],
-      );
-    });
+      ],
+    );
   }
 }
 

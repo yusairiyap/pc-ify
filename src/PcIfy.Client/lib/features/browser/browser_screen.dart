@@ -1569,8 +1569,10 @@ class _BrowserLoadedState extends ConsumerState<_BrowserLoaded> {
   ) async {
     final e = item.entry;
     final api = ref.read(apiServiceProvider);
-    final quality =
-        ref.read(sharedPrefsProvider).getInt('thumbnail_quality') ?? 50;
+    final prefs = ref.read(sharedPrefsProvider);
+    final quality = prefs.getInt('thumbnail_quality') ?? 50;
+    final tlCount = prefs.getInt('timeline_thumbnail_count') ?? 5;
+    final tlHeight = (prefs.getInt('timeline_thumbnail_height') ?? 100).toDouble();
 
     return showModalBottomSheet<String>(
       context: context,
@@ -1598,7 +1600,7 @@ class _BrowserLoadedState extends ConsumerState<_BrowserLoaded> {
                   builder: (_, snap) {
                     final durationMs = snap.data ?? 0;
                     if (snap.connectionState == ConnectionState.waiting) {
-                      return const VideoTimelinePlaceholder();
+                      return VideoTimelinePlaceholder(count: tlCount, height: tlHeight);
                     }
                     if (durationMs <= 0) return const SizedBox.shrink();
                     return VideoTimelineStrip(
@@ -1606,6 +1608,8 @@ class _BrowserLoadedState extends ConsumerState<_BrowserLoaded> {
                       durationMs: durationMs,
                       api: api,
                       quality: quality,
+                      count: tlCount,
+                      height: tlHeight,
                       onSeekTap: (posMs) =>
                           Navigator.pop(sheetCtx, 'seek:$posMs'),
                     );
