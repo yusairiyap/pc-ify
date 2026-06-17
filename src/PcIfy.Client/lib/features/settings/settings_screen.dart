@@ -22,6 +22,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   late BoxFit _videoFit;
   late bool _videoRepeat;
   late int _thumbnailQuality;
+  late int _timelineCount;
+  late int _timelineHeight;
   late AppLockType _lockType;
   late int _lockGrace;
 
@@ -39,6 +41,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     };
     _videoRepeat = prefs.getBool('video_auto_repeat') ?? false;
     _thumbnailQuality = prefs.getInt('thumbnail_quality') ?? 50;
+    _timelineCount = prefs.getInt('timeline_thumbnail_count') ?? 5;
+    _timelineHeight = prefs.getInt('timeline_thumbnail_height') ?? 88;
     final lockService = ref.read(appLockServiceProvider);
     _lockType = lockService.getLockType();
     _lockGrace = lockService.gracePeriodSeconds;
@@ -84,6 +88,18 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   void _onThumbnailQualityChanged(int quality) {
     setState(() => _thumbnailQuality = quality);
     ref.read(sharedPrefsProvider).setInt('thumbnail_quality', quality);
+  }
+
+  void _onTimelineCountChanged(int count) {
+    setState(() => _timelineCount = count);
+    ref.read(sharedPrefsProvider).setInt('timeline_thumbnail_count', count);
+    ref.read(timelineThumbnailCountProvider.notifier).state = count;
+  }
+
+  void _onTimelineHeightChanged(int height) {
+    setState(() => _timelineHeight = height);
+    ref.read(sharedPrefsProvider).setInt('timeline_thumbnail_height', height);
+    ref.read(timelineThumbnailHeightProvider.notifier).state = height.toDouble();
   }
 
   Future<void> _logout() async {
@@ -215,7 +231,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 ),
                 const Divider(height: 1, indent: 16, endIndent: 16),
                 Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -240,6 +256,72 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                           selected: {_thumbnailQuality},
                           onSelectionChanged: (v) =>
                               _onThumbnailQualityChanged(v.first),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const Divider(height: 1, indent: 16, endIndent: 16),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('Timeline Thumbnails',
+                          style: Theme.of(context).textTheme.labelLarge),
+                      const SizedBox(height: 2),
+                      Text(
+                        'Number of frames shown in the video timeline strip',
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                      const SizedBox(height: 10),
+                      SizedBox(
+                        width: double.infinity,
+                        child: SegmentedButton<int>(
+                          showSelectedIcon: false,
+                          segments: const [
+                            ButtonSegment(value: 3, label: Text('3')),
+                            ButtonSegment(value: 4, label: Text('4')),
+                            ButtonSegment(value: 5, label: Text('5')),
+                            ButtonSegment(value: 6, label: Text('6')),
+                            ButtonSegment(value: 7, label: Text('7')),
+                            ButtonSegment(value: 8, label: Text('8')),
+                          ],
+                          selected: {_timelineCount},
+                          onSelectionChanged: (v) =>
+                              _onTimelineCountChanged(v.first),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const Divider(height: 1, indent: 16, endIndent: 16),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('Timeline Height',
+                          style: Theme.of(context).textTheme.labelLarge),
+                      const SizedBox(height: 2),
+                      Text(
+                        'Size of each frame in the timeline strip',
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                      const SizedBox(height: 10),
+                      SizedBox(
+                        width: double.infinity,
+                        child: SegmentedButton<int>(
+                          showSelectedIcon: false,
+                          segments: const [
+                            ButtonSegment(value: 60, label: Text('Small')),
+                            ButtonSegment(value: 88, label: Text('Medium')),
+                            ButtonSegment(value: 120, label: Text('Large')),
+                            ButtonSegment(value: 160, label: Text('XLarge')),
+                          ],
+                          selected: {_timelineHeight},
+                          onSelectionChanged: (v) =>
+                              _onTimelineHeightChanged(v.first),
                         ),
                       ),
                     ],

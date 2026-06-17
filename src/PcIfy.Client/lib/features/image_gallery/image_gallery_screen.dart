@@ -9,9 +9,12 @@ import 'package:media_kit/media_kit.dart';
 import 'package:media_kit_video/media_kit_video.dart';
 import '../../services/pip_service.dart';
 
+import 'dart:math' show atan2;
+
 import '../../core/models/file_entry.dart';
 import '../../providers/services_providers.dart';
-import '../../services/api_service.dart' show ApiService;
+import '../browser/video_timeline_strip.dart'
+    show VideoPlayerTimelineStrip;
 
 // --- Data model ---
 
@@ -107,7 +110,7 @@ class _ImageGalleryScreenState extends ConsumerState<ImageGalleryScreen>
   int? _zoomAnimIndex;
   Offset? _doubleTapPos;
 
-  bool _showTimelineStrip = false;
+  bool _showTimelineStrip = false; // initialized from pref in initState
 
   static const _thumbSize = 60.0;
   static const _thumbMargin = 4.0;
@@ -153,6 +156,7 @@ class _ImageGalleryScreenState extends ConsumerState<ImageGalleryScreen>
       duration: const Duration(milliseconds: 250),
       vsync: this,
     )..addListener(_onDismissSnapTick);
+    _showTimelineStrip = ref.read(timelineStripVisibleProvider);
     if (Platform.isAndroid) {
       PipService.onPipChanged = (inPip) {
         if (mounted) setState(() => _inPipMode = inPip);
@@ -533,6 +537,8 @@ class _ImageGalleryScreenState extends ConsumerState<ImageGalleryScreen>
                         .read(sharedPrefsProvider)
                         .getInt('thumbnail_quality') ??
                     50;
+                final tlCount = ref.read(timelineThumbnailCountProvider);
+                final tlHeight = ref.read(timelineThumbnailHeightProvider);
                 return Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
@@ -544,12 +550,15 @@ class _ImageGalleryScreenState extends ConsumerState<ImageGalleryScreen>
                           ? Padding(
                               padding:
                                   const EdgeInsets.fromLTRB(8, 8, 8, 0),
-                              child: _GalleryTimelineStrip(
+                              child: VideoPlayerTimelineStrip(
                                 player: player,
                                 durationMs: durationMs,
                                 filePath: items[_currentIndex].streamUri,
                                 api: api,
                                 quality: quality,
+                                count: tlCount,
+                                height: tlHeight,
+                                onInteract: _resetHideTimer,
                               ),
                             )
                           : const SizedBox.shrink(),
@@ -595,8 +604,12 @@ class _ImageGalleryScreenState extends ConsumerState<ImageGalleryScreen>
                             : Colors.white38,
                         size: 20,
                       ),
-                      onPressed: () => setState(
-                          () => _showTimelineStrip = !_showTimelineStrip),
+                      onPressed: () {
+                        final next = !_showTimelineStrip;
+                        setState(() => _showTimelineStrip = next);
+                        ref.read(timelineStripVisibleProvider.notifier).state = next;
+                        ref.read(sharedPrefsProvider).setBool('timeline_strip_visible', next);
+                      },
                     ),
                     // Fit mode cycle
                     Consumer(builder: (context, ref, _) {
@@ -770,8 +783,9 @@ class _ImageGalleryScreenState extends ConsumerState<ImageGalleryScreen>
           const carouselH = _thumbSize + _thumbMargin * 2 + 8;
           final isCurrentVideo = items[_currentIndex].isVideo;
           final seekBarH = isCurrentVideo ? 52.0 : 0.0;
-          // Include the timeline strip (88 px content + 16 px padding) when visible.
-          final timelineStripH = (_showTimelineStrip && isCurrentVideo) ? 104.0 : 0.0;
+          // Include the timeline strip (content + 8 px top padding) when visible.
+          final tlHeight = ref.read(timelineThumbnailHeightProvider);
+          final timelineStripH = (_showTimelineStrip && isCurrentVideo) ? tlHeight + 16 : 0.0;
           final bottomOverlayH = carouselH +
               seekBarH +
               MediaQuery.of(context).padding.bottom;
@@ -805,28 +819,12 @@ class _ImageGalleryScreenState extends ConsumerState<ImageGalleryScreen>
                             : null,
                       );
                     }
-                    return GestureDetector(
-                      onDoubleTapDown: (d) =>
-                          _doubleTapPos = d.localPosition,
+                    return _GalleryImagePage(
+                      key: ValueKey(item.streamUri),
+                      streamUri: item.streamUri,
+                      transformationController: _tfControllerFor(i),
+                      onDoubleTapDown: (d) => _doubleTapPos = d.localPosition,
                       onDoubleTap: () => _handleImageDoubleTap(i),
-                      child: InteractiveViewer(
-                        transformationController: _tfControllerFor(i),
-                        minScale: 1.0,
-                        maxScale: 5.0,
-                        child: Center(
-                          child: CachedNetworkImage(
-                            imageUrl: item.streamUri,
-                            fit: BoxFit.contain,
-                            placeholder: (_, __) => const Center(
-                                child: CircularProgressIndicator(
-                                    color: Colors.white)),
-                            errorWidget: (_, __, ___) => const Icon(
-                                Icons.broken_image,
-                                color: Colors.white54,
-                                size: 64),
-                          ),
-                        ),
-                      ),
                     );
                   },
                 ),
@@ -921,6 +919,91 @@ class _ImageGalleryScreenState extends ConsumerState<ImageGalleryScreen>
   }
 }
 
+// --- Gallery image page (supports pinch-zoom, pan, and rotation) ---
+
+class _GalleryImagePage extends StatefulWidget {
+  const _GalleryImagePage({
+    super.key,
+    required this.streamUri,
+    required this.transformationController,
+    required this.onDoubleTapDown,
+    required this.onDoubleTap,
+  });
+  final String streamUri;
+  final TransformationController transformationController;
+  final void Function(TapDownDetails) onDoubleTapDown;
+  final VoidCallback onDoubleTap;
+
+  @override
+  State<_GalleryImagePage> createState() => _GalleryImagePageState();
+}
+
+class _GalleryImagePageState extends State<_GalleryImagePage> {
+  double _rotation = 0.0;
+  double _baseRotation = 0.0;
+  double? _pinchStartAngle;
+  final Map<int, Offset> _activePointers = {};
+
+  void _handlePointerDown(PointerDownEvent e) {
+    _activePointers[e.pointer] = e.localPosition;
+  }
+
+  void _handlePointerMove(PointerMoveEvent e) {
+    _activePointers[e.pointer] = e.localPosition;
+    if (_activePointers.length >= 2) {
+      final pts = _activePointers.values.toList();
+      final diff = pts[0] - pts[1];
+      final currentAngle = atan2(diff.dy, diff.dx);
+      _pinchStartAngle ??= currentAngle;
+      final newRotation = _baseRotation + (currentAngle - _pinchStartAngle!);
+      if (newRotation != _rotation) setState(() => _rotation = newRotation);
+    }
+  }
+
+  void _handlePointerEnd(int pointer) {
+    _activePointers.remove(pointer);
+    if (_activePointers.length < 2) {
+      _baseRotation = _rotation;
+      _pinchStartAngle = null;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Listener(
+      behavior: HitTestBehavior.translucent,
+      onPointerDown: _handlePointerDown,
+      onPointerMove: _handlePointerMove,
+      onPointerUp: (e) => _handlePointerEnd(e.pointer),
+      onPointerCancel: (e) => _handlePointerEnd(e.pointer),
+      child: Transform.rotate(
+        angle: _rotation,
+        child: GestureDetector(
+          onDoubleTapDown: widget.onDoubleTapDown,
+          onDoubleTap: widget.onDoubleTap,
+          child: InteractiveViewer(
+            transformationController: widget.transformationController,
+            minScale: 1.0,
+            maxScale: 5.0,
+            child: Center(
+              child: CachedNetworkImage(
+                imageUrl: widget.streamUri,
+                fit: BoxFit.contain,
+                placeholder: (_, __) => const Center(
+                    child: CircularProgressIndicator(color: Colors.white)),
+                errorWidget: (_, __, ___) => const Icon(
+                    Icons.broken_image,
+                    color: Colors.white54,
+                    size: 64),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 // --- Gallery video page ---
 
 class _GalleryVideoPage extends ConsumerStatefulWidget {
@@ -954,9 +1037,12 @@ class _GalleryVideoPageState extends ConsumerState<_GalleryVideoPage> {
   // user never sees a flash of the start frame or a seek-landing glitch.
   bool _videoVisible = false;
 
-  // Pinch-zoom / pan state (managed via Listener to bypass gesture arena)
+  // Pinch-zoom / pan / rotate state (managed via Listener to bypass gesture arena)
   double _scale = 1.0;
   Offset _offset = Offset.zero;
+  double _rotation = 0.0;
+  double _baseRotation = 0.0;
+  double? _pinchStartAngle;
   final Map<int, Offset> _activePointers = {};
   double? _pinchStartDist;
   double? _pinchStartScale;
@@ -1054,15 +1140,19 @@ class _GalleryVideoPageState extends ConsumerState<_GalleryVideoPage> {
   }
 
   void _resetZoom() {
-    if (_scale != 1.0 || _offset != Offset.zero) {
+    if (_scale != 1.0 || _offset != Offset.zero ||
+        _rotation != 0.0 || _baseRotation != 0.0) {
       setState(() {
         _scale = 1.0;
         _offset = Offset.zero;
+        _rotation = 0.0;
+        _baseRotation = 0.0;
       });
     }
     _activePointers.clear();
     _pinchStartDist = null;
     _pinchStartScale = null;
+    _pinchStartAngle = null;
     if (_isActive) widget.zoomedNotifier.value = false;
   }
 
@@ -1083,10 +1173,17 @@ class _GalleryVideoPageState extends ConsumerState<_GalleryVideoPage> {
         _pinchStartDist != null &&
         _pinchStartDist! > 0) {
       final pts = _activePointers.values.toList();
-      final dist = (pts[0] - pts[1]).distance;
+      final diff = pts[0] - pts[1];
+      final dist = diff.distance;
       final newScale =
           (_pinchStartScale! * dist / _pinchStartDist!).clamp(1.0, 5.0);
-      setState(() => _scale = newScale);
+      // Rotation from two-finger angle delta
+      final currentAngle = atan2(diff.dy, diff.dx);
+      _pinchStartAngle ??= currentAngle;
+      setState(() {
+        _scale = newScale;
+        _rotation = _baseRotation + (currentAngle - _pinchStartAngle!);
+      });
       if (_isActive) widget.zoomedNotifier.value = newScale > 1.01;
     } else if (_activePointers.length == 1 &&
         _scale > 1.01 &&
@@ -1102,6 +1199,8 @@ class _GalleryVideoPageState extends ConsumerState<_GalleryVideoPage> {
     if (_activePointers.length < 2) {
       _pinchStartDist = null;
       _pinchStartScale = null;
+      _baseRotation = _rotation;
+      _pinchStartAngle = null;
     }
     if (_scale <= 1.01) {
       setState(() {
@@ -1151,17 +1250,19 @@ class _GalleryVideoPageState extends ConsumerState<_GalleryVideoPage> {
     final fit = ref.watch(videoFitProvider);
     return Stack(
       children: [
-        // Apply pinch-zoom and pan via Transform (avoids InteractiveViewer/gesture
-        // arena conflicts with the platform Texture used by media_kit on Android)
+        // Apply pinch-zoom, pan and rotation via Transform
         Transform.translate(
           offset: _offset,
-          child: Transform.scale(
-            scale: _scale,
-            child: AnimatedOpacity(
-              duration: const Duration(milliseconds: 300),
-              opacity: _videoVisible ? 1.0 : 0.0,
-              child: Video(
-                  controller: _controller, controls: NoVideoControls, fit: fit),
+          child: Transform.rotate(
+            angle: _rotation,
+            child: Transform.scale(
+              scale: _scale,
+              child: AnimatedOpacity(
+                duration: const Duration(milliseconds: 300),
+                opacity: _videoVisible ? 1.0 : 0.0,
+                child: Video(
+                    controller: _controller, controls: NoVideoControls, fit: fit),
+              ),
             ),
           ),
         ),
@@ -1262,144 +1363,3 @@ class _NavButton extends StatelessWidget {
   }
 }
 
-// ─── Gallery timeline strip ───────────────────────────────────────────────────
-
-/// Thin adapter: derives thumbnail URIs from [filePath] (the stream URI) by
-/// swapping the /stream/ segment for /thumbnails/ and appending quality + t=.
-/// When server path is not known (stream URI only), falls back to
-/// VideoTimelineStrip with directly built URIs via api.
-class _GalleryTimelineStrip extends StatefulWidget {
-  const _GalleryTimelineStrip({
-    required this.player,
-    required this.durationMs,
-    required this.filePath,
-    required this.api,
-    required this.quality,
-  });
-
-  final Player player;
-  final int durationMs;
-  final String filePath; // stream URI — used only as identifier for the item
-  final ApiService api;
-  final int quality;
-
-  @override
-  State<_GalleryTimelineStrip> createState() => _GalleryTimelineStripState();
-}
-
-class _GalleryTimelineStripState extends State<_GalleryTimelineStrip> {
-  static const _fracs = [0.15, 0.30, 0.45, 0.60, 0.75];
-  List<String?>? _uris;
-
-  @override
-  void initState() {
-    super.initState();
-    _buildUris();
-  }
-
-  @override
-  void didUpdateWidget(_GalleryTimelineStrip old) {
-    super.didUpdateWidget(old);
-    if (old.filePath != widget.filePath || old.durationMs != widget.durationMs) {
-      setState(() => _uris = null);
-      _buildUris();
-    }
-  }
-
-  /// Extracts the server path from the stream URI by reversing the encoding
-  /// applied by ApiService.buildStreamUriWithToken().
-  String? _serverPathFromStreamUri(String streamUri) {
-    try {
-      final uri = Uri.parse(streamUri);
-      // Path looks like /api/files/stream/<encodedServerPath>
-      const prefix = '/api/files/stream/';
-      if (uri.path.startsWith(prefix)) {
-        return Uri.decodeComponent(uri.path.substring(prefix.length));
-      }
-    } catch (_) {}
-    return null;
-  }
-
-  Future<void> _buildUris() async {
-    final serverPath = _serverPathFromStreamUri(widget.filePath);
-    if (serverPath == null) return;
-    final uris = <String?>[];
-    for (final frac in _fracs) {
-      final posMs = (widget.durationMs * frac).round();
-      final atSec = posMs / 1000.0;
-      final uri = await widget.api.buildThumbnailUriWithToken(
-        serverPath,
-        quality: widget.quality,
-        atSeconds: atSec,
-      );
-      uris.add(uri);
-    }
-    if (mounted) setState(() => _uris = uris);
-  }
-
-  String _ts(int posMs) {
-    final d = Duration(milliseconds: posMs);
-    final h = d.inHours;
-    final m = d.inMinutes.remainder(60).toString().padLeft(2, '0');
-    final s = d.inSeconds.remainder(60).toString().padLeft(2, '0');
-    return h > 0 ? '$h:$m:$s' : '$m:$s';
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return SizedBox(
-      height: 88,
-      child: Row(
-        children: List.generate(_fracs.length, (i) {
-          final posMs = (widget.durationMs * _fracs[i]).round();
-          final uri = _uris?[i];
-          return Expanded(
-            child: GestureDetector(
-              onTap: () =>
-                  widget.player.seek(Duration(milliseconds: posMs)),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 3),
-                child: Column(
-                  children: [
-                    Expanded(
-                      child: ClipRRect(
-                        borderRadius: BorderRadius.circular(5),
-                        child: _uris == null
-                            ? Container(
-                                color: Colors.white12,
-                              )
-                            : uri != null
-                                ? CachedNetworkImage(
-                                    imageUrl: uri,
-                                    fit: BoxFit.cover,
-                                    width: double.infinity,
-                                    placeholder: (_, __) => Container(
-                                        color: Colors.white12),
-                                    errorWidget: (_, __, ___) => Container(
-                                      color: Colors.white12,
-                                      child: const Icon(
-                                          Icons.videocam_off_outlined,
-                                          color: Colors.white38,
-                                          size: 18),
-                                    ),
-                                  )
-                                : Container(color: Colors.white12),
-                      ),
-                    ),
-                    const SizedBox(height: 3),
-                    Text(
-                      _ts(posMs),
-                      style: const TextStyle(
-                          color: Colors.white70, fontSize: 9),
-                      textAlign: TextAlign.center,
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          );
-        }),
-      ),
-    );
-  }
-}
