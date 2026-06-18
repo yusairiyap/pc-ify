@@ -5,6 +5,7 @@ import '../../providers/dashboard_providers.dart'
     show bookmarksProvider, dashboardLayoutProvider;
 import '../../providers/services_providers.dart';
 import '../../providers/theme_providers.dart';
+import '../../services/theme_service.dart';
 import '../../services/backup_restore_service.dart';
 
 class BackupRestoreScreen extends ConsumerStatefulWidget {
@@ -209,12 +210,13 @@ class _BackupRestoreScreenState extends ConsumerState<BackupRestoreScreen> {
             'dark' => ThemeMode.dark,
             _ => current.mode,
           };
-          final newColor = accentColorInt != null
-              ? Color(accentColorInt)
-              : current.accentColor;
-          await ref
-              .read(themeNotifierProvider.notifier)
-              .apply(newMode, newColor);
+          await ref.read(themeNotifierProvider.notifier).apply(
+                newMode,
+                accentColor:
+                    accentColorInt != null ? Color(accentColorInt) : null,
+                accentMode:
+                    accentColorInt != null ? AccentMode.preset : null,
+              );
         }
         if (s.containsKey('video_fit_mode')) {
           ref.read(videoFitProvider.notifier).state =

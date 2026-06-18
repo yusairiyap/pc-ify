@@ -3,9 +3,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:local_auth/local_auth.dart';
 import 'package:url_launcher/url_launcher.dart';
+import '../../core/layout/breakpoints.dart';
 import '../../core/utils/grid_density_helper.dart';
 import '../../features/app_lock/app_lock_providers.dart';
 import '../../providers/dashboard_providers.dart';
+import '../../providers/layout_providers.dart';
 import '../../providers/services_providers.dart';
 import '../../providers/theme_providers.dart';
 import '../../services/theme_service.dart';
@@ -28,11 +30,13 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   late AppLockType _lockType;
   late int _lockGrace;
   late int _statusPollInterval;
+  late TabletLayoutMode _tabletLayout;
 
   @override
   void initState() {
     super.initState();
     final prefs = ref.read(sharedPrefsProvider);
+    _tabletLayout = ref.read(tabletLayoutModeProvider);
     _selectedDensity = GridDensityHelper.fromString(
         prefs.getString('grid_density') ?? 'normal');
     _alwaysExternal = prefs.getBool('always_external_player') ?? false;
@@ -52,13 +56,32 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   }
 
   Future<void> _onThemeModeChanged(ThemeMode mode) async {
-    final current = ref.read(themeNotifierProvider);
-    await ref.read(themeNotifierProvider.notifier).apply(mode, current.accentColor);
+    await ref.read(themeNotifierProvider.notifier).apply(mode);
   }
 
   Future<void> _onAccentChanged(Color color) async {
     final current = ref.read(themeNotifierProvider);
-    await ref.read(themeNotifierProvider.notifier).apply(current.mode, color);
+    await ref.read(themeNotifierProvider.notifier).apply(
+          current.mode,
+          accentColor: color,
+          accentMode: AccentMode.preset,
+        );
+  }
+
+  Future<void> _onSystemAccentSelected() async {
+    final current = ref.read(themeNotifierProvider);
+    await ref.read(themeNotifierProvider.notifier).apply(
+          current.mode,
+          accentMode: AccentMode.system,
+        );
+  }
+
+  void _onTabletLayoutChanged(TabletLayoutMode mode) {
+    setState(() => _tabletLayout = mode);
+    ref
+        .read(sharedPrefsProvider)
+        .setString('tablet_layout_mode', tabletLayoutModeToString(mode));
+    ref.read(tabletLayoutModeProvider.notifier).state = mode;
   }
 
   void _onDensityChanged(GridDensity density) {
@@ -123,9 +146,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
 
     return Scaffold(
       appBar: AppBar(title: const Text('Settings')),
-      body: ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
+      body: _SettingsLayout(children: [
           const _SectionLabel('Appearance'),
           Card(
             child: Padding(
@@ -151,27 +172,57 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   const SizedBox(height: 16),
                   Text('Accent Color',
                       style: Theme.of(context).textTheme.labelLarge),
+                  const SizedBox(height: 2),
+                  Text(
+                    'System follows your wallpaper / OS colour on supported devices (Android 12+).',
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
                   const SizedBox(height: 8),
                   SingleChildScrollView(
                     scrollDirection: Axis.horizontal,
                     child: Row(
-                      children: ThemeService.presetColors.map((color) {
-                        final selected = themeState.accentColor == color;
-                        return GestureDetector(
-                          onTap: () => _onAccentChanged(color),
+                      children: [
+                        // System (Material You) swatch.
+                        GestureDetector(
+                          onTap: _onSystemAccentSelected,
                           child: Padding(
                             padding: const EdgeInsets.only(right: 8),
                             child: CircleAvatar(
-                              backgroundColor: color,
                               radius: 20,
-                              child: selected
-                                  ? const Icon(Icons.check,
-                                      color: Colors.white, size: 18)
-                                  : null,
+                              backgroundColor:
+                                  Theme.of(context).colorScheme.primaryContainer,
+                              child: Icon(
+                                themeState.accentMode == AccentMode.system
+                                    ? Icons.check
+                                    : Icons.auto_awesome,
+                                color: Theme.of(context)
+                                    .colorScheme
+                                    .onPrimaryContainer,
+                                size: 18,
+                              ),
                             ),
                           ),
-                        );
-                      }).toList(),
+                        ),
+                        ...ThemeService.presetColors.map((color) {
+                          final selected =
+                              themeState.accentMode == AccentMode.preset &&
+                                  themeState.accentColor == color;
+                          return GestureDetector(
+                            onTap: () => _onAccentChanged(color),
+                            child: Padding(
+                              padding: const EdgeInsets.only(right: 8),
+                              child: CircleAvatar(
+                                backgroundColor: color,
+                                radius: 20,
+                                child: selected
+                                    ? const Icon(Icons.check,
+                                        color: Colors.white, size: 18)
+                                    : null,
+                              ),
+                            ),
+                          );
+                        }),
+                      ],
                     ),
                   ),
                   const SizedBox(height: 16),
@@ -187,6 +238,32 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                             value: d,
                             child: Text(GridDensityHelper.label(d))))
                         .toList(),
+                  ),
+                  const SizedBox(height: 16),
+                  Text('Tablet Layout',
+                      style: Theme.of(context).textTheme.labelLarge),
+                  const SizedBox(height: 2),
+                  Text(
+                    'Side navigation rail and a two-pane browser with a preview panel. Auto enables it on large screens.',
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                  const SizedBox(height: 10),
+                  SizedBox(
+                    width: double.infinity,
+                    child: SegmentedButton<TabletLayoutMode>(
+                      showSelectedIcon: false,
+                      segments: const [
+                        ButtonSegment(
+                            value: TabletLayoutMode.auto, label: Text('Auto')),
+                        ButtonSegment(
+                            value: TabletLayoutMode.on, label: Text('On')),
+                        ButtonSegment(
+                            value: TabletLayoutMode.off, label: Text('Off')),
+                      ],
+                      selected: {_tabletLayout},
+                      onSelectionChanged: (v) =>
+                          _onTabletLayoutChanged(v.first),
+                    ),
                   ),
                 ],
               ),
@@ -421,6 +498,56 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           const SizedBox(height: 24),
           const _SectionLabel('About'),
           _AboutCard(),
+      ]),
+    );
+  }
+}
+
+/// Lays settings sections out as a single scrolling column on phones, and as
+/// two balanced columns on large/tablet screens. Sections are split at each
+/// [_SectionLabel] boundary and distributed across the two columns.
+class _SettingsLayout extends StatelessWidget {
+  const _SettingsLayout({required this.children});
+  final List<Widget> children;
+
+  @override
+  Widget build(BuildContext context) {
+    if (!Breakpoints.isExpanded(context)) {
+      return ListView(
+        padding: const EdgeInsets.all(16),
+        children: children,
+      );
+    }
+
+    // Group the flat list into section blocks (each begins with a label).
+    final blocks = <List<Widget>>[];
+    for (final w in children) {
+      if (w is _SectionLabel || blocks.isEmpty) blocks.add(<Widget>[]);
+      blocks.last.add(w);
+    }
+    final left = <Widget>[];
+    final right = <Widget>[];
+    for (var i = 0; i < blocks.length; i++) {
+      (i.isEven ? left : right).addAll(blocks[i]);
+    }
+
+    return Padding(
+      padding: const EdgeInsets.all(16),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(
+            child: ListView(
+              padding: const EdgeInsets.only(right: 8),
+              children: left,
+            ),
+          ),
+          Expanded(
+            child: ListView(
+              padding: const EdgeInsets.only(left: 8),
+              children: right,
+            ),
+          ),
         ],
       ),
     );
