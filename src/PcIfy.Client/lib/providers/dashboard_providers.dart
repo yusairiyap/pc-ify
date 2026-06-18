@@ -7,6 +7,12 @@ import '../core/models/file_entry.dart';
 import '../core/models/server_info.dart';
 import 'services_providers.dart';
 
+// ── Status poll interval ───────────────────────────────────────────────────────
+
+final statusPollIntervalProvider = StateProvider<int>((ref) {
+  return ref.read(sharedPrefsProvider).getInt('status_poll_interval') ?? 5;
+});
+
 // ── Layout ────────────────────────────────────────────────────────────────────
 
 final dashboardLayoutProvider =
@@ -68,10 +74,11 @@ class ControlStatusNotifier extends AutoDisposeAsyncNotifier<ControlStatus> {
 
   @override
   Future<ControlStatus> build() async {
+    final intervalSeconds = ref.watch(statusPollIntervalProvider);
     ref.onDispose(() => _timer?.cancel());
-    // Start polling before the first await so the timer is registered even
-    // if the initial fetch throws (server unreachable on startup).
-    _timer = Timer.periodic(const Duration(seconds: 5), (_) => _refresh());
+    _timer?.cancel();
+    _timer = Timer.periodic(
+        Duration(seconds: intervalSeconds), (_) => _refresh());
     return _fetch();
   }
 

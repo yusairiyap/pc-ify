@@ -5,6 +5,7 @@ import 'package:local_auth/local_auth.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../core/utils/grid_density_helper.dart';
 import '../../features/app_lock/app_lock_providers.dart';
+import '../../providers/dashboard_providers.dart';
 import '../../providers/services_providers.dart';
 import '../../providers/theme_providers.dart';
 import '../../services/theme_service.dart';
@@ -26,6 +27,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   late int _timelineHeight;
   late AppLockType _lockType;
   late int _lockGrace;
+  late int _statusPollInterval;
 
   @override
   void initState() {
@@ -43,6 +45,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     _thumbnailQuality = prefs.getInt('thumbnail_quality') ?? 50;
     _timelineCount = prefs.getInt('timeline_thumbnail_count') ?? 5;
     _timelineHeight = prefs.getInt('timeline_thumbnail_height') ?? 88;
+    _statusPollInterval = prefs.getInt('status_poll_interval') ?? 5;
     final lockService = ref.read(appLockServiceProvider);
     _lockType = lockService.getLockType();
     _lockGrace = lockService.gracePeriodSeconds;
@@ -100,6 +103,12 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     setState(() => _timelineHeight = height);
     ref.read(sharedPrefsProvider).setInt('timeline_thumbnail_height', height);
     ref.read(timelineThumbnailHeightProvider.notifier).state = height.toDouble();
+  }
+
+  void _onStatusPollIntervalChanged(int seconds) {
+    setState(() => _statusPollInterval = seconds);
+    ref.read(sharedPrefsProvider).setInt('status_poll_interval', seconds);
+    ref.read(statusPollIntervalProvider.notifier).state = seconds;
   }
 
   Future<void> _logout() async {
@@ -328,6 +337,41 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   ),
                 ),
               ],
+            ),
+          ),
+          const SizedBox(height: 16),
+          const _SectionLabel('Dashboard'),
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Status Update Interval',
+                      style: Theme.of(context).textTheme.labelLarge),
+                  const SizedBox(height: 2),
+                  Text(
+                    'How often the dashboard widgets (battery, CPU, RAM, volume) refresh',
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                  const SizedBox(height: 10),
+                  SizedBox(
+                    width: double.infinity,
+                    child: SegmentedButton<int>(
+                      showSelectedIcon: false,
+                      segments: const [
+                        ButtonSegment(value: 2, label: Text('2s')),
+                        ButtonSegment(value: 5, label: Text('5s')),
+                        ButtonSegment(value: 10, label: Text('10s')),
+                        ButtonSegment(value: 30, label: Text('30s')),
+                      ],
+                      selected: {_statusPollInterval},
+                      onSelectionChanged: (v) =>
+                          _onStatusPollIntervalChanged(v.first),
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
           const SizedBox(height: 16),
