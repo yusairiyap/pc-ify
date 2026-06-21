@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../core/layout/breakpoints.dart';
 import '../../core/models/dashboard_models.dart';
 import '../../providers/dashboard_providers.dart';
 import 'widget_cards/battery_card.dart';
@@ -320,36 +319,27 @@ class _WidgetGridState extends ConsumerState<_WidgetGrid> {
     final rows = <Widget>[];
     final pending = <(int, DashboardItem)>[];
 
-    // On large screens (view mode only) pack more half-width widgets per row.
-    // Edit mode stays 2-up so the drag-and-drop slot math is unaffected.
-    final isWideView = !widget.editMode && Breakpoints.isExpanded(context);
-    final perRow = isWideView
-        ? (MediaQuery.sizeOf(context).width >= 1240 ? 4 : 3)
-        : 2;
-
-    void flushPending() {
-      if (pending.isEmpty) return;
-      rows.add(perRow == 2
-          ? _halfRow(pending[0], pending.length > 1 ? pending[1] : null)
-          : _multiRow(List.of(pending), perRow));
-      pending.clear();
-    }
-
     for (var i = 0; i < _items.length; i++) {
       final item = _items[i];
       if (!item.effectiveSize.isWide) {
-        // halfWidth or halfWidthTall — pack `perRow` per row
+        // halfWidth or halfWidthTall — pair up two per row
         pending.add((i, item));
-        if (pending.length == perRow) flushPending();
+        if (pending.length == 2) {
+          rows.add(_halfRow(pending[0], pending[1]));
+          pending.clear();
+        }
       } else {
-        flushPending();
+        if (pending.isNotEmpty) {
+          rows.add(_halfRow(pending[0], null));
+          pending.clear();
+        }
         rows.add(Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
           child: widget.editMode ? _draggableCard(i, item) : _buildCard(item),
         ));
       }
     }
-    flushPending();
+    if (pending.isNotEmpty) rows.add(_halfRow(pending[0], null));
 
     final layoutKey = _items
         .map((i) => '${i.id}:${i.effectiveSize.name}')
@@ -363,24 +353,6 @@ class _WidgetGridState extends ConsumerState<_WidgetGrid> {
       ),
     );
   }
-
-  /// View-mode multi-column row (3–4 half-width cards on large screens).
-  Widget _multiRow(List<(int, DashboardItem)> items, int perRow) => Padding(
-        padding: const EdgeInsets.fromLTRB(16, 4, 16, 4),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            for (var k = 0; k < perRow; k++) ...[
-              if (k > 0) const SizedBox(width: 8),
-              Expanded(
-                child: k < items.length
-                    ? _buildCard(items[k].$2)
-                    : const SizedBox.shrink(),
-              ),
-            ],
-          ],
-        ),
-      );
 
   Widget _halfRow((int, DashboardItem) a, (int, DashboardItem)? b) =>
       Padding(
