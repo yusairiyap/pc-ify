@@ -20,6 +20,10 @@ class WindowBackground {
 final browseBackgroundProvider =
     StateProvider<WindowBackground?>((ref) => null);
 
+/// Same as [browseBackgroundProvider] but for the Home tab's background.
+final homeBackgroundProvider =
+    StateProvider<WindowBackground?>((ref) => null);
+
 /// How the tablet / wide layout (navigation rail + master-detail browser) is
 /// chosen.
 enum TabletLayoutMode { auto, on, off }

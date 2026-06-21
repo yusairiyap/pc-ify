@@ -124,11 +124,14 @@ class MainShell extends ConsumerWidget {
     // Extend the rail (icon + label side by side) on very wide windows.
     final useExtended = MediaQuery.sizeOf(context).width >= 1240;
 
-    // When the Browse tab has a folder background, paint it full-width behind a
-    // transparent rail (the Browse screen renders transparent in this case).
-    final bg = ref.watch(browseBackgroundProvider);
-    final showBg =
-        shell.currentIndex == 1 && bg != null && !bg.isEmpty;
+    // When the active tab has a folder background, paint it full-width behind a
+    // transparent rail (the screen renders transparent in this case).
+    final bg = switch (shell.currentIndex) {
+      0 => ref.watch(homeBackgroundProvider),
+      1 => ref.watch(browseBackgroundProvider),
+      _ => null,
+    };
+    final showBg = bg != null && !bg.isEmpty;
 
     final rail = NavigationRail(
       extended: useExtended,
