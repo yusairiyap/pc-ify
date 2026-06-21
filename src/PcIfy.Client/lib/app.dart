@@ -72,24 +72,25 @@ class _PcIfyAppState extends ConsumerState<PcIfyApp>
     return DynamicColorBuilder(
       builder: (lightDynamic, darkDynamic) {
         // Follow the OS / wallpaper accent (Material You) when in system mode
-        // and the platform actually provides a dynamic scheme. Otherwise fall
-        // back to the chosen preset seed.
+        // and the platform actually provides a dynamic scheme. We seed
+        // ColorScheme.fromSeed with the wallpaper's primary colour (rather than
+        // using the raw dynamic scheme) so the surface/container tones are
+        // generated with the same tonal principles as the preset accents —
+        // otherwise cards blend into the background.
         final useSystem = themeState.accentMode == AccentMode.system &&
             lightDynamic != null &&
             darkDynamic != null;
+        final seed =
+            useSystem ? lightDynamic.primary : themeState.accentColor;
 
-        final scheme = useSystem
-            ? lightDynamic.harmonized()
-            : ColorScheme.fromSeed(
-                seedColor: themeState.accentColor,
-                brightness: Brightness.light,
-              );
-        final schemeDark = useSystem
-            ? darkDynamic.harmonized()
-            : ColorScheme.fromSeed(
-                seedColor: themeState.accentColor,
-                brightness: Brightness.dark,
-              );
+        final scheme = ColorScheme.fromSeed(
+          seedColor: seed,
+          brightness: Brightness.light,
+        );
+        final schemeDark = ColorScheme.fromSeed(
+          seedColor: seed,
+          brightness: Brightness.dark,
+        );
 
         return MaterialApp.router(
           title: 'pc-ify',

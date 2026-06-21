@@ -561,7 +561,31 @@ class _BrowserLoadedState extends ConsumerState<_BrowserLoaded> {
   // Whether the wide master-detail layout is currently active. Set in build().
   bool _wide = false;
 
+  // Dedupe key for the hoisted window background (see _syncWindowBackground).
+  String? _lastBgKey;
+
   _BrowserState get state => widget.state;
+
+  /// Publishes the current folder background up to [browseBackgroundProvider]
+  /// so [MainShell] can paint it behind a transparent rail. Only meaningful in
+  /// the wide layout; compact paints its own background inline.
+  void _syncWindowBackground(bool hasBg) {
+    final desired = (_wide && hasBg)
+        ? WindowBackground(
+            imageUri: state.backgroundImageUri,
+            videoUri: state.backgroundVideoUri,
+            prefs: state.prefs,
+          )
+        : null;
+    final key =
+        '$_wide|${state.backgroundImageUri}|${state.backgroundVideoUri}';
+    if (key == _lastBgKey) return;
+    _lastBgKey = key;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      ref.read(browseBackgroundProvider.notifier).state = desired;
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -574,6 +598,9 @@ class _BrowserLoadedState extends ConsumerState<_BrowserLoaded> {
     // On wide layouts the right pane is always present: it shows the file
     // preview, or — during multi-select — the selection summary and actions.
     final showDetail = _wide;
+    // In the wide layout the background is hoisted to MainShell (so it spans
+    // behind the transparent rail); in compact we paint it inline below.
+    _syncWindowBackground(hasBg);
 
     final clipboard = ref.watch(clipboardProvider);
     final AppBar appBar;
@@ -800,6 +827,17 @@ class _BrowserLoadedState extends ConsumerState<_BrowserLoaded> {
           Expanded(child: grid),
         ],
       );
+      // Wide layout: the background is painted by MainShell behind the
+      // transparent rail, so this scaffold stays transparent and we don't
+      // re-paint the background here.
+      if (_wide) {
+        return Scaffold(
+          backgroundColor: Colors.transparent,
+          extendBodyBehindAppBar: true,
+          appBar: appBar,
+          body: _wideBody(context, gridColumn, listing, hasBg: true),
+        );
+      }
       return Scaffold(
         extendBodyBehindAppBar: true,
         appBar: appBar,
@@ -820,9 +858,7 @@ class _BrowserLoadedState extends ConsumerState<_BrowserLoaded> {
               decoration:
                   BoxDecoration(color: Colors.black.withValues(alpha: 0.35)),
             ),
-            showDetail
-                ? _wideBody(context, gridColumn, listing, hasBg: true)
-                : gridColumn,
+            gridColumn,
           ],
         ),
       );

@@ -2,7 +2,23 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../core/layout/breakpoints.dart';
+import '../core/models/folder_prefs.dart';
 import 'services_providers.dart';
+
+/// The folder background currently being shown by the Browse screen, hoisted up
+/// so [MainShell] can paint it full-width behind a transparent navigation rail
+/// on wide layouts. Null when there is no background or the layout is compact.
+class WindowBackground {
+  const WindowBackground({this.imageUri, this.videoUri, required this.prefs});
+  final String? imageUri;
+  final String? videoUri;
+  final FolderPrefs prefs;
+
+  bool get isEmpty => imageUri == null && videoUri == null;
+}
+
+final browseBackgroundProvider =
+    StateProvider<WindowBackground?>((ref) => null);
 
 /// How the tablet / wide layout (navigation rail + master-detail browser) is
 /// chosen.

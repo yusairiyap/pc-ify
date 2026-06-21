@@ -5,6 +5,8 @@ import 'package:go_router/go_router.dart';
 import '../core/theme/motion.dart';
 import '../core/utils/shell_state.dart';
 import '../providers/layout_providers.dart';
+import 'folder_background_image.dart';
+import 'video_background_player.dart';
 
 class AnimatedTabContainer extends StatefulWidget {
   const AnimatedTabContainer({
@@ -121,31 +123,81 @@ class MainShell extends ConsumerWidget {
 
     // Extend the rail (icon + label side by side) on very wide windows.
     final useExtended = MediaQuery.sizeOf(context).width >= 1240;
+
+    // When the Browse tab has a folder background, paint it full-width behind a
+    // transparent rail (the Browse screen renders transparent in this case).
+    final bg = ref.watch(browseBackgroundProvider);
+    final showBg =
+        shell.currentIndex == 1 && bg != null && !bg.isEmpty;
+
+    final rail = NavigationRail(
+      extended: useExtended,
+      backgroundColor: showBg ? Colors.transparent : null,
+      selectedIndex: shell.currentIndex,
+      onDestinationSelected: shell.goBranch,
+      labelType: useExtended
+          ? NavigationRailLabelType.none
+          : NavigationRailLabelType.all,
+      indicatorColor: showBg ? Colors.white24 : null,
+      selectedIconTheme: showBg ? const IconThemeData(color: Colors.white) : null,
+      unselectedIconTheme:
+          showBg ? const IconThemeData(color: Colors.white70) : null,
+      selectedLabelTextStyle:
+          showBg ? const TextStyle(color: Colors.white) : null,
+      unselectedLabelTextStyle:
+          showBg ? const TextStyle(color: Colors.white70) : null,
+      destinations: [
+        for (final d in _kDestinations)
+          NavigationRailDestination(
+            icon: Icon(d.icon),
+            selectedIcon: Icon(d.selected),
+            label: Text(d.label),
+          ),
+      ],
+    );
+
     return Scaffold(
-      body: SafeArea(
-        child: Row(
-          children: [
-            NavigationRail(
-              extended: useExtended,
-              selectedIndex: shell.currentIndex,
-              onDestinationSelected: shell.goBranch,
-              labelType: useExtended
-                  ? NavigationRailLabelType.none
-                  : NavigationRailLabelType.all,
-              destinations: [
-                for (final d in _kDestinations)
-                  NavigationRailDestination(
-                    icon: Icon(d.icon),
-                    selectedIcon: Icon(d.selected),
-                    label: Text(d.label),
-                  ),
+      body: Stack(
+        children: [
+          if (showBg) Positioned.fill(child: _BackgroundLayer(bg)),
+          SafeArea(
+            child: Row(
+              children: [
+                rail,
+                VerticalDivider(
+                    width: 1,
+                    thickness: 1,
+                    color: showBg ? Colors.transparent : null),
+                Expanded(child: shell),
               ],
             ),
-            const VerticalDivider(width: 1, thickness: 1),
-            Expanded(child: shell),
-          ],
-        ),
+          ),
+        ],
       ),
+    );
+  }
+}
+
+/// Full-bleed folder background (image or video) with a dark scrim — painted by
+/// [MainShell] behind a transparent rail so it spans the whole window.
+class _BackgroundLayer extends StatelessWidget {
+  const _BackgroundLayer(this.bg);
+  final WindowBackground bg;
+
+  @override
+  Widget build(BuildContext context) {
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        if (bg.videoUri != null)
+          VideoBackgroundPlayer(videoUri: bg.videoUri!, prefs: bg.prefs)
+        else
+          FolderBackgroundImage(imageUri: bg.imageUri!, prefs: bg.prefs),
+        DecoratedBox(
+          decoration:
+              BoxDecoration(color: Colors.black.withValues(alpha: 0.35)),
+        ),
+      ],
     );
   }
 }
