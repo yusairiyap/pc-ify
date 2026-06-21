@@ -19,6 +19,9 @@ dependencies:
   # Navigation
   go_router: ^14.2.7
 
+  # Theming — Material You / system accent colour
+  dynamic_color: ^1.7.0
+
   # HTTP
   dio: ^5.4.3
 

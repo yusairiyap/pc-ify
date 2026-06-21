@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../core/models/folder_prefs.dart';
 import '../../providers/dashboard_providers.dart';
+import '../../providers/layout_providers.dart';
 import '../../providers/services_providers.dart';
 import '../../widgets/folder_background_image.dart';
 import '../../widgets/video_background_player.dart';
@@ -25,6 +26,29 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   String? _backgroundImageUri;
   String? _backgroundVideoUri;
   ProviderSubscription<int>? _prefsVersionSub;
+
+  // Dedupe key for the hoisted window background (see _syncWindowBackground).
+  String? _lastBgKey;
+
+  /// Publishes the Home background up to [homeBackgroundProvider] so [MainShell]
+  /// can paint it behind a transparent rail. Only meaningful in the wide
+  /// layout; compact paints its own background inline.
+  void _syncWindowBackground(bool wide, bool hasBg) {
+    final desired = (wide && hasBg)
+        ? WindowBackground(
+            imageUri: _backgroundImageUri,
+            videoUri: _backgroundVideoUri,
+            prefs: _prefs,
+          )
+        : null;
+    final key = '$wide|$_backgroundImageUri|$_backgroundVideoUri';
+    if (key == _lastBgKey) return;
+    _lastBgKey = key;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      ref.read(homeBackgroundProvider.notifier).state = desired;
+    });
+  }
 
   @override
   void initState() {
@@ -262,6 +286,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     final hasBg = _backgroundImageUri != null || _backgroundVideoUri != null;
+    final wide = useExpandedLayout(context, ref.watch(tabletLayoutModeProvider));
+    // In the wide layout the background is hoisted to MainShell (so it spans
+    // behind the transparent rail); in compact we paint it inline below.
+    _syncWindowBackground(wide, hasBg);
 
     final appBar = AppBar(
       backgroundColor: hasBg ? Colors.transparent : null,
@@ -302,6 +330,22 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     final body = DashboardBody(hasBg: hasBg);
 
     if (hasBg) {
+      final paddedBody = Padding(
+        padding: EdgeInsets.only(
+          top: MediaQuery.viewPaddingOf(context).top + kToolbarHeight,
+        ),
+        child: body,
+      );
+      // Wide layout: the background is painted by MainShell behind the
+      // transparent rail, so this scaffold stays transparent.
+      if (wide) {
+        return Scaffold(
+          backgroundColor: Colors.transparent,
+          extendBodyBehindAppBar: true,
+          appBar: appBar,
+          body: paddedBody,
+        );
+      }
       return Scaffold(
         extendBodyBehindAppBar: true,
         appBar: appBar,
@@ -318,12 +362,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
               decoration:
                   BoxDecoration(color: Colors.black.withValues(alpha: 0.35)),
             ),
-            Padding(
-              padding: EdgeInsets.only(
-                top: MediaQuery.viewPaddingOf(context).top + kToolbarHeight,
-              ),
-              child: body,
-            ),
+            paddedBody,
           ],
         ),
       );

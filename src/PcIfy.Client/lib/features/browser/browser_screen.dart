@@ -11,6 +11,8 @@ import 'package:open_filex/open_filex.dart';
 import 'package:path/path.dart' as p;
 
 import '../../core/constants/media_types.dart';
+import '../../core/theme/motion.dart';
+import '../../core/theme/shapes.dart';
 import '../../core/utils/shell_state.dart';
 import '../../core/models/bookmarked_folder.dart';
 import '../../core/models/file_entry.dart';
@@ -21,6 +23,7 @@ import '../../core/utils/file_size_formatter.dart';
 import '../../core/utils/grid_density_helper.dart';
 import '../../core/utils/sort_helper.dart';
 import '../../providers/dashboard_providers.dart';
+import '../../providers/layout_providers.dart';
 import '../../providers/services_providers.dart';
 import '../../providers/transfer_providers.dart';
 import '../../widgets/folder_background_image.dart';
@@ -550,7 +553,39 @@ class _BrowserLoadedState extends ConsumerState<_BrowserLoaded> {
   // Set by item long-press so the background GestureDetector skips once.
   bool _itemLongPressConsumed = false;
 
+  // Master-detail (wide layout only): the file shown in the right preview pane.
+  // Local to this State so it resets automatically when the folder changes
+  // (the widget is keyed by the listing path) and is invisible to phone code.
+  FileEntry? _selectedDetail;
+
+  // Whether the wide master-detail layout is currently active. Set in build().
+  bool _wide = false;
+
+  // Dedupe key for the hoisted window background (see _syncWindowBackground).
+  String? _lastBgKey;
+
   _BrowserState get state => widget.state;
+
+  /// Publishes the current folder background up to [browseBackgroundProvider]
+  /// so [MainShell] can paint it behind a transparent rail. Only meaningful in
+  /// the wide layout; compact paints its own background inline.
+  void _syncWindowBackground(bool hasBg) {
+    final desired = (_wide && hasBg)
+        ? WindowBackground(
+            imageUri: state.backgroundImageUri,
+            videoUri: state.backgroundVideoUri,
+            prefs: state.prefs,
+          )
+        : null;
+    final key =
+        '$_wide|${state.backgroundImageUri}|${state.backgroundVideoUri}';
+    if (key == _lastBgKey) return;
+    _lastBgKey = key;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      ref.read(browseBackgroundProvider.notifier).state = desired;
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -558,6 +593,14 @@ class _BrowserLoadedState extends ConsumerState<_BrowserLoaded> {
     final listing = state.listing!;
     final hasBg = state.hasBg;
     final canUpload = listing.path.isNotEmpty;
+
+    _wide = useExpandedLayout(context, ref.watch(tabletLayoutModeProvider));
+    // On wide layouts the right pane is always present: it shows the file
+    // preview, or — during multi-select — the selection summary and actions.
+    final showDetail = _wide;
+    // In the wide layout the background is hoisted to MainShell (so it spans
+    // behind the transparent rail); in compact we paint it inline below.
+    _syncWindowBackground(hasBg);
 
     final clipboard = ref.watch(clipboardProvider);
     final AppBar appBar;
@@ -707,6 +750,10 @@ class _BrowserLoadedState extends ConsumerState<_BrowserLoaded> {
               constraints.maxWidth, state.density);
           return GestureDetector(
             behavior: HitTestBehavior.translucent,
+            // Tapping empty grid space clears the preview selection (wide mode).
+            onTap: (_wide && !state.isSelecting && _selectedDetail != null)
+                ? () => setState(() => _selectedDetail = null)
+                : null,
             onLongPress: canUpload
                 ? () {
                     if (_itemLongPressConsumed) {
@@ -736,12 +783,16 @@ class _BrowserLoadedState extends ConsumerState<_BrowserLoaded> {
                     item.entry.type == FileType.video;
                 final isSelected =
                     state.selectedPaths.contains(item.entry.path);
+                final isActive = _wide &&
+                    !state.isSelecting &&
+                    _selectedDetail?.path == item.entry.path;
                 return RepaintBoundary(
                   child: _FileGridItem(
                     item: item,
                     hasBackground: hasBg,
                     isSelecting: state.isSelecting && isSelectable,
                     isSelected: isSelected,
+                    isActive: isActive,
                     onTap: () => _onTap(context, item),
                     onLongPress: () {
                       _itemLongPressConsumed = true;
@@ -762,6 +813,31 @@ class _BrowserLoadedState extends ConsumerState<_BrowserLoaded> {
     );
 
     if (hasBg) {
+      final gridColumn = Column(
+        children: [
+          SizedBox(
+              height: MediaQuery.viewPaddingOf(context).top + kToolbarHeight),
+          _DensityToolbar(
+              count: state.items.length,
+              density: state.density,
+              sort: state.sort,
+              onCycle: notifier.cycleDensity,
+              onSort: notifier.setSortOption,
+              hasBackground: true),
+          Expanded(child: grid),
+        ],
+      );
+      // Wide layout: the background is painted by MainShell behind the
+      // transparent rail, so this scaffold stays transparent and we don't
+      // re-paint the background here.
+      if (_wide) {
+        return Scaffold(
+          backgroundColor: Colors.transparent,
+          extendBodyBehindAppBar: true,
+          appBar: appBar,
+          body: _wideBody(context, gridColumn, listing, hasBg: true),
+        );
+      }
       return Scaffold(
         extendBodyBehindAppBar: true,
         appBar: appBar,
@@ -782,40 +858,111 @@ class _BrowserLoadedState extends ConsumerState<_BrowserLoaded> {
               decoration:
                   BoxDecoration(color: Colors.black.withValues(alpha: 0.35)),
             ),
-            Column(
-              children: [
-                SizedBox(
-                    height:
-                        MediaQuery.viewPaddingOf(context).top + kToolbarHeight),
-                _DensityToolbar(
-                    count: state.items.length,
-                    density: state.density,
-                    sort: state.sort,
-                    onCycle: notifier.cycleDensity,
-                    onSort: notifier.setSortOption,
-                    hasBackground: true),
-                Expanded(child: grid),
-              ],
-            ),
+            gridColumn,
           ],
         ),
       );
     }
 
+    final gridColumn = Column(
+      children: [
+        _DensityToolbar(
+            count: state.items.length,
+            density: state.density,
+            sort: state.sort,
+            onCycle: notifier.cycleDensity,
+            onSort: notifier.setSortOption),
+        Expanded(child: grid),
+      ],
+    );
     return Scaffold(
       appBar: appBar,
-      body: Column(
-        children: [
-          _DensityToolbar(
-              count: state.items.length,
-              density: state.density,
-              sort: state.sort,
-              onCycle: notifier.cycleDensity,
-              onSort: notifier.setSortOption),
-          Expanded(child: grid),
-        ],
-      ),
+      body: showDetail
+          ? _wideBody(context, gridColumn, listing, hasBg: false)
+          : gridColumn,
     );
+  }
+
+  /// Master-detail layout: file grid on the left, preview/info pane on the
+  /// right. The grid keeps adapting its column count to its (narrower) width
+  /// automatically via the existing LayoutBuilder + GridDensityHelper.
+  Widget _wideBody(
+    BuildContext context,
+    Widget gridColumn,
+    FolderListing listing, {
+    required bool hasBg,
+  }) {
+    final notifier = ref.read(_browserNotifierProvider.notifier);
+    // With a folder background the AppBar floats over the body, so push the
+    // pane content down to clear it.
+    final topInset =
+        hasBg ? MediaQuery.viewPaddingOf(context).top + kToolbarHeight : 0.0;
+
+    final Widget pane;
+    if (state.isSelecting) {
+      final selectedItems = state.items
+          .where((i) => state.selectedPaths.contains(i.entry.path))
+          .toList();
+      pane = _SelectionDetailPane(
+        items: selectedItems,
+        hasBg: hasBg,
+        canSplitView: selectedItems.isNotEmpty && selectedItems.length <= 3,
+        onClear: notifier.clearSelection,
+        onSplitView: () => _openSplitView(context, listing),
+        onAction: (action) =>
+            _onSelectionMenuAction(context, listing, action, selectedItems),
+      );
+    } else {
+      pane = _DetailPane(
+        entry: _selectedDetail,
+        item: _selectedDetail == null
+            ? null
+            : state.items.cast<_BrowserItem?>().firstWhere(
+                  (i) => i?.entry.path == _selectedDetail!.path,
+                  orElse: () => null,
+                ),
+        hasBg: hasBg,
+        onClose: () => setState(() => _selectedDetail = null),
+        onPlay: _openSelectedFullscreen,
+        onExternal: _openSelectedExternal,
+        onDownload: (e) => _startDownload(e.path, e.name),
+      );
+    }
+
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Expanded(flex: 6, child: gridColumn),
+        const VerticalDivider(width: 1, thickness: 1),
+        Expanded(
+          flex: 4,
+          child: Padding(
+            padding: EdgeInsets.only(top: topInset),
+            child: pane,
+          ),
+        ),
+      ],
+    );
+  }
+
+  /// Opens the currently-selected detail entry in the fullscreen gallery/player
+  /// (reuses the exact index math from [_onTap]).
+  void _openSelectedFullscreen(FileEntry e, {int? posMs}) {
+    final listing = ref.read(_browserNotifierProvider).valueOrNull?.listing;
+    final media = listing?.entries
+            .where((x) => x.type == FileType.image || x.type == FileType.video)
+            .toList() ??
+        [];
+    final idx = media.indexWhere((x) => x.path == e.path);
+    final posPart = posMs != null ? '&pos=$posMs' : '';
+    context.push(
+        '/gallery?path=${Uri.encodeComponent(listing?.path ?? '')}&index=${idx < 0 ? 0 : idx}$posPart');
+  }
+
+  Future<void> _openSelectedExternal(FileEntry e, String? streamUri) async {
+    final uri = streamUri ?? '';
+    final mime = MediaTypes.getMimeType(MediaTypes.extensionOf(e.name));
+    await ref.read(externalPlayerServiceProvider).openVideo(uri, mime);
   }
 
   // ── Upload ─────────────────────────────────────────────────────────────────
@@ -1290,6 +1437,17 @@ class _BrowserLoadedState extends ConsumerState<_BrowserLoaded> {
       return;
     }
     final e = item.entry;
+    // Wide / tablet layout: tapping a media file shows it in the detail pane.
+    // Tapping the already-previewed file again opens it fullscreen. Folders and
+    // other types behave as usual.
+    if (_wide && (e.type == FileType.video || e.type == FileType.image)) {
+      if (_selectedDetail?.path == e.path) {
+        _openSelectedFullscreen(e);
+      } else {
+        setState(() => _selectedDetail = e);
+      }
+      return;
+    }
     switch (e.type) {
       case FileType.folder:
         ref.read(_browserNotifierProvider.notifier).navigateTo(e.path);
@@ -1930,6 +2088,434 @@ class _PropRow {
   final String value;
 }
 
+/// Right-hand master-detail preview pane (wide / tablet layout). Shows a
+/// thumbnail timeline (video) or large preview (image), file info, and the
+/// primary actions. Composed entirely from existing infra.
+class _DetailPane extends ConsumerStatefulWidget {
+  const _DetailPane({
+    required this.entry,
+    required this.item,
+    required this.hasBg,
+    required this.onClose,
+    required this.onPlay,
+    required this.onExternal,
+    required this.onDownload,
+  });
+
+  final FileEntry? entry;
+  final _BrowserItem? item;
+  final bool hasBg;
+  final VoidCallback onClose;
+  final void Function(FileEntry entry, {int? posMs}) onPlay;
+  final void Function(FileEntry entry, String? streamUri) onExternal;
+  final void Function(FileEntry entry) onDownload;
+
+  @override
+  ConsumerState<_DetailPane> createState() => _DetailPaneState();
+}
+
+class _DetailPaneState extends ConsumerState<_DetailPane> {
+  // Cached per selected path so unrelated parent rebuilds don't refetch.
+  String? _durationForPath;
+  Future<int?>? _durationFuture;
+
+  Future<int?> _durationFor(FileEntry e) {
+    if (_durationForPath != e.path || _durationFuture == null) {
+      _durationForPath = e.path;
+      _durationFuture = ref.read(apiServiceProvider).getVideoDurationMs(e.path);
+    }
+    return _durationFuture!;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final tt = Theme.of(context).textTheme;
+    final e = widget.entry;
+    // Transparent over a folder background (the grid's dark scrim shows through);
+    // a solid surface otherwise.
+    final bg = widget.hasBg ? Colors.transparent : cs.surfaceContainerLow;
+    final muted = widget.hasBg ? Colors.white70 : cs.onSurfaceVariant;
+
+    return ColoredBox(
+      color: bg,
+      child: e == null
+          ? Center(
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.touch_app_outlined, size: 48, color: muted),
+                    const SizedBox(height: 12),
+                    Text('Select a file to preview',
+                        textAlign: TextAlign.center,
+                        style: tt.bodyMedium?.copyWith(color: muted)),
+                  ],
+                ),
+              ),
+            )
+          : _buildContent(context, e),
+    );
+  }
+
+  Widget _buildContent(BuildContext context, FileEntry e) {
+    final cs = Theme.of(context).colorScheme;
+    final tt = Theme.of(context).textTheme;
+    final api = ref.read(apiServiceProvider);
+    final prefs = ref.read(sharedPrefsProvider);
+    final quality = prefs.getInt('thumbnail_quality') ?? 50;
+    final tlCount = prefs.getInt('timeline_thumbnail_count') ?? 5;
+    final tlHeight =
+        (prefs.getInt('timeline_thumbnail_height') ?? 100).toDouble();
+    final isVideo = e.type == FileType.video;
+    final Color? fg = widget.hasBg ? Colors.white : null;
+    final Color muted = widget.hasBg ? Colors.white70 : cs.onSurfaceVariant;
+
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: Text(e.name,
+                  style: tt.titleMedium?.copyWith(color: fg),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis),
+            ),
+            IconButton(
+              icon: const Icon(Icons.close),
+              color: fg,
+              tooltip: 'Close preview',
+              onPressed: widget.onClose,
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        // Preview / timeline
+        if (isVideo)
+          FutureBuilder<int?>(
+            future: _durationFor(e),
+            builder: (_, snap) {
+              final durationMs = snap.data ?? 0;
+              final strip = snap.connectionState == ConnectionState.waiting
+                  ? VideoTimelinePlaceholder(count: tlCount, height: tlHeight)
+                  : durationMs <= 0
+                      ? const SizedBox.shrink()
+                      : VideoTimelineStrip(
+                          serverPath: e.path,
+                          durationMs: durationMs,
+                          api: api,
+                          quality: quality,
+                          count: tlCount,
+                          height: tlHeight,
+                          onSeekTap: (posMs) =>
+                              widget.onPlay(e, posMs: posMs),
+                        );
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  strip,
+                  if (durationMs > 0)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 8),
+                      child: _DetailRow('Length', _formatDuration(durationMs),
+                          tt, muted, fg),
+                    ),
+                ],
+              );
+            },
+          )
+        else
+          ClipRRect(
+            borderRadius: BorderRadius.circular(AppShapes.card),
+            child: AspectRatio(
+              aspectRatio: 16 / 10,
+              child: (widget.item?.thumbnailUri ?? widget.item?.streamUri) !=
+                      null
+                  ? CachedNetworkImage(
+                      imageUrl: (widget.item!.thumbnailUri ??
+                          widget.item!.streamUri)!,
+                      fit: BoxFit.cover,
+                      placeholder: (_, __) =>
+                          ColoredBox(color: cs.surfaceContainerHighest),
+                      errorWidget: (_, __, ___) => Center(
+                          child: Icon(Icons.broken_image_outlined,
+                              color: cs.onSurfaceVariant)),
+                    )
+                  : ColoredBox(color: cs.surfaceContainerHighest),
+            ),
+          ),
+        const SizedBox(height: 16),
+        // Info
+        _DetailRow(
+            'Type',
+            e.type.name[0].toUpperCase() + e.type.name.substring(1),
+            tt,
+            muted,
+            fg),
+        if (e.sizeBytes > 0)
+          _DetailRow(
+              'Size', FileSizeFormatter.format(e.sizeBytes), tt, muted, fg),
+        _DetailRow('Modified', _formatModified(e.lastModified), tt, muted, fg),
+        const SizedBox(height: 20),
+        // Actions
+        FilledButton.icon(
+          onPressed: () => widget.onPlay(e),
+          icon: Icon(isVideo ? Icons.play_arrow_rounded : Icons.open_in_full),
+          label: Text(isVideo ? 'Play' : 'View'),
+        ),
+        if (isVideo) ...[
+          const SizedBox(height: 8),
+          OutlinedButton.icon(
+            onPressed: () => widget.onExternal(e, widget.item?.streamUri),
+            icon: const Icon(Icons.open_in_new),
+            label: const Text('Open in external player'),
+          ),
+        ],
+        const SizedBox(height: 8),
+        OutlinedButton.icon(
+          onPressed: () => widget.onDownload(e),
+          icon: const Icon(Icons.download_outlined),
+          label: const Text('Download'),
+        ),
+      ],
+    );
+  }
+
+  static String _formatModified(DateTime d) =>
+      '${d.year}-${d.month.toString().padLeft(2, '0')}-'
+      '${d.day.toString().padLeft(2, '0')}  '
+      '${d.hour.toString().padLeft(2, '0')}:'
+      '${d.minute.toString().padLeft(2, '0')}';
+
+  static String _formatDuration(int ms) {
+    final total = ms ~/ 1000;
+    final h = total ~/ 3600;
+    final m = (total % 3600) ~/ 60;
+    final s = total % 60;
+    final mm = m.toString().padLeft(2, '0');
+    final ss = s.toString().padLeft(2, '0');
+    return h > 0 ? '$h:$mm:$ss' : '$mm:$ss';
+  }
+}
+
+class _DetailRow extends StatelessWidget {
+  const _DetailRow(this.label, this.value, this.tt, this.labelColor,
+      [this.valueColor]);
+  final String label;
+  final String value;
+  final TextTheme tt;
+  final Color labelColor;
+  final Color? valueColor;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 84,
+            child: Text(label,
+                style: tt.bodySmall?.copyWith(color: labelColor)),
+          ),
+          Expanded(
+            child: Text(value,
+                style: tt.bodyMedium
+                    ?.copyWith(fontWeight: FontWeight.w600, color: valueColor)),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Right-hand pane shown while multi-selecting (wide layout): a count summary,
+/// thumbnails of the selection, and the same actions as the selection menu.
+class _SelectionDetailPane extends StatelessWidget {
+  const _SelectionDetailPane({
+    required this.items,
+    required this.hasBg,
+    required this.canSplitView,
+    required this.onClear,
+    required this.onSplitView,
+    required this.onAction,
+  });
+
+  final List<_BrowserItem> items;
+  final bool hasBg;
+  final bool canSplitView;
+  final VoidCallback onClear;
+  final VoidCallback onSplitView;
+  final void Function(String action) onAction;
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final tt = Theme.of(context).textTheme;
+    final bg = hasBg ? Colors.transparent : cs.surfaceContainerLow;
+    final fg = hasBg ? Colors.white : cs.onSurface;
+    final muted = hasBg ? Colors.white70 : cs.onSurfaceVariant;
+
+    final count = items.length;
+    final single = count == 1;
+    final singleVideo = single && items.first.entry.type == FileType.video;
+    final singleImage = single && items.first.entry.type == FileType.image;
+    final singleMedia = singleVideo || singleImage;
+
+    return ColoredBox(
+      color: bg,
+      child: ListView(
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  count == 0
+                      ? 'Nothing selected'
+                      : '$count item${count == 1 ? '' : 's'} selected',
+                  style: tt.titleMedium?.copyWith(color: fg),
+                ),
+              ),
+              IconButton(
+                icon: const Icon(Icons.close),
+                color: fg,
+                tooltip: 'Clear selection',
+                onPressed: onClear,
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          if (items.isNotEmpty)
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                for (final it in items.take(12))
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(8),
+                    child: SizedBox(
+                      width: 64,
+                      height: 64,
+                      child: it.thumbnailUri != null
+                          ? CachedNetworkImage(
+                              imageUrl: it.thumbnailUri!,
+                              fit: BoxFit.cover,
+                              placeholder: (_, __) =>
+                                  ColoredBox(color: cs.surfaceContainerHighest),
+                              errorWidget: (_, __, ___) => Container(
+                                color: cs.surfaceContainerHighest,
+                                child: Icon(Icons.image_outlined, color: muted),
+                              ),
+                            )
+                          : Container(
+                              color: cs.surfaceContainerHighest,
+                              child: Icon(Icons.insert_drive_file, color: muted),
+                            ),
+                    ),
+                  ),
+                if (items.length > 12)
+                  Container(
+                    width: 64,
+                    height: 64,
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(
+                      color: cs.surfaceContainerHighest,
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Text('+${items.length - 12}',
+                        style: tt.labelLarge?.copyWith(color: fg)),
+                  ),
+              ],
+            ),
+          const SizedBox(height: 16),
+          // Actions — mirror the selection menu.
+          FilledButton.icon(
+            onPressed: canSplitView ? onSplitView : null,
+            icon: const Icon(Icons.view_column_outlined),
+            label: const Text('Open in Split View'),
+          ),
+          if (singleVideo) ...[
+            const SizedBox(height: 8),
+            OutlinedButton.icon(
+              onPressed: () => onAction('play'),
+              icon: const Icon(Icons.play_arrow_rounded),
+              label: const Text('Play'),
+            ),
+          ],
+          if (singleImage) ...[
+            const SizedBox(height: 8),
+            OutlinedButton.icon(
+              onPressed: () => onAction('view'),
+              icon: const Icon(Icons.open_in_full),
+              label: const Text('View'),
+            ),
+          ],
+          if (singleVideo) ...[
+            const SizedBox(height: 8),
+            OutlinedButton.icon(
+              onPressed: () => onAction('external'),
+              icon: const Icon(Icons.open_in_new),
+              label: const Text('Open in external player'),
+            ),
+          ],
+          const SizedBox(height: 8),
+          OutlinedButton.icon(
+            onPressed: () => onAction('download'),
+            icon: const Icon(Icons.download_outlined),
+            label: Text(count > 1 ? 'Download $count files' : 'Download'),
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: () => onAction('copy'),
+                  icon: const Icon(Icons.copy_outlined),
+                  label: const Text('Copy'),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: () => onAction('cut'),
+                  icon: const Icon(Icons.content_cut),
+                  label: const Text('Cut'),
+                ),
+              ),
+            ],
+          ),
+          if (singleMedia) ...[
+            const SizedBox(height: 8),
+            OutlinedButton.icon(
+              onPressed: () => onAction('set_bg'),
+              icon: const Icon(Icons.wallpaper),
+              label: const Text('Set as folder background'),
+            ),
+          ],
+          if (single) ...[
+            const SizedBox(height: 8),
+            OutlinedButton.icon(
+              onPressed: () => onAction('properties'),
+              icon: const Icon(Icons.info_outline),
+              label: const Text('Properties'),
+            ),
+          ],
+          const SizedBox(height: 8),
+          OutlinedButton.icon(
+            onPressed: () => onAction('delete'),
+            icon: Icon(Icons.delete_outline, color: cs.error),
+            label: Text('Delete', style: TextStyle(color: cs.error)),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 // --- Sub-widgets ---
 
 class _DensityToolbar extends StatelessWidget {
@@ -2019,6 +2605,7 @@ class _FileGridItem extends StatelessWidget {
     this.hasBackground = false,
     this.isSelecting = false,
     this.isSelected = false,
+    this.isActive = false,
   });
   final _BrowserItem item;
   final VoidCallback onTap;
@@ -2026,6 +2613,10 @@ class _FileGridItem extends StatelessWidget {
   final bool hasBackground;
   final bool isSelecting;
   final bool isSelected;
+
+  /// Highlighted as the current master-detail selection (wide layout). Distinct
+  /// from [isSelected], which is the multi-select state.
+  final bool isActive;
 
   @override
   Widget build(BuildContext context) {
@@ -2084,54 +2675,72 @@ class _FileGridItem extends StatelessWidget {
           )
         : null;
 
-    if (hasBackground) {
-      return ClipRRect(
-        borderRadius: BorderRadius.circular(12),
-        child: Container(
-          decoration: BoxDecoration(
-            color: Theme.of(context)
-                .colorScheme
-                .surfaceContainerHigh
-                .withValues(alpha: 0.82),
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(
-                color: isSelected
-                    ? Colors.lightBlue
-                    : Theme.of(context)
-                        .colorScheme
-                        .primary
-                        .withValues(alpha: 0.4),
-                width: isSelected ? 2.0 : 1.0),
-          ),
-          child: InkWell(
-            onTap: onTap,
-            onLongPress: onLongPress,
-            borderRadius: BorderRadius.circular(12),
-            child: Stack(children: [
-              cardContent,
-              if (selectionOverlay != null) selectionOverlay,
-            ]),
-          ),
-        ),
-      );
-    }
+    final primary = cs.primary;
+    // Target corner radius — morphs tighter when active (detail selection).
+    final targetRadius = isActive ? AppShapes.selected : 12.0;
 
-    return Card(
-      clipBehavior: Clip.hardEdge,
-      shape: isSelected
-          ? RoundedRectangleBorder(
-              side: const BorderSide(color: Colors.lightBlue, width: 2),
-              borderRadius: BorderRadius.circular(12),
-            )
-          : null,
-      child: InkWell(
-        onTap: onTap,
-        onLongPress: onLongPress,
+    if (hasBackground) {
+      return TweenAnimationBuilder<double>(
+        tween: Tween(end: targetRadius),
+        duration: AppMotion.standard,
+        curve: AppMotion.spring,
+        builder: (context, radius, child) {
+          final br = BorderRadius.circular(radius);
+          return ClipRRect(
+            borderRadius: br,
+            child: Container(
+              decoration: BoxDecoration(
+                color: cs.surfaceContainerHigh.withValues(alpha: 0.82),
+                borderRadius: br,
+                border: Border.all(
+                    color: isSelected
+                        ? Colors.lightBlue
+                        : isActive
+                            ? primary
+                            : primary.withValues(alpha: 0.4),
+                    width: (isSelected || isActive) ? 2.0 : 1.0),
+              ),
+              child: InkWell(
+                onTap: onTap,
+                onLongPress: onLongPress,
+                borderRadius: br,
+                child: child,
+              ),
+            ),
+          );
+        },
         child: Stack(children: [
           cardContent,
           if (selectionOverlay != null) selectionOverlay,
         ]),
-      ),
+      );
+    }
+
+    return TweenAnimationBuilder<double>(
+      tween: Tween(end: targetRadius),
+      duration: AppMotion.standard,
+      curve: AppMotion.spring,
+      builder: (context, radius, child) {
+        final br = BorderRadius.circular(radius);
+        final BorderSide side = isSelected
+            ? const BorderSide(color: Colors.lightBlue, width: 2)
+            : isActive
+                ? BorderSide(color: primary, width: 2)
+                : BorderSide.none;
+        return Card(
+          clipBehavior: Clip.hardEdge,
+          shape: RoundedRectangleBorder(side: side, borderRadius: br),
+          child: InkWell(
+            onTap: onTap,
+            onLongPress: onLongPress,
+            child: child,
+          ),
+        );
+      },
+      child: Stack(children: [
+        cardContent,
+        if (selectionOverlay != null) selectionOverlay,
+      ]),
     );
   }
 

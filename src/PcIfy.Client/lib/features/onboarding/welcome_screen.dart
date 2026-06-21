@@ -29,6 +29,7 @@ class _WelcomeScreenState extends ConsumerState<WelcomeScreen> {
   late Color _selectedColor;
   late ThemeMode _selectedMode;
   late GridDensity _selectedDensity;
+  late AccentMode _selectedAccentMode;
 
   @override
   void initState() {
@@ -36,6 +37,7 @@ class _WelcomeScreenState extends ConsumerState<WelcomeScreen> {
     final themeState = ref.read(themeNotifierProvider);
     _selectedColor = themeState.accentColor;
     _selectedMode = themeState.mode;
+    _selectedAccentMode = themeState.accentMode;
     final prefs = ref.read(sharedPrefsProvider);
     _selectedDensity =
         GridDensityHelper.fromString(prefs.getString('grid_density') ?? 'normal');
@@ -45,9 +47,13 @@ class _WelcomeScreenState extends ConsumerState<WelcomeScreen> {
     // Apply theme & density immediately when the user taps Next on the
     // personalize page so the change is visible on the next step.
     if (_page == 2) {
-      await ref
-          .read(themeNotifierProvider.notifier)
-          .apply(_selectedMode, _selectedColor);
+      await ref.read(themeNotifierProvider.notifier).apply(
+            _selectedMode,
+            accentColor: _selectedAccentMode == AccentMode.preset
+                ? _selectedColor
+                : null,
+            accentMode: _selectedAccentMode,
+          );
       await ref
           .read(sharedPrefsProvider)
           .setString('grid_density', _selectedDensity.name);
@@ -119,7 +125,13 @@ class _WelcomeScreenState extends ConsumerState<WelcomeScreen> {
                   selectedColor: _selectedColor,
                   selectedMode: _selectedMode,
                   selectedDensity: _selectedDensity,
-                  onColorChanged: (c) => setState(() => _selectedColor = c),
+                  selectedAccentMode: _selectedAccentMode,
+                  onColorChanged: (c) => setState(() {
+                    _selectedColor = c;
+                    _selectedAccentMode = AccentMode.preset;
+                  }),
+                  onSystemAccentSelected: () =>
+                      setState(() => _selectedAccentMode = AccentMode.system),
                   onModeChanged: (m) => setState(() => _selectedMode = m),
                   onDensityChanged: (d) => setState(() => _selectedDensity = d),
                   onNext: _goNext,
@@ -350,7 +362,9 @@ class _PersonalizePage extends StatefulWidget {
     required this.selectedColor,
     required this.selectedMode,
     required this.selectedDensity,
+    required this.selectedAccentMode,
     required this.onColorChanged,
+    required this.onSystemAccentSelected,
     required this.onModeChanged,
     required this.onDensityChanged,
     required this.onNext,
@@ -359,7 +373,9 @@ class _PersonalizePage extends StatefulWidget {
   final Color selectedColor;
   final ThemeMode selectedMode;
   final GridDensity selectedDensity;
+  final AccentMode selectedAccentMode;
   final ValueChanged<Color> onColorChanged;
+  final VoidCallback onSystemAccentSelected;
   final ValueChanged<ThemeMode> onModeChanged;
   final ValueChanged<GridDensity> onDensityChanged;
   final Future<void> Function() onNext;
@@ -403,23 +419,47 @@ class _PersonalizePageState extends State<_PersonalizePage> {
             SingleChildScrollView(
               scrollDirection: Axis.horizontal,
               child: Row(
-                children: ThemeService.presetColors.map((color) {
-                  final selected = widget.selectedColor == color;
-                  return GestureDetector(
-                    onTap: _saving ? null : () => widget.onColorChanged(color),
+                children: [
+                  GestureDetector(
+                    onTap: _saving ? null : widget.onSystemAccentSelected,
                     child: Padding(
                       padding: const EdgeInsets.only(right: 10),
                       child: CircleAvatar(
-                        backgroundColor: color,
                         radius: 22,
-                        child: selected
-                            ? const Icon(Icons.check,
-                                color: Colors.white, size: 20)
-                            : null,
+                        backgroundColor:
+                            Theme.of(context).colorScheme.primaryContainer,
+                        child: Icon(
+                          widget.selectedAccentMode == AccentMode.system
+                              ? Icons.check
+                              : Icons.auto_awesome,
+                          color:
+                              Theme.of(context).colorScheme.onPrimaryContainer,
+                          size: 20,
+                        ),
                       ),
                     ),
-                  );
-                }).toList(),
+                  ),
+                  ...ThemeService.presetColors.map((color) {
+                    final selected =
+                        widget.selectedAccentMode == AccentMode.preset &&
+                            widget.selectedColor == color;
+                    return GestureDetector(
+                      onTap:
+                          _saving ? null : () => widget.onColorChanged(color),
+                      child: Padding(
+                        padding: const EdgeInsets.only(right: 10),
+                        child: CircleAvatar(
+                          backgroundColor: color,
+                          radius: 22,
+                          child: selected
+                              ? const Icon(Icons.check,
+                                  color: Colors.white, size: 20)
+                              : null,
+                        ),
+                      ),
+                    );
+                  }),
+                ],
               ),
             ),
             const SizedBox(height: 28),

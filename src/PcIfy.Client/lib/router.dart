@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import 'core/theme/motion.dart';
 import 'features/app_lock/setup_password_screen.dart';
 import 'features/app_lock/setup_pin_screen.dart';
 import 'features/browser/background_crop_screen.dart';
@@ -190,12 +191,13 @@ final routerProvider = Provider<GoRouter>((ref) {
 CustomTransitionPage<void> _slideUpPage(GoRouterState state, Widget child) {
   return CustomTransitionPage<void>(
     key: state.pageKey,
+    transitionDuration: AppMotion.emphasized,
     child: child,
     transitionsBuilder: (context, animation, secondaryAnimation, child) {
       return SlideTransition(
         position: animation.drive(
           Tween(begin: const Offset(0, 1), end: Offset.zero)
-              .chain(CurveTween(curve: Curves.easeOutCubic)),
+              .chain(CurveTween(curve: AppMotion.emphasizedDecelerate)),
         ),
         child: child,
       );
@@ -207,12 +209,13 @@ CustomTransitionPage<void> _slideUpPage(GoRouterState state, Widget child) {
 CustomTransitionPage<void> _slideRightPage(GoRouterState state, Widget child) {
   return CustomTransitionPage<void>(
     key: state.pageKey,
+    transitionDuration: AppMotion.emphasized,
     child: child,
     transitionsBuilder: (context, animation, secondaryAnimation, child) {
       return SlideTransition(
         position: animation.drive(
           Tween(begin: const Offset(1.0, 0.0), end: Offset.zero)
-              .chain(CurveTween(curve: Curves.easeOutCubic)),
+              .chain(CurveTween(curve: AppMotion.emphasizedDecelerate)),
         ),
         child: FadeTransition(opacity: animation, child: child),
       );
@@ -224,16 +227,18 @@ CustomTransitionPage<void> _slideRightPage(GoRouterState state, Widget child) {
 CustomTransitionPage<T> _fadeZoomPage<T>(GoRouterState state, Widget child) {
   return CustomTransitionPage<T>(
     key: state.pageKey,
+    transitionDuration: AppMotion.emphasized,
     child: child,
     transitionsBuilder: (context, animation, secondaryAnimation, child) {
       return FadeTransition(
         opacity: CurvedAnimation(
           parent: animation,
-          curve: Curves.easeOutCubic,
+          curve: AppMotion.emphasizedDecelerate,
         ),
         child: ScaleTransition(
           scale: Tween<double>(begin: 0.94, end: 1.0).animate(
-            CurvedAnimation(parent: animation, curve: Curves.easeOutCubic),
+            CurvedAnimation(
+                parent: animation, curve: AppMotion.emphasizedDecelerate),
           ),
           child: child,
         ),
